@@ -1600,7 +1600,7 @@ function renderCashierRoster(){
 }
 
 function selectCashier(id){
-  selectedCashierId=id;
+  selectedCashierId=parseInt(id);
   cPinEntry='';
   updateCPinDisplay();
   setCPinMsg('');
@@ -1614,7 +1614,7 @@ function selectCashier(id){
   renderCashierRoster();
 }
 
-function ckp(n){if(cPinEntry.length<4){cPinEntry+=n;updateCPinDisplay();}}
+function ckp(n){if(cPinEntry.length<4){cPinEntry+=String(n);updateCPinDisplay();}}
 function ckpDel(){cPinEntry=cPinEntry.slice(0,-1);updateCPinDisplay();setCPinMsg('');}
 function updateCPinDisplay(){
   for(let i=0;i<4;i++){
@@ -1635,9 +1635,9 @@ function flashCPin(state){
 function doCashierAction(type){
   if(!selectedCashierId){setCPinMsg('Select a cashier first.');return;}
   if(cPinEntry.length<4){setCPinMsg('Enter your 4-digit PIN.');return;}
-  const c=cashiers.find(x=>x.id===selectedCashierId);
+  const c=cashiers.find(x=>parseInt(x.id)===parseInt(selectedCashierId));
   if(!c){setCPinMsg('Cashier not found.');return;}
-  if(cPinEntry!==c.pin){flashCPin('p-error');setCPinMsg('Wrong PIN. Try again.');return;}
+  if(String(cPinEntry)!==String(c.pin)){flashCPin('p-error');setCPinMsg('Wrong PIN. Try again.');return;}
   if(type==='IN'&&c.active){setCPinMsg('Already signed in.',true);flashCPin('p-ok');return;}
   if(type==='OUT'&&!c.active){setCPinMsg('Not currently signed in.');flashCPin('p-error');return;}
   c.active=(type==='IN');
@@ -1683,7 +1683,7 @@ function openCashierModal(id){
   }
   openModal('cashier-modal');
 }
-function mkp(n){if(mPinEntry.length<4){mPinEntry+=n;updateMPinDisplay();}}
+function mkp(n){if(mPinEntry.length<4){mPinEntry+=String(n);updateMPinDisplay();}}
 function mkpDel(){mPinEntry=mPinEntry.slice(0,-1);updateMPinDisplay();}
 function updateMPinDisplay(){
   for(let i=0;i<4;i++){
@@ -2066,6 +2066,12 @@ function loginPinBack() {
 
 /* ═══════════════════ INIT ═══════════════════ */
 document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
+// Fix DB status immediately — don't stay on "Connecting…" if no sheet configured
+(function(){
+  if(!SHEETS_URL){
+    setDBStatus('disconnected','No Sheet — Offline');
+  }
+})();
 // Session restore handles init — if no session the login screen stays visible
 // If already restored above, do nothing here
 </script>
