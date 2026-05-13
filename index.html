@@ -268,6 +268,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .pin-circle.p-error{background:var(--danger);border-color:var(--danger);animation:pshake .3s ease;}
 .pin-circle.p-ok{background:var(--success);border-color:var(--success);}
 @keyframes pshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes loginShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 .c-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:8px;}
 .ckbtn{padding:10px;font-size:15px;font-weight:700;border:1.5px solid var(--blue-pale);border-radius:10px;background:#fff;color:var(--blue-deep);cursor:pointer;text-align:center;transition:all .12s;font-family:'Nunito',sans-serif;}
 .ckbtn:hover{background:var(--blue-ghost);}
@@ -1747,17 +1748,10 @@ function showToast(msg,type='success'){
 let googleUser = null;
 
 function doLogin() {
-  var name = document.getElementById('login-name').value.trim();
+  // Note: this base function is overridden below by window.doLogin
+  // It should never be called directly — the override handles all validation
   var errEl = document.getElementById('login-err');
-  if (!name) { errEl.textContent = 'Please enter your name.'; return; }
-  errEl.textContent = '';
-  googleUser = { name: name, email: '', sub: name.toLowerCase().split(' ').join('_') };
-  localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
-  if (!SHEETS_URL) {
-    var saved = localStorage.getItem('greektogo_sheets_url') || '';
-    if (saved) SHEETS_URL = saved;
-  }
-  onSignedIn();
+  if (errEl) errEl.textContent = 'Please enter valid credentials.';
 }
 
 function showSheetsSetupOnLogin() {
@@ -2052,8 +2046,6 @@ function loginPinBack() {
       return;
     } catch(e) {}
   }
-  // Show staff grid on login screen
-  setTimeout(function(){ if(typeof renderLoginStaffGrid==='function') renderLoginStaffGrid(); }, 50);
   // Pre-fill name if previously used
   if (saved) {
     try {
@@ -2066,6 +2058,8 @@ function loginPinBack() {
 
 /* ═══════════════════ INIT ═══════════════════ */
 document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
+// Fix DB badge — don't stay on "Connecting…" if no sheet linked
+if(!SHEETS_URL){ setDBStatus('disconnected','No Sheet — Offline'); }
 // Session restore handles init — if no session the login screen stays visible
 // If already restored above, do nothing here
 </script>
@@ -2180,39 +2174,17 @@ window.doLogin = function(){
 
   if(staffMatch){
     localStorage.setItem('gtg_user', JSON.stringify({username: staffMatch.name, role: staffMatch.role}));
+    // Set googleUser so onSignedIn works correctly
+    googleUser = { name: staffMatch.name, email: staffMatch.role || 'Staff', sub: staffMatch.name.toLowerCase().replace(/\s+/g,'_') };
+    localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
 
-    var loginScreen = document.getElementById('login-screen');
-    if(loginScreen) loginScreen.style.display = 'none';
-
-    var active = document.getElementById('active-cashier');
-    if(active) active.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
+    // Show logout button
     var _lb3 = document.getElementById('logout-btn');
     if(_lb3) _lb3.style.display = 'inline-flex';
 
-    // Update user chip
-    var chip = document.getElementById('g-user-chip');
-    if(chip) chip.style.display = 'flex';
-    var initials = staffMatch.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-    var dispEl = document.getElementById('g-user-display');
-    var initEl = document.getElementById('g-user-initials');
-    var nameEl2 = document.getElementById('g-menu-name');
-    var emailEl = document.getElementById('g-menu-email');
-    if(dispEl) dispEl.textContent = staffMatch.name.split(' ')[0];
-    if(initEl) initEl.textContent = initials;
-    if(nameEl2) nameEl2.textContent = staffMatch.name;
-    if(emailEl) emailEl.textContent = staffMatch.role || 'Staff';
-
-    // Load inventory & roster
-    if(typeof SHEETS_URL !== 'undefined' && SHEETS_URL){
-      if(typeof loadInventoryFromSheets === 'function') loadInventoryFromSheets();
-    } else {
-      if(typeof inventory !== 'undefined' && typeof DEFAULT_INVENTORY !== 'undefined') inventory = DEFAULT_INVENTORY;
-      if(typeof setDBStatus === 'function') setDBStatus('disconnected','No Sheet — Offline');
-      if(typeof renderCatTabs === 'function') renderCatTabs();
-      if(typeof renderMenu === 'function') renderMenu();
-      if(typeof renderInventory === 'function') renderInventory();
-    }
-    if(typeof renderCashierRoster === 'function') renderCashierRoster();
+    // Update cashier badge
+    var active = document.getElementById('active-cashier');
+    if(active) active.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
 
     // Log shift in
     var _staffEntry = {
@@ -2222,10 +2194,10 @@ window.doLogin = function(){
       time: new Date().toLocaleString('en-PH')
     };
     if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_staffEntry); if(shiftLog.length>30) shiftLog.length=30; }
-    if(typeof renderShiftLog === 'function') renderShiftLog();
     if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_staffEntry);
 
-    if(typeof showToast === 'function') showToast('Welcome, ' + staffMatch.name.split(' ')[0] + '!', 'success');
+    // Use onSignedIn() to properly boot the app
+    if(typeof onSignedIn === 'function') onSignedIn();
     return true;
   }
 
