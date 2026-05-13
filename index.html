@@ -368,6 +368,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .toast.show{transform:translateY(0);opacity:1;}
 .toast.success{border-left:4px solid var(--success);}
 .toast.error{border-left:4px solid var(--danger);}
+.toast.warning{border-left:4px solid #C9A84C;background:rgba(201,168,76,.12);color:#C9A84C;}
 .toast.info{border-left:4px solid var(--blue-accent);}
 .toast.grab-toast{border-left:4px solid var(--grab);}
 
@@ -1146,24 +1147,133 @@ function showTab(tab, btn) {
   if(tab==='cashier') { renderCashierRoster(); renderShiftLog(); }
 }
 
-/* ═══════════════════ SHEETS ═══════════════════ */
-async function sheetsCall(action, body={}) {
-  if(!SHEETS_URL) return null;
-  try {
-    const res = await fetch(SHEETS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({action,...body}) });
-    return await res.json();
-  } catch(e) { return null; }
+/* ═══════════════════ SHEETS — AUTO-RECONNECT ENGINE ═══════════════════ */
+let _sheetsOnline    = false;
+let _reconnectTimer  = null;
+let _heartbeatTimer  = null;
+let _reconnectDelay  = 5000;
+const MAX_RETRY_DELAY    = 60000;
+const HEARTBEAT_INTERVAL = 30000;
+const OFFLINE_QUEUE_KEY  = 'gtg_offline_queue';
+
+function _queueLoad(){ try{ return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]'); }catch(e){ return []; } }
+function _queueSave(q){ try{ localStorage.setItem(OFFLINE_QUEUE_KEY,JSON.stringify(q)); }catch(e){} }
+function _enqueue(action,body){
+  const q=_queueLoad(); q.push({action,body,ts:Date.now()});
+  if(q.length>200) q.splice(0,q.length-200);
+  _queueSave(q); _updateQueueBadge(q.length);
 }
-async function loadInventoryFromSheets() {
+function _clearQueue(){ _queueSave([]); _updateQueueBadge(0); }
+function _updateQueueBadge(count){
+  const el=document.getElementById('db-status-txt');
+  if(!el) return;
+  if(count>0 && !_sheetsOnline) el.textContent=`Offline — ${count} pending`;
+}
+
+async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
+  for(let i=0;i<retries;i++){
+    try{
+      const ctrl = new AbortController();
+      const tid  = setTimeout(()=>ctrl.abort(), 10000);
+      const res  = await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctrl.signal});
+      clearTimeout(tid);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      return await res.json();
+    } catch(e){
+      if(i<retries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));
+    }
+  }
+  return null;
+}
+
+async function sheetsCall(action, body={}){
+  if(!SHEETS_URL) return null;
+  const result = await _fetchWithRetry(SHEETS_URL,{action,...body});
+  if(result !== null){
+    if(!_sheetsOnline) _onReconnected();
+  } else {
+    _onDisconnected();
+    const writeOps=['saveInventory','updateStock','logSale','logShift'];
+    if(writeOps.includes(action)) _enqueue(action,body);
+  }
+  return result;
+}
+
+function _onDisconnected(){
+  if(_sheetsOnline){
+    _sheetsOnline=false;
+    setDBStatus('disconnected','Reconnecting…');
+    showToast('⚠️ Google Sheets disconnected. Working offline.','warning');
+  } else {
+    setDBStatus('disconnected','Offline — retrying…');
+  }
+  _startReconnectLoop();
+}
+
+function _onReconnected(){
+  _sheetsOnline=true;
+  _reconnectDelay=5000;
+  _stopReconnectLoop();
+  setDBStatus('connected','Google Sheets ✓');
+  showToast('✅ Google Sheets reconnected!','success');
+  _flushQueue();
+  _startHeartbeat();
+}
+
+function _startReconnectLoop(){
+  _stopReconnectLoop(); _stopHeartbeat();
+  _reconnectTimer=setTimeout(async()=>{
+    if(!SHEETS_URL) return;
+    setDBStatus('loading','Reconnecting…');
+    const res=await _fetchWithRetry(SHEETS_URL,{action:'ping'},1,1000);
+    if(res!==null){ _onReconnected(); }
+    else{
+      _reconnectDelay=Math.min(_reconnectDelay*1.5,MAX_RETRY_DELAY);
+      setDBStatus('disconnected',`Retry in ${Math.round(_reconnectDelay/1000)}s…`);
+      _startReconnectLoop();
+    }
+  },_reconnectDelay);
+}
+function _stopReconnectLoop(){ if(_reconnectTimer){clearTimeout(_reconnectTimer);_reconnectTimer=null;} }
+
+function _startHeartbeat(){
+  _stopHeartbeat();
+  _heartbeatTimer=setInterval(async()=>{
+    if(!SHEETS_URL) return;
+    const res=await _fetchWithRetry(SHEETS_URL,{action:'ping'},1,1000);
+    if(res===null && _sheetsOnline) _onDisconnected();
+  },HEARTBEAT_INTERVAL);
+}
+function _stopHeartbeat(){ if(_heartbeatTimer){clearInterval(_heartbeatTimer);_heartbeatTimer=null;} }
+
+async function _flushQueue(){
+  const q=_queueLoad(); if(!q.length) return;
+  showToast(`🔄 Syncing ${q.length} offline action(s)…`,'info');
+  const failed=[];
+  for(const item of q){
+    const res=await _fetchWithRetry(SHEETS_URL,{action:item.action,...item.body},2,1000);
+    if(res===null) failed.push(item);
+  }
+  _queueSave(failed); _updateQueueBadge(failed.length);
+  if(!failed.length) showToast('✅ All offline data synced!','success');
+  else showToast(`⚠️ ${failed.length} item(s) could not sync. Will retry.`,'warning');
+}
+
+window.addEventListener('online',  ()=>{ if(SHEETS_URL&&!_sheetsOnline) _startReconnectLoop(); });
+window.addEventListener('offline', ()=>{ if(_sheetsOnline) _onDisconnected(); });
+
+async function loadInventoryFromSheets(){
   setDBStatus('loading','Syncing…');
-  const res = await sheetsCall('getInventory');
+  const res=await sheetsCall('getInventory');
   if(res && res.items && res.items.length>0){
-    inventory = res.items.map(it=>({id:parseInt(it.id),name:it.name,cat:it.cat,price:parseFloat(it.price),stock:parseInt(it.stock),emoji:it.emoji}));
+    inventory=res.items.map(it=>({id:parseInt(it.id),name:it.name,cat:it.cat,price:parseFloat(it.price),stock:parseInt(it.stock),emoji:it.emoji}));
     setDBStatus('connected','Google Sheets ✓');
     showToast('✅ Inventory loaded from Sheets!','success');
+    _sheetsOnline=true; _startHeartbeat();
   } else {
-    inventory = DEFAULT_INVENTORY;
-    setDBStatus(SHEETS_URL?'connected':'disconnected', SHEETS_URL?'Google Sheets ✓':'Offline mode');
+    inventory=DEFAULT_INVENTORY;
+    if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _startReconnectLoop(); }
+    else { setDBStatus('disconnected','No Sheet — Offline'); }
     if(SHEETS_URL) await sheetsCall('saveInventory',{items:DEFAULT_INVENTORY});
   }
   renderCatTabs(); renderMenu(); renderInventory();
@@ -1173,6 +1283,7 @@ async function pushInventoryToSheets(){ if(SHEETS_URL) await sheetsCall('saveInv
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
 async function pushSaleToSheets(s){ if(SHEETS_URL) await sheetsCall('logSale',{sale:s}); }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
+
 function setDBStatus(state,txt){
   document.getElementById('db-status').className='db-status '+state;
   document.getElementById('db-status-txt').textContent=txt;
@@ -1859,7 +1970,9 @@ async function connectSheets() {
       if (googleUser) localStorage.setItem('gtg_sheets_url_' + googleUser.sub, url);
       statusEl.textContent = '✅ Connected successfully!';
       statusEl.style.color = '#27AE60';
+      _sheetsOnline=true;
       setDBStatus('connected','Google Sheets ✓');
+      _startHeartbeat();
       closeModal('sheets-setup-modal');
       await loadInventoryFromSheets();
       showToast('Google Sheets connected!','success');
