@@ -1352,6 +1352,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
 function newOrder(){
   clearOrder();
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
+if(!SHEETS_URL){ setDBStatus('disconnected','No Sheet — Offline'); }
 }
 
 /* ═══════════════════ DELIVERY ORDERS ═══════════════════ */
@@ -1568,13 +1569,6 @@ const C_COLORS=['av-b','av-t','av-a','av-p','av-r'];
 function cInitials(n){return n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();}
 
 let cashiers=JSON.parse(localStorage.getItem('gtg_cashiers')||'[]');
-if(!cashiers.length){
-  cashiers=[
-    {id:1,name:'Maria Santos',role:'Senior Cashier',pin:'1234',color:'av-b',active:false},
-    {id:2,name:'Jose Reyes',role:'Cashier',pin:'5678',color:'av-t',active:false},
-  ];
-  saveCashiers();
-}
 let selectedCashierId=null;
 let cPinEntry='';
 let mPinEntry='';
@@ -1748,8 +1742,7 @@ function showToast(msg,type='success'){
 let googleUser = null;
 
 function doLogin() {
-  // Note: this base function is overridden below by window.doLogin
-  // It should never be called directly — the override handles all validation
+  // Overridden below — this base version should not grant access
   var errEl = document.getElementById('login-err');
   if (errEl) errEl.textContent = 'Please enter valid credentials.';
 }
@@ -2046,6 +2039,8 @@ function loginPinBack() {
       return;
     } catch(e) {}
   }
+  // Show staff grid on login screen
+  setTimeout(function(){ if(typeof renderLoginStaffGrid==='function') renderLoginStaffGrid(); }, 50);
   // Pre-fill name if previously used
   if (saved) {
     try {
@@ -2058,8 +2053,6 @@ function loginPinBack() {
 
 /* ═══════════════════ INIT ═══════════════════ */
 document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
-// Fix DB badge — don't stay on "Connecting…" if no sheet linked
-if(!SHEETS_URL){ setDBStatus('disconnected','No Sheet — Offline'); }
 // Session restore handles init — if no session the login screen stays visible
 // If already restored above, do nothing here
 </script>
@@ -2174,19 +2167,12 @@ window.doLogin = function(){
 
   if(staffMatch){
     localStorage.setItem('gtg_user', JSON.stringify({username: staffMatch.name, role: staffMatch.role}));
-    // Set googleUser so onSignedIn works correctly
     googleUser = { name: staffMatch.name, email: staffMatch.role || 'Staff', sub: staffMatch.name.toLowerCase().replace(/\s+/g,'_') };
     localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
-
-    // Show logout button
     var _lb3 = document.getElementById('logout-btn');
     if(_lb3) _lb3.style.display = 'inline-flex';
-
-    // Update cashier badge
-    var active = document.getElementById('active-cashier');
-    if(active) active.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
-
-    // Log shift in
+    var active2 = document.getElementById('active-cashier');
+    if(active2) active2.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
     var _staffEntry = {
       name: staffMatch.name, type: 'IN',
       shift: document.getElementById('c-shift-sel') ? document.getElementById('c-shift-sel').value : 'Shift',
@@ -2195,8 +2181,6 @@ window.doLogin = function(){
     };
     if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_staffEntry); if(shiftLog.length>30) shiftLog.length=30; }
     if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_staffEntry);
-
-    // Use onSignedIn() to properly boot the app
     if(typeof onSignedIn === 'function') onSignedIn();
     return true;
   }
