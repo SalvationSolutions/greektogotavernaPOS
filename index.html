@@ -673,11 +673,11 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
     <div class="login-field">
       <label>Username</label>
-      <input type="text" id="login-name" placeholder="Enter username" autofocus autocomplete="username">
+      <input type="text" id="login-name" placeholder="Username or your full name" autofocus autocomplete="username">
     </div>
     <div class="login-field">
       <label>Password / PIN</label>
-      <input type="password" id="login-pass" placeholder="Enter password or cashier PIN" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="current-password">
+      <input type="password" id="login-pass" placeholder="Password or your 4-digit PIN" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="current-password">
     </div>
     <div class="login-err" id="login-err"></div>
     <button class="login-btn" onclick="doLogin()">&#127963; Enter POS</button>
@@ -1635,7 +1635,7 @@ function flashCPin(state){
 function doCashierAction(type){
   if(!selectedCashierId){setCPinMsg('Select a cashier first.');return;}
   if(cPinEntry.length<4){setCPinMsg('Enter your 4-digit PIN.');return;}
-  const c=cashiers.find(x=>parseInt(x.id)===parseInt(selectedCashierId));
+  const c=cashiers.find(x=>x.id===selectedCashierId);
   if(!c){setCPinMsg('Cashier not found.');return;}
   if(String(cPinEntry)!==String(c.pin)){flashCPin('p-error');setCPinMsg('Wrong PIN. Try again.');return;}
   if(type==='IN'&&c.active){setCPinMsg('Already signed in.',true);flashCPin('p-ok');return;}
@@ -2066,12 +2066,6 @@ function loginPinBack() {
 
 /* ═══════════════════ INIT ═══════════════════ */
 document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
-// Fix DB status immediately — don't stay on "Connecting…" if no sheet configured
-(function(){
-  if(!SHEETS_URL){
-    setDBStatus('disconnected','No Sheet — Offline');
-  }
-})();
 // Session restore handles init — if no session the login screen stays visible
 // If already restored above, do nothing here
 </script>
@@ -2177,12 +2171,69 @@ window.doLogin = function(){
       return true;
   }
 
-  // ── No match — block entry ──
-  if(errEl){
-      errEl.innerText = '❌ Invalid username or password.';
-      errEl.style.color = '#E05050';
+  // ── Check cashiers created in Cashier tab (name + PIN) ──
+  var storedCashiers = [];
+  try { storedCashiers = JSON.parse(localStorage.getItem('gtg_cashiers') || '[]'); } catch(e){}
+  var staffMatch = storedCashiers.find(function(c){
+    return c.name.toLowerCase() === username.toLowerCase() && String(c.pin) === String(password);
+  });
+
+  if(staffMatch){
+    localStorage.setItem('gtg_user', JSON.stringify({username: staffMatch.name, role: staffMatch.role}));
+
+    var loginScreen = document.getElementById('login-screen');
+    if(loginScreen) loginScreen.style.display = 'none';
+
+    var active = document.getElementById('active-cashier');
+    if(active) active.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
+    var _lb3 = document.getElementById('logout-btn');
+    if(_lb3) _lb3.style.display = 'inline-flex';
+
+    // Update user chip
+    var chip = document.getElementById('g-user-chip');
+    if(chip) chip.style.display = 'flex';
+    var initials = staffMatch.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var dispEl = document.getElementById('g-user-display');
+    var initEl = document.getElementById('g-user-initials');
+    var nameEl2 = document.getElementById('g-menu-name');
+    var emailEl = document.getElementById('g-menu-email');
+    if(dispEl) dispEl.textContent = staffMatch.name.split(' ')[0];
+    if(initEl) initEl.textContent = initials;
+    if(nameEl2) nameEl2.textContent = staffMatch.name;
+    if(emailEl) emailEl.textContent = staffMatch.role || 'Staff';
+
+    // Load inventory & roster
+    if(typeof SHEETS_URL !== 'undefined' && SHEETS_URL){
+      if(typeof loadInventoryFromSheets === 'function') loadInventoryFromSheets();
+    } else {
+      if(typeof inventory !== 'undefined' && typeof DEFAULT_INVENTORY !== 'undefined') inventory = DEFAULT_INVENTORY;
+      if(typeof setDBStatus === 'function') setDBStatus('disconnected','No Sheet — Offline');
+      if(typeof renderCatTabs === 'function') renderCatTabs();
+      if(typeof renderMenu === 'function') renderMenu();
+      if(typeof renderInventory === 'function') renderInventory();
+    }
+    if(typeof renderCashierRoster === 'function') renderCashierRoster();
+
+    // Log shift in
+    var _staffEntry = {
+      name: staffMatch.name, type: 'IN',
+      shift: document.getElementById('c-shift-sel') ? document.getElementById('c-shift-sel').value : 'Shift',
+      color: staffMatch.color || 'av-t',
+      time: new Date().toLocaleString('en-PH')
+    };
+    if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_staffEntry); if(shiftLog.length>30) shiftLog.length=30; }
+    if(typeof renderShiftLog === 'function') renderShiftLog();
+    if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_staffEntry);
+
+    if(typeof showToast === 'function') showToast('Welcome, ' + staffMatch.name.split(' ')[0] + '!', 'success');
+    return true;
   }
-  // shake the login box
+
+  // ── No match anywhere — block entry ──
+  if(errEl){
+    errEl.innerText = '❌ Invalid username or password.';
+    errEl.style.color = '#E05050';
+  }
   var box = document.querySelector('.login-box');
   if(box){ box.style.animation='none'; void box.offsetWidth; box.style.animation='loginShake .35s ease'; }
   return false;
