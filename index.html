@@ -248,6 +248,12 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .c-pdot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.3);}
 .add-cashier-btn{padding:10px;background:rgba(255,255,255,.08);border:1.5px dashed rgba(255,255,255,.2);border-radius:11px;color:rgba(255,255,255,.6);font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all .2s;}
 .add-cashier-btn:hover{background:rgba(255,255,255,.14);color:#fff;}
+.cashier-data-btns{display:flex;gap:6px;margin-top:2px;}
+.cdata-btn{flex:1;padding:7px 4px;border-radius:9px;font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;cursor:pointer;border:1.5px solid rgba(255,255,255,.15);transition:all .2s;}
+.export-btn{background:rgba(39,174,96,.15);color:#6ED9A0;}
+.export-btn:hover{background:rgba(39,174,96,.3);color:#fff;}
+.import-btn{background:rgba(46,125,209,.15);color:#7EC8F7;}
+.import-btn:hover{background:rgba(46,125,209,.3);color:#fff;}
 .cashier-right{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .cashier-top-bar{background:#fff;border-bottom:1px solid var(--blue-pale);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
 .cashier-top-bar h2{font-family:'Cinzel',serif;font-size:17px;color:var(--blue-deep);}
@@ -906,6 +912,12 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <div class="cashier-left-title">👥 Cashier Roster</div>
     <div class="c-reg-list" id="c-reg-list"></div>
     <button class="add-cashier-btn" onclick="openCashierModal()">+ Add Cashier</button>
+    <div class="cashier-data-btns">
+      <button class="cdata-btn export-btn" onclick="exportCashiers()" title="Save cashiers to a file">⬇ Export</button>
+      <button class="cdata-btn import-btn" onclick="document.getElementById('cashier-import-input').click()" title="Load cashiers from a file">⬆ Import</button>
+      <input type="file" id="cashier-import-input" accept=".json" style="display:none" onchange="importCashiers(event)">
+    </div>
+    <div style="font-size:9px;color:rgba(255,255,255,.3);text-align:center;margin-top:-6px;line-height:1.4;">Export saves your staff list.<br>Import restores it on any device.</div>
   </div>
   <!-- RIGHT: Sign in/out + log -->
   <div class="cashier-right">
@@ -1686,6 +1698,52 @@ let mPinEntry='';
 let editingCashierId=null;
 
 function saveCashiers(){localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));}
+
+function exportCashiers(){
+  if(!cashiers.length){ showToast('No cashiers to export.','error'); return; }
+  const data = JSON.stringify(cashiers, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'greektogo_cashiers.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ Cashiers exported! Save this file safely.','success');
+}
+
+function importCashiers(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const imported = JSON.parse(e.target.result);
+      if(!Array.isArray(imported) || !imported.length){ showToast('❌ Invalid file format.','error'); return; }
+      // Merge: keep existing, add new ones not already present by name
+      let added = 0;
+      imported.forEach(ic => {
+        const exists = cashiers.find(c => c.name.toLowerCase() === ic.name.toLowerCase());
+        if(!exists){
+          const newId = cashiers.length ? Math.max(...cashiers.map(c=>c.id))+1 : 1;
+          cashiers.push({...ic, id:newId, active:false});
+          added++;
+        }
+      });
+      if(!added){ showToast('ℹ️ All cashiers already exist.','info'); }
+      else {
+        saveCashiers();
+        renderCashierRoster();
+        showToast(`✅ ${added} cashier(s) imported successfully!`,'success');
+      }
+    } catch(err){
+      showToast('❌ Could not read file. Make sure it is a valid export.','error');
+    }
+    // Reset input so same file can be re-imported if needed
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
 
 function renderCashierRoster(){
   const el=document.getElementById('c-reg-list');
