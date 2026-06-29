@@ -1183,14 +1183,30 @@ function _updateQueueBadge(count){
 }
 
 async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
+  // ── Use GET with query params, not POST ──
+  // Apps Script /exec issues a 302 redirect internally. Many mobile browsers
+  // (Safari, Brave) drop the POST body when following that redirect, causing
+  // silent failures. GET requests carry no body, so the redirect can never
+  // lose data — this is the permanent, reliable fix.
+  const action = payload.action;
+  const rest = Object.assign({}, payload);
+  delete rest.action;
+  let qs = 'action=' + encodeURIComponent(action);
+  if (Object.keys(rest).length > 0) {
+    qs += '&data=' + encodeURIComponent(JSON.stringify(rest));
+  }
+  const fullUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + qs;
+
   for(let i=0;i<retries;i++){
     try{
       const ctrl = new AbortController();
       const tid  = setTimeout(()=>ctrl.abort(), 10000);
-      const res  = await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctrl.signal});
+      const res  = await fetch(fullUrl,{method:'GET',signal:ctrl.signal});
       clearTimeout(tid);
       if(!res.ok) throw new Error('HTTP '+res.status);
-      return await res.json();
+      const data = await res.json();
+      if(data && data.error) throw new Error(data.error);  // treat script errors as failures
+      return data;
     } catch(e){
       if(i<retries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));
     }
@@ -2020,7 +2036,12 @@ async function connectSheets() {
   statusEl.textContent = '⏳ Testing connection…';
   statusEl.style.color = '#C9A84C';
   try {
-    var res = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({action:'getInventory'}) });
+    // GET request — avoids the POST+redirect body-loss issue on mobile browsers
+    var testUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + 'action=getInventory';
+    var ctrl = new AbortController();
+    var tid = setTimeout(()=>ctrl.abort(), 10000);
+    var res = await fetch(testUrl, { method:'GET', signal: ctrl.signal });
+    clearTimeout(tid);
     var data = await res.json();
     if (data && data.items !== undefined) {
       SHEETS_URL = url;
@@ -2034,6 +2055,9 @@ async function connectSheets() {
       closeModal('sheets-setup-modal');
       await loadInventoryFromSheets();
       showToast('Google Sheets connected!','success');
+    } else if (data && data.error) {
+      statusEl.textContent = '❌ Script error: ' + data.error;
+      statusEl.style.color = '#E05050';
     } else {
       statusEl.textContent = '❌ Unexpected response. Check your Apps Script.';
       statusEl.style.color = '#E05050';
@@ -2370,3 +2394,4 @@ window.doLogin = function(){
 </script>
 
 </body>
+</html>
