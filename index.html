@@ -1184,12 +1184,68 @@ function _updateQueueBadge(count){
 
 window._lastSheetsError = '';  // human-readable reason for the most recent failure
 
+// ── JSONP fallback ────────────────────────────────────────────────────────
+// Some browsers/extensions (Brave Shields, certain ad-blockers, some mobile
+// privacy modes) block fetch()/XHR calls to script.google.com outright —
+// the request never even completes, so fetch() throws "Failed to fetch"
+// before any response can be read. JSONP sidesteps this entirely: it loads
+// the URL as a plain <script> tag (the same mechanism used by Google Maps
+// embeds, analytics snippets, etc.), which privacy tools essentially never
+// block. This is the standard, battle-tested workaround for this exact
+// failure mode and makes the connection bulletproof regardless of browser.
+function _jsonpRequest(url, timeoutMs){
+  return new Promise((resolve, reject) => {
+    const cbName = '_gtg_jsonp_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    const script = document.createElement('script');
+    let settled = false;
+    function cleanup(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cbName] = function(data){ if(settled) return; settled=true; cleanup(); resolve(data); };
+    const timer = setTimeout(()=>{ if(settled) return; settled=true; cleanup(); reject(new Error('Request timed out after '+Math.round(timeoutMs/1000)+'s — slow connection or unresponsive script.')); }, timeoutMs);
+    script.onerror = function(){ if(settled) return; settled=true; cleanup(); reject(new Error('Could not load script — check the URL is correct and ends in /exec.')); };
+    const sep = url.indexOf('?')>-1 ? '&' : '?';
+    script.src = url + sep + 'callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+// ── Smart GET: tries fetch() first, auto-falls-back to JSONP if blocked ───
+async function _smartGet(fullUrl, timeoutMs){
+  let res, raw;
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
+    res = await fetch(fullUrl, { method:'GET', signal: ctrl.signal });
+    clearTimeout(tid);
+  } catch(fetchErr){
+    if (fetchErr.name === 'AbortError') {
+      throw new Error('Request timed out after '+Math.round(timeoutMs/1000)+'s — slow connection or unresponsive script.');
+    }
+    // fetch() was blocked before any response arrived (e.g. "Failed to fetch")
+    // — fall back to JSONP, which bypasses most shield/extension blocking.
+    const data = await _jsonpRequest(fullUrl, timeoutMs);
+    if (data && data.error) throw new Error('Script error: ' + data.error);
+    return data;
+  }
+
+  raw = await res.text();
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+
+  let data;
+  try { data = JSON.parse(raw); }
+  catch(parseErr){
+    if (/accounts\.google\.com|ServiceLogin|<html/i.test(raw)) {
+      throw new Error('Got a Google sign-in page instead of data. Fix: Apps Script → Deploy → Manage deployments → pencil icon → set "Execute as: Me" → Deploy → New version.');
+    }
+    throw new Error('Script returned a non-JSON response. Re-check the script code is the latest version.');
+  }
+  if (data && data.error) throw new Error('Script error: ' + data.error);
+  return data;
+}
+
 async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
-  // ── Use GET with query params, not POST ──
-  // Apps Script /exec issues a 302 redirect internally. Many mobile browsers
-  // (Safari, Brave) drop the POST body when following that redirect, causing
-  // silent failures. GET requests carry no body, so the redirect can never
-  // lose data — this is the permanent, reliable fix.
+  // Use GET with query params, not POST — Apps Script /exec issues a 302
+  // redirect internally, and many mobile browsers drop POST bodies on
+  // redirect. GET carries no body, so nothing can be lost in transit.
   const action = payload.action;
   const rest = Object.assign({}, payload);
   delete rest.action;
@@ -1202,32 +1258,11 @@ async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
   let lastErr = '';
   for(let i=0;i<retries;i++){
     try{
-      const ctrl = new AbortController();
-      const tid  = setTimeout(()=>ctrl.abort(), 10000);
-      const res  = await fetch(fullUrl,{method:'GET',signal:ctrl.signal});
-      clearTimeout(tid);
-      const raw  = await res.text();
-      if(!res.ok){ lastErr = 'HTTP '+res.status; throw new Error(lastErr); }
-
-      let data;
-      try { data = JSON.parse(raw); }
-      catch(parseErr){
-        // Script returned HTML instead of JSON — almost always means
-        // "Execute as" is set wrong and Google is showing a sign-in page.
-        if(/<html|accounts\.google\.com|ServiceLogin/i.test(raw)){
-          lastErr = 'Got a Google sign-in page instead of data. Fix: Apps Script → Deploy → Manage deployments → ✏️ → set "Execute as: Me" → Deploy new version.';
-        } else {
-          lastErr = 'Script returned a non-JSON response.';
-        }
-        throw new Error(lastErr);
-      }
-
-      if(data && data.error){ lastErr = 'Script error: '+data.error; throw new Error(lastErr); }
+      const data = await _smartGet(fullUrl, 10000);
       window._lastSheetsError = '';
       return data;
     } catch(e){
-      if(e.name === 'AbortError') lastErr = 'Request timed out after 10s — slow connection or unresponsive script.';
-      else if(!lastErr) lastErr = e.message || 'Network error — cannot reach the script URL.';
+      lastErr = e.message || 'Network error — cannot reach the script URL.';
       window._lastSheetsError = lastErr;
       if(i<retries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));
     }
@@ -2058,33 +2093,18 @@ async function connectSheets() {
   var url = document.getElementById('sheets-url-field').value.trim();
   var statusEl = document.getElementById('sheets-conn-status');
   if (!url || !url.includes('script.google.com')) {
-    statusEl.innerHTML = '❌ Enter a valid Apps Script Web App URL.';
+    statusEl.textContent = '❌ Enter a valid Apps Script Web App URL.';
     statusEl.style.color = '#E05050';
     return;
   }
   statusEl.textContent = '⏳ Testing connection…';
   statusEl.style.color = '#C9A84C';
   try {
-    // GET request — avoids the POST+redirect body-loss issue on mobile browsers
+    // _smartGet tries a normal fetch() first, then automatically falls back
+    // to JSONP if the browser blocks the direct request (e.g. Brave Shields,
+    // ad blockers) — same logic used everywhere else in the app.
     var testUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + 'action=getInventory';
-    var ctrl = new AbortController();
-    var tid = setTimeout(()=>ctrl.abort(), 10000);
-    var res = await fetch(testUrl, { method:'GET', signal: ctrl.signal });
-    clearTimeout(tid);
-    var raw = await res.text();
-
-    var data;
-    try { data = JSON.parse(raw); }
-    catch(parseErr){
-      // Got HTML back instead of JSON — diagnose exactly why
-      if (/accounts\.google\.com|ServiceLogin|<html/i.test(raw)) {
-        statusEl.innerHTML = '❌ <b>Got a Google sign-in page</b>, not data.<br>Fix: in Apps Script go to <b>Deploy → Manage deployments → ✏️</b><br>Set <b>Execute as: Me</b> (not "User accessing the web app")<br>Then <b>Deploy → New version</b>.';
-      } else {
-        statusEl.innerHTML = '❌ Script returned an unexpected response (not JSON).<br>Re-check you pasted the full script code correctly.';
-      }
-      statusEl.style.color = '#E05050';
-      return;
-    }
+    var data = await _smartGet(testUrl, 10000);
 
     if (data && data.items !== undefined) {
       SHEETS_URL = url;
@@ -2092,26 +2112,19 @@ async function connectSheets() {
       if (googleUser) localStorage.setItem('gtg_sheets_url_' + googleUser.sub, url);
       statusEl.textContent = '✅ Connected successfully!';
       statusEl.style.color = '#27AE60';
-      _sheetsOnline=true;
+      _sheetsOnline = true;
       window._lastSheetsError = '';
       setDBStatus('connected','Google Sheets ✓');
       _startHeartbeat();
       closeModal('sheets-setup-modal');
       await loadInventoryFromSheets();
       showToast('Google Sheets connected!','success');
-    } else if (data && data.error) {
-      statusEl.innerHTML = '❌ Script error: ' + data.error;
-      statusEl.style.color = '#E05050';
     } else {
-      statusEl.innerHTML = '❌ Unexpected response shape. Check your Apps Script code matches the latest version.';
+      statusEl.textContent = '❌ Unexpected response shape. Check your Apps Script code matches the latest version.';
       statusEl.style.color = '#E05050';
     }
   } catch(e) {
-    if (e.name === 'AbortError') {
-      statusEl.innerHTML = '❌ Timed out after 10s.<br>The script may be slow, sleeping, or unreachable. Try again.';
-    } else {
-      statusEl.innerHTML = '❌ Cannot reach URL.<br>Check the link is correct and ends in <code>/exec</code>.';
-    }
+    statusEl.textContent = '❌ ' + (e.message || 'Connection failed.');
     statusEl.style.color = '#E05050';
   }
 }
