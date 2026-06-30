@@ -1182,6 +1182,8 @@ function _updateQueueBadge(count){
   if(count>0 && !_sheetsOnline) el.textContent=`Offline — ${count} pending`;
 }
 
+window._lastSheetsError = '';  // human-readable reason for the most recent failure
+
 async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
   // ── Use GET with query params, not POST ──
   // Apps Script /exec issues a 302 redirect internally. Many mobile browsers
@@ -1197,17 +1199,36 @@ async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
   }
   const fullUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + qs;
 
+  let lastErr = '';
   for(let i=0;i<retries;i++){
     try{
       const ctrl = new AbortController();
       const tid  = setTimeout(()=>ctrl.abort(), 10000);
       const res  = await fetch(fullUrl,{method:'GET',signal:ctrl.signal});
       clearTimeout(tid);
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      const data = await res.json();
-      if(data && data.error) throw new Error(data.error);  // treat script errors as failures
+      const raw  = await res.text();
+      if(!res.ok){ lastErr = 'HTTP '+res.status; throw new Error(lastErr); }
+
+      let data;
+      try { data = JSON.parse(raw); }
+      catch(parseErr){
+        // Script returned HTML instead of JSON — almost always means
+        // "Execute as" is set wrong and Google is showing a sign-in page.
+        if(/<html|accounts\.google\.com|ServiceLogin/i.test(raw)){
+          lastErr = 'Got a Google sign-in page instead of data. Fix: Apps Script → Deploy → Manage deployments → ✏️ → set "Execute as: Me" → Deploy new version.';
+        } else {
+          lastErr = 'Script returned a non-JSON response.';
+        }
+        throw new Error(lastErr);
+      }
+
+      if(data && data.error){ lastErr = 'Script error: '+data.error; throw new Error(lastErr); }
+      window._lastSheetsError = '';
       return data;
     } catch(e){
+      if(e.name === 'AbortError') lastErr = 'Request timed out after 10s — slow connection or unresponsive script.';
+      else if(!lastErr) lastErr = e.message || 'Network error — cannot reach the script URL.';
+      window._lastSheetsError = lastErr;
       if(i<retries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));
     }
   }
@@ -1228,10 +1249,11 @@ async function sheetsCall(action, body={}){
 }
 
 function _onDisconnected(){
+  const reasonShort = window._lastSheetsError ? (' (' + window._lastSheetsError.split('.')[0] + ')') : '';
   if(_sheetsOnline){
     _sheetsOnline=false;
     setDBStatus('disconnected','Reconnecting…');
-    showToast('⚠️ Google Sheets disconnected. Working offline.','warning');
+    showToast('⚠️ Google Sheets disconnected' + reasonShort + '. Working offline.','warning');
   } else {
     setDBStatus('disconnected','Offline — retrying…');
   }
@@ -1313,8 +1335,15 @@ async function pushSaleToSheets(s){ if(SHEETS_URL) await sheetsCall('logSale',{s
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
 
 function setDBStatus(state,txt){
-  document.getElementById('db-status').className='db-status '+state;
+  const badge = document.getElementById('db-status');
+  badge.className='db-status '+state;
   document.getElementById('db-status-txt').textContent=txt;
+  // Tap/hover the badge to see the exact technical reason for the last failure
+  badge.title = (state==='disconnected' && window._lastSheetsError) ? window._lastSheetsError : '';
+  badge.style.cursor = (state==='disconnected' && window._lastSheetsError) ? 'help' : 'default';
+  badge.onclick = (state==='disconnected' && window._lastSheetsError)
+    ? function(){ showToast('ℹ️ ' + window._lastSheetsError, 'info'); }
+    : null;
 }
 
 /* ═══════════════════ MENU ═══════════════════ */
@@ -2029,7 +2058,7 @@ async function connectSheets() {
   var url = document.getElementById('sheets-url-field').value.trim();
   var statusEl = document.getElementById('sheets-conn-status');
   if (!url || !url.includes('script.google.com')) {
-    statusEl.textContent = '❌ Enter a valid Apps Script Web App URL.';
+    statusEl.innerHTML = '❌ Enter a valid Apps Script Web App URL.';
     statusEl.style.color = '#E05050';
     return;
   }
@@ -2042,7 +2071,21 @@ async function connectSheets() {
     var tid = setTimeout(()=>ctrl.abort(), 10000);
     var res = await fetch(testUrl, { method:'GET', signal: ctrl.signal });
     clearTimeout(tid);
-    var data = await res.json();
+    var raw = await res.text();
+
+    var data;
+    try { data = JSON.parse(raw); }
+    catch(parseErr){
+      // Got HTML back instead of JSON — diagnose exactly why
+      if (/accounts\.google\.com|ServiceLogin|<html/i.test(raw)) {
+        statusEl.innerHTML = '❌ <b>Got a Google sign-in page</b>, not data.<br>Fix: in Apps Script go to <b>Deploy → Manage deployments → ✏️</b><br>Set <b>Execute as: Me</b> (not "User accessing the web app")<br>Then <b>Deploy → New version</b>.';
+      } else {
+        statusEl.innerHTML = '❌ Script returned an unexpected response (not JSON).<br>Re-check you pasted the full script code correctly.';
+      }
+      statusEl.style.color = '#E05050';
+      return;
+    }
+
     if (data && data.items !== undefined) {
       SHEETS_URL = url;
       localStorage.setItem('greektogo_sheets_url', url);
@@ -2050,20 +2093,25 @@ async function connectSheets() {
       statusEl.textContent = '✅ Connected successfully!';
       statusEl.style.color = '#27AE60';
       _sheetsOnline=true;
+      window._lastSheetsError = '';
       setDBStatus('connected','Google Sheets ✓');
       _startHeartbeat();
       closeModal('sheets-setup-modal');
       await loadInventoryFromSheets();
       showToast('Google Sheets connected!','success');
     } else if (data && data.error) {
-      statusEl.textContent = '❌ Script error: ' + data.error;
+      statusEl.innerHTML = '❌ Script error: ' + data.error;
       statusEl.style.color = '#E05050';
     } else {
-      statusEl.textContent = '❌ Unexpected response. Check your Apps Script.';
+      statusEl.innerHTML = '❌ Unexpected response shape. Check your Apps Script code matches the latest version.';
       statusEl.style.color = '#E05050';
     }
   } catch(e) {
-    statusEl.textContent = '❌ Cannot reach URL. Check deployment & permissions.';
+    if (e.name === 'AbortError') {
+      statusEl.innerHTML = '❌ Timed out after 10s.<br>The script may be slow, sleeping, or unreachable. Try again.';
+    } else {
+      statusEl.innerHTML = '❌ Cannot reach URL.<br>Check the link is correct and ends in <code>/exec</code>.';
+    }
     statusEl.style.color = '#E05050';
   }
 }
