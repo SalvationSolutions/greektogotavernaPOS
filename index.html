@@ -215,6 +215,9 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .inv-table td{padding:11px 15px;border-bottom:1px solid var(--blue-ghost);font-size:13px;}
 .inv-table tr:last-child td{border-bottom:none;}
 .inv-table tr:hover td{background:var(--blue-ghost);}
+.oos-cell{color:var(--danger);font-weight:800;}
+.low-cell{color:var(--warn,#C9A84C);font-weight:700;}
+.ia-cell{white-space:nowrap;}
 .sp{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;}
 .sp.high{background:rgba(39,174,96,.13);color:#27AE60;}
 .sp.medium{background:rgba(46,125,209,.13);color:var(--blue-accent);}
@@ -869,9 +872,13 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 <!-- ══════════ INVENTORY VIEW ══════════ -->
 <div id="inventory-view" class="tab-view">
   <div class="inv-header">
-    <h2>📦 Inventory Management</h2>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button class="add-btn" style="background:var(--success)" onclick="syncInventory()">🔄 Sync Sheet</button>
+    <div>
+      <h2>📦 Inventory Management</h2>
+      <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Independent from the POS Menu — items here don't affect what's orderable.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="add-btn" style="background:#5B7FBF" onclick="importFromSheets()" title="Pulls data FROM Google Sheets and replaces your local Inventory list — only runs when you tap this, never automatic">⬇ Import from Sheet</button>
+      <button class="add-btn" style="background:var(--success)" onclick="syncInventory()" title="Backs up this inventory list to Google Sheets — never pulls or overwrites">⬆ Backup to Sheet</button>
       <button class="add-btn" onclick="openAddModal()">+ Add Item</button>
     </div>
   </div>
@@ -893,15 +900,21 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     </select>
   </div>
   <div class="stats-bar" id="inv-stats"></div>
-  <div class="inv-table">
-    <table>
-      <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody id="inv-body"></tbody>
+  <div class="inv-table" style="overflow-x:auto">
+    <table style="min-width:820px">
+      <thead><tr>
+        <th>Item Code</th>
+        <th>Item Description</th>
+        <th>Category</th>
+        <th>Price</th>
+        <th>Beg. Bal Stocks</th>
+        <th>Ending Stocks</th>
+        <th>UOM</th>
+        <th>Supplier</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody id="inv-table-body"></tbody>
     </table>
-    <div id="inv-no-results" style="display:none;text-align:center;padding:32px;color:var(--gray-soft);">
-      <div style="font-size:36px;margin-bottom:8px;">🔍</div>
-      <p style="font-weight:700;">No items match your search</p>
-    </div>
   </div>
 </div>
 
@@ -1017,16 +1030,25 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
 <!-- ITEM MODAL -->
 <div class="modal-overlay" id="item-modal">
-  <div class="modal">
-    <h3 id="modal-title">➕ Add Menu Item</h3>
-    <div class="mf"><label>Item Name</label><input type="text" id="m-name" placeholder="e.g. Chicken Souvlaki"></div>
-    <div class="mf"><label>Category</label>
-      <select id="m-cat"><option>Mains</option><option>Appetizers</option><option>Soups & Salads</option><option>Desserts</option><option>Drinks</option><option>Sides</option></select>
+  <div class="modal" style="max-width:520px;width:95vw">
+    <h3 id="modal-title">➕ Add Inventory Item</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="mf"><label>Item Code</label><input type="text" id="m-code" placeholder="e.g. GS-001"></div>
+      <div class="mf"><label>Category</label>
+        <input type="text" id="m-cat" list="cat-suggestions" placeholder="e.g. Mains, Drinks…" autocomplete="off">
+        <datalist id="cat-suggestions">
+          <option>Mains</option><option>Appetizers</option><option>Soups &amp; Salads</option>
+          <option>Desserts</option><option>Drinks</option><option>Sides</option>
+        </datalist>
+      </div>
+      <div class="mf" style="grid-column:1/-1"><label>Item Description</label><input type="text" id="m-name" placeholder="e.g. Chicken Souvlaki"></div>
+      <div class="mf"><label>Price (₱)</label><input type="number" id="m-price" placeholder="0.00" min="0" step="0.50"></div>
+      <div class="mf"><label>UOM</label><input type="text" id="m-uom" placeholder="e.g. pcs, kg, L"></div>
+      <div class="mf"><label>Beg. Bal. Stocks</label><input type="number" id="m-begbal" placeholder="0" min="0"></div>
+      <div class="mf"><label>Ending Stocks</label><input type="number" id="m-ending" placeholder="0" min="0"></div>
+      <div class="mf" style="grid-column:1/-1"><label>Supplier</label><input type="text" id="m-supplier" placeholder="e.g. ABC Trading"></div>
     </div>
-    <div class="mf"><label>Price (₱)</label><input type="number" id="m-price" placeholder="0.00" min="0" step="0.50"></div>
-    <div class="mf"><label>Stock Qty</label><input type="number" id="m-stock" placeholder="0" min="0"></div>
-    <div class="mf"><label>Emoji</label><input type="text" id="m-emoji" placeholder="🥙" maxlength="2"></div>
-    <div class="modal-actions">
+    <div class="modal-actions" style="margin-top:14px">
       <button class="m-cancel" onclick="closeModal('item-modal')">Cancel</button>
       <button class="m-save" onclick="saveItem()">Save Item</button>
     </div>
@@ -1107,18 +1129,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 <script>
 /* ═══════════════════ CONFIG ═══════════════════ */
 let SHEETS_URL = localStorage.getItem('greektogo_sheets_url') || '';
-let inventory = [];
-let order = [];
-let orderCount = parseInt(localStorage.getItem('greektogo_order_count') || '1');
-let editingId = null;
-let shiftLog = [];
-let activeCashier = null;
-let currentCat = 'All';
-let disc = {type:'pct', value:0, applied:false};
-
-// Delivery orders
-let grabOrders  = JSON.parse(localStorage.getItem('greektogo_grab_orders')  || '[]');
-
 const DEFAULT_INVENTORY = [
   {id:1,name:"Chicken Souvlaki",cat:"Mains",price:185,stock:30,emoji:"🥙"},
   {id:2,name:"Lamb Gyros",cat:"Mains",price:195,stock:25,emoji:"🌯"},
@@ -1136,6 +1146,46 @@ const DEFAULT_INVENTORY = [
   {id:14,name:"Pork Souvlaki",cat:"Mains",price:175,stock:0,emoji:"🍢"},
   {id:15,name:"Feta Saganaki",cat:"Appetizers",price:155,stock:10,emoji:"🧀"},
 ];
+
+// ══════════════════════════════════════════════════════════════════════════
+// MENU and INVENTORY are two fully independent lists. Nothing you do to one
+// ever affects the other — no shared array, no shared storage key, no
+// shared Sheets sync. This is intentional and permanent.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── POS MENU — what's sellable/orderable. Seeded once from the starter
+// dishes below; after that it lives only in this device's localStorage.
+// Never touches Google Sheets.
+let menuItems = (function(){
+  try {
+    var saved = localStorage.getItem('gtg_menu_items');
+    if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length) return parsed; }
+  } catch(e) {}
+  return DEFAULT_INVENTORY.slice();  // fresh copy so edits don't mutate the const
+})();
+function _saveMenuLocally(){ try{ localStorage.setItem('gtg_menu_items', JSON.stringify(menuItems)); }catch(e){} }
+
+// ── INVENTORY (stock tracking) — starts empty. You build this list
+// yourself via the Inventory tab. Backs up to Google Sheets, but Sheets
+// can only ever receive a copy from here — never push data back in.
+let stockInventory = (function(){
+  try {
+    var saved = localStorage.getItem('gtg_stock_inventory');
+    if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
+  } catch(e) {}
+  return [];
+})();
+function _saveStockLocally(){ try{ localStorage.setItem('gtg_stock_inventory', JSON.stringify(stockInventory)); }catch(e){} }
+let order = [];
+let orderCount = parseInt(localStorage.getItem('greektogo_order_count') || '1');
+let editingId = null;
+let shiftLog = [];
+let activeCashier = null;
+let currentCat = 'All';
+let disc = {type:'pct', value:0, applied:false};
+
+// Delivery orders
+let grabOrders  = JSON.parse(localStorage.getItem('greektogo_grab_orders')  || '[]');
 
 /* ═══════════════════ CLOCK ═══════════════════ */
 setInterval(()=>{ document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-PH'); }, 1000);
@@ -1347,24 +1397,79 @@ async function _flushQueue(){
 window.addEventListener('online',  ()=>{ if(SHEETS_URL&&!_sheetsOnline) _startReconnectLoop(); });
 window.addEventListener('offline', ()=>{ if(_sheetsOnline) _onDisconnected(); });
 
+// Bidirectional sync — on connect, PULLS latest from Sheets first (so any
+// edits you made directly in the spreadsheet are reflected immediately),
+// then the Inventory tab becomes the live view of that data.
+// The POS Menu (ordering screen) is entirely separate and is NEVER touched.
 async function loadInventoryFromSheets(){
   setDBStatus('loading','Syncing…');
-  const res=await sheetsCall('getInventory');
-  if(res && res.items && res.items.length>0){
-    inventory=res.items.map(it=>({id:parseInt(it.id),name:it.name,cat:it.cat,price:parseFloat(it.price),stock:parseInt(it.stock),emoji:it.emoji}));
+  const res = await sheetsCall('getInventory');
+  if(res){
     setDBStatus('connected','Google Sheets ✓');
-    showToast('✅ Inventory loaded from Sheets!','success');
-    _sheetsOnline=true; _startHeartbeat();
+    _sheetsOnline = true; _startHeartbeat();
+    // Pull Sheets data into Inventory tab (bidirectional sync)
+    if(res.items && res.items.length > 0){
+      stockInventory = res.items.map((it,idx)=>({
+        id: idx+1,
+        itemCode:    it.itemCode    || it['ITEM CODE']        || '',
+        description: it.description || it['ITEM DESCRIPTION'] || it.name || '',
+        category:    it.category    || it['CATEGORY']         || it.cat  || '',
+        price:       parseFloat(it.price  || it['PRICE'] || 0),
+        begBal:      parseInt(it.begBal   || it['BEG BAL STOCKS'] || it['BEG BAL'] || 0),
+        endingStock: parseInt(it.endingStock || it['ENDING STOCKS'] || it.stock || 0),
+        uom:         it.uom      || it['UOM']      || '',
+        supplier:    it.supplier || it['SUPPLIER'] || ''
+      }));
+      _saveStockLocally();
+      showToast('✅ Inventory synced from Google Sheets!','success');
+    } else {
+      // Sheet is empty — push local data up as the first backup
+      await pushInventoryToSheets();
+    }
+    renderInventory();
   } else {
-    inventory=DEFAULT_INVENTORY;
     if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _startReconnectLoop(); }
     else { setDBStatus('disconnected','No Sheet — Offline'); }
-    if(SHEETS_URL) await sheetsCall('saveInventory',{items:DEFAULT_INVENTORY});
   }
-  renderCatTabs(); renderMenu(); renderInventory();
 }
-async function syncInventory(){ showToast('🔄 Syncing…','info'); await loadInventoryFromSheets(); }
-async function pushInventoryToSheets(){ if(SHEETS_URL) await sheetsCall('saveInventory',{items:inventory}); }
+async function syncInventory(){
+  showToast('⬆ Backing up to Sheet…','info');
+  if(SHEETS_URL){ await pushInventoryToSheets(); showToast('✅ Backed up to Google Sheets!','success'); }
+  else { showToast('No Sheet connected yet.','error'); }
+}
+async function pushInventoryToSheets(){
+  if(!SHEETS_URL) return;
+  const rows = stockInventory.map(i=>({
+    itemCode: i.itemCode||'', description: i.description||'',
+    category: i.category||'', price: i.price||0,
+    begBal: i.begBal||0, endingStock: i.endingStock||0,
+    uom: i.uom||'', supplier: i.supplier||''
+  }));
+  await sheetsCall('saveInventory',{items:rows});
+}
+
+// ── Manual pull, ONLY runs when the button is tapped — never automatic ──────
+// This is the one deliberate exception to "Sheets never overwrites local
+// data": the person explicitly chose to bring spreadsheet edits into the
+// app. It only ever affects the Inventory list — the POS Menu is untouched.
+async function importFromSheets(){
+  if(!SHEETS_URL){ showToast('No Sheet connected yet.','error'); return; }
+  const ok = confirm('This will REPLACE your current Inventory list with whatever is in Google Sheets right now.\n\nYour POS Menu is not affected.\n\nContinue?');
+  if(!ok) return;
+  showToast('⬇ Importing from Sheets…','info');
+  const res = await sheetsCall('getInventory');
+  if(res && res.items){
+    stockInventory = res.items.map(it=>({
+      id: parseInt(it.id), name: it.name, cat: it.cat,
+      price: parseFloat(it.price), stock: parseInt(it.stock), emoji: it.emoji
+    }));
+    _saveStockLocally();
+    renderInventory();
+    showToast(`✅ Imported ${stockInventory.length} item(s) from Sheets!`,'success');
+  } else {
+    showToast('❌ Could not import — check your connection and try again.','error');
+  }
+}
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
 async function pushSaleToSheets(s){ if(SHEETS_URL) await sheetsCall('logSale',{sale:s}); }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
@@ -1383,13 +1488,13 @@ function setDBStatus(state,txt){
 
 /* ═══════════════════ MENU ═══════════════════ */
 function renderCatTabs(){
-  const cats=['All',...new Set(inventory.map(i=>i.cat))];
+  const cats=['All',...new Set(menuItems.map(i=>i.cat))];
   document.getElementById('cat-tabs').innerHTML=cats.map(c=>`<button class="cat-tab ${c===currentCat?'active':''}" onclick="setCategory('${c}')">${c}</button>`).join('');
 }
 function setCategory(c){currentCat=c;renderCatTabs();renderMenu();}
 function filterMenu(q){renderMenu(q);}
 function renderMenu(search=''){
-  let items=inventory;
+  let items=menuItems;
   if(currentCat!=='All') items=items.filter(i=>i.cat===currentCat);
   if(search) items=items.filter(i=>i.name.toLowerCase().includes(search.toLowerCase()));
   const grid=document.getElementById('menu-grid');
@@ -1406,7 +1511,7 @@ function renderMenu(search=''){
 
 /* ═══════════════════ ORDER ═══════════════════ */
 function addToOrder(id){
-  const item=inventory.find(i=>i.id===id);
+  const item=menuItems.find(i=>i.id===id);
   if(!item||item.stock<=0) return;
   const ex=order.find(o=>o.id===id);
   if(ex){ if(ex.qty>=item.stock){showToast('Not enough stock!','error');return;} ex.qty++; }
@@ -1525,12 +1630,14 @@ function openQRPH(){
 function confirmQRPH(){ closeModal('qrph-modal'); finalizePayment('QR Ph','',''); }
 
 async function finalizePayment(method,gcashNum,gcashRef){
-  const stockUpdates=order.map(o=>{ const it=inventory.find(i=>i.id===o.id); if(it){it.stock-=o.qty;return{id:it.id,stock:it.stock};} return null; }).filter(Boolean);
+  // Decrements the Menu's own stock only — completely separate from the
+  // Inventory tab's stock numbers, and never touches Google Sheets.
+  order.forEach(o=>{ const it=menuItems.find(i=>i.id===o.id); if(it){ it.stock-=o.qty; } });
+  _saveMenuLocally();
   const{sub,da,vat,tot}=getTotals();
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
   const dateStr=new Date().toLocaleString('en-PH');
-  pushStockUpdate(stockUpdates);
   pushSaleToSheets({orderNum:`#${ordNum}`,date:dateStr,customer:cust,cashier:activeCashier||'—',method,
     items:order.map(o=>({qty:o.qty,name:o.name})),
     subtotal:sub.toFixed(2),discount:da.toFixed(2),discLabel:da>0?discLabel():'None',vat:vat.toFixed(2),total:tot.toFixed(2)});
@@ -1667,7 +1774,7 @@ function renderDeliveryTable(platform){
 /* ═══════════════════ INVENTORY ═══════════════════ */
 function stockStatus(n){ if(n===0) return ['none','Out of Stock']; if(n<=5) return ['low','Low']; if(n<=20) return ['medium','Medium']; return ['high','Good']; }
 function renderInventoryPills(){
-  const cats=['All',...new Set(inventory.map(i=>i.cat))];
+  const cats=['All',...new Set(stockInventory.map(i=>i.category).filter(Boolean))];
   const active=window._invActiveCat||'All';
   const el=document.getElementById('inv-filter-pills');
   if(!el) return;
@@ -1684,8 +1791,8 @@ function filterInventory(){
   const sort=document.getElementById('inv-sort').value;
   const clearBtn=document.getElementById('inv-search-clear');
   if(clearBtn) clearBtn.style.display=q?'block':'none';
-  let items=[...inventory];
-  if(cat!=='All') items=items.filter(i=>i.cat===cat);
+  let items=[...stockInventory];
+  if(cat!=='All') items=items.filter(i=>i.category===cat);
   if(q) items=items.filter(i=>i.name.toLowerCase().includes(q)||i.cat.toLowerCase().includes(q));
   if(sort==='name-asc') items.sort((a,b)=>a.name.localeCompare(b.name));
   else if(sort==='name-desc') items.sort((a,b)=>b.name.localeCompare(a.name));
@@ -1693,7 +1800,7 @@ function filterInventory(){
   else if(sort==='price-desc') items.sort((a,b)=>parseFloat(b.price)-parseFloat(a.price));
   else if(sort==='stock-asc') items.sort((a,b)=>a.stock-b.stock);
   else if(sort==='stock-desc') items.sort((a,b)=>b.stock-a.stock);
-  const tbody=document.getElementById('inv-body');
+  const tbody=document.getElementById('inv-table-body');
   const noRes=document.getElementById('inv-no-results');
   if(!items.length){
     tbody.innerHTML='';
@@ -1716,54 +1823,107 @@ function clearInvSearch(){
   filterInventory();
 }
 function renderInventory(){
-  const oos=inventory.filter(i=>i.stock===0).length;
-  const low=inventory.filter(i=>i.stock>0&&i.stock<=5).length;
-  const val=inventory.reduce((s,i)=>s+parseFloat(i.price)*i.stock,0);
+  const oos = stockInventory.filter(i=>i.endingStock===0).length;
+  const low = stockInventory.filter(i=>i.endingStock>0&&i.endingStock<=5).length;
+  const val = stockInventory.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.endingStock)||0),0);
   document.getElementById('inv-stats').innerHTML=`
-    <div class="stat-card"><div class="stat-lbl">Total Items</div><div class="stat-val">${inventory.length}</div></div>
-    <div class="stat-card" style="border-color:var(--danger)"><div class="stat-lbl">Out of Stock</div><div class="stat-val" style="color:var(--danger)">${oos}</div></div>
-    <div class="stat-card" style="border-color:#E8A020"><div class="stat-lbl">Low Stock</div><div class="stat-val" style="color:#E8A020">${low}</div></div>
-    <div class="stat-card" style="border-color:var(--gold)"><div class="stat-lbl">Inventory Value</div><div class="stat-val gold">₱${val.toLocaleString('en-PH')}</div></div>`;
+    <div class="stat-card"><div class="stat-lbl">Total Items</div><div class="stat-val">${stockInventory.length}</div></div>
+    <div class="stat-card stat-warn"><div class="stat-lbl">Low Ending Stock</div><div class="stat-val">${low}</div></div>
+    <div class="stat-card stat-danger"><div class="stat-lbl">Out of Stock</div><div class="stat-val">${oos}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Inventory Value</div><div class="stat-val">₱${val.toFixed(2)}</div></div>`;
   renderInventoryPills();
-  filterInventory();
+  const cat = document.querySelector('.inv-pill.active')?.dataset?.cat||'All';
+  let items=[...stockInventory];
+  if(cat!=='All') items=items.filter(i=>i.category===cat);
+  const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
+  if(q) items=items.filter(i=>(i.description||'').toLowerCase().includes(q)||(i.category||'').toLowerCase().includes(q)||(i.itemCode||'').toLowerCase().includes(q));
+  const el=document.getElementById('inv-table-body');
+  if(!el) return;
+  if(!items.length){
+    el.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-soft)">No items found.</td></tr>';
+    return;
+  }
+  el.innerHTML=items.map(it=>`
+    <tr>
+      <td>${it.itemCode||'—'}</td>
+      <td style="font-weight:700">${it.description||'—'}</td>
+      <td>${it.category||'—'}</td>
+      <td>₱${parseFloat(it.price||0).toFixed(2)}</td>
+      <td>${it.begBal||0}</td>
+      <td class="${parseInt(it.endingStock||0)===0?'oos-cell':parseInt(it.endingStock||0)<=5?'low-cell':''}">${it.endingStock||0}</td>
+      <td>${it.uom||'—'}</td>
+      <td>${it.supplier||'—'}</td>
+      <td class="ia-cell">
+        <button class="ia" onclick="openEditModal(${it.id})">✏️</button>
+        <button class="ia del" onclick="deleteItem(${it.id})">🗑</button>
+      </td>
+    </tr>`).join('');
 }
+
 function openAddModal(){
   editingId=null;
-  document.getElementById('modal-title').textContent='➕ Add Menu Item';
-  ['m-name','m-price','m-stock','m-emoji'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('m-cat').value='Mains';
+  document.getElementById('modal-title').textContent='➕ Add Inventory Item';
+  ['m-code','m-name','m-cat','m-price','m-uom','m-begbal','m-ending','m-supplier']
+    .forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  _refreshCatSuggestions();
   openModal('item-modal');
 }
 function openEditModal(id){
   editingId=id;
-  const it=inventory.find(i=>i.id===id);
-  document.getElementById('modal-title').textContent='✏️ Edit Item';
-  document.getElementById('m-name').value=it.name;
-  document.getElementById('m-cat').value=it.cat;
-  document.getElementById('m-price').value=it.price;
-  document.getElementById('m-stock').value=it.stock;
-  document.getElementById('m-emoji').value=it.emoji;
+  const it=stockInventory.find(i=>i.id===id);
+  if(!it) return;
+  document.getElementById('modal-title').textContent='✏️ Edit Inventory Item';
+  document.getElementById('m-code').value    = it.itemCode    || '';
+  document.getElementById('m-name').value    = it.description || '';
+  document.getElementById('m-cat').value     = it.category    || '';
+  document.getElementById('m-price').value   = it.price       || '';
+  document.getElementById('m-uom').value     = it.uom         || '';
+  document.getElementById('m-begbal').value  = it.begBal      || 0;
+  document.getElementById('m-ending').value  = it.endingStock || 0;
+  document.getElementById('m-supplier').value= it.supplier    || '';
+  _refreshCatSuggestions();
   openModal('item-modal');
 }
+function _refreshCatSuggestions(){
+  // Adds any custom categories the user has already created to the suggestions
+  const dl = document.getElementById('cat-suggestions');
+  if(!dl) return;
+  const existing = Array.from(dl.options).map(o=>o.value);
+  const custom = [...new Set(stockInventory.map(i=>i.category).filter(c=>c&&!existing.includes(c)))];
+  custom.forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); });
+}
+
 async function saveItem(){
-  const name=document.getElementById('m-name').value.trim();
-  const cat=document.getElementById('m-cat').value;
-  const price=parseFloat(document.getElementById('m-price').value);
-  const stock=parseInt(document.getElementById('m-stock').value);
-  const emoji=document.getElementById('m-emoji').value||'🍽️';
-  if(!name||isNaN(price)||isNaN(stock)){showToast('Fill all fields!','error');return;}
-  if(editingId){ Object.assign(inventory.find(i=>i.id===editingId),{name,cat,price,stock,emoji}); showToast('Item updated!','success'); }
-  else{ inventory.push({id:inventory.length?Math.max(...inventory.map(i=>i.id))+1:1,name,cat,price,stock,emoji}); showToast('Item added!','success'); }
+  const itemCode    = document.getElementById('m-code').value.trim();
+  const description = document.getElementById('m-name').value.trim();
+  const category    = document.getElementById('m-cat').value.trim();
+  const price       = parseFloat(document.getElementById('m-price').value)||0;
+  const uom         = document.getElementById('m-uom').value.trim();
+  const begBal      = parseInt(document.getElementById('m-begbal').value)||0;
+  const endingStock = parseInt(document.getElementById('m-ending').value)||0;
+  const supplier    = document.getElementById('m-supplier').value.trim();
+  if(!description){showToast('Enter item description.','error');return;}
+  const record = {itemCode,description,category,price,uom,begBal,endingStock,supplier};
+  if(editingId){
+    const idx = stockInventory.findIndex(i=>i.id===editingId);
+    if(idx>-1) stockInventory[idx] = {...stockInventory[idx], ...record};
+    showToast('Item updated!','success');
+  } else {
+    const newId = stockInventory.length ? Math.max(...stockInventory.map(i=>i.id))+1 : 1;
+    stockInventory.push({id:newId, ...record});
+    showToast('Item added!','success');
+  }
   closeModal('item-modal');
+  _saveStockLocally();
   await pushInventoryToSheets();
-  renderInventory(); renderCatTabs(); renderMenu();
+  renderInventory();
 }
 async function deleteItem(id){
   if(!confirm('Delete this item?')) return;
-  inventory=inventory.filter(i=>i.id!==id);
-  order=order.filter(o=>o.id!==id);
-  await pushInventoryToSheets();
-  renderInventory(); renderMenu(); renderOrder();
+  stockInventory=stockInventory.filter(i=>i.id!==id);
+  _saveStockLocally();
+  await pushInventoryToSheets();  // backup only — never overwrites local, never touches the Menu
+  renderInventory();
   showToast('Item deleted.','success');
 }
 
@@ -2011,13 +2171,13 @@ function onSignedIn() {
   document.getElementById('g-user-initials').textContent = initials;
   document.getElementById('g-menu-name').textContent = googleUser.name;
   document.getElementById('g-menu-email').textContent = googleUser.email || 'Local account';
+  // Inventory already loaded from localStorage at page init — never reset here.
   if (SHEETS_URL) {
-    loadInventoryFromSheets();
+    loadInventoryFromSheets();  // confirms connection + backs up, doesn't overwrite
   } else {
-    inventory = DEFAULT_INVENTORY;
     setDBStatus('disconnected','No Sheet connected');
-    renderCatTabs(); renderMenu(); renderInventory();
   }
+  renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
   showToast('Welcome, ' + googleUser.name.split(' ')[0] + '!', 'success');
 }
@@ -2025,7 +2185,7 @@ function onSignedIn() {
 function continueOffline() {
   googleUser = { name: 'Guest', email: '', sub: 'guest' };
   document.getElementById('login-screen').style.display = 'none';
-  inventory = DEFAULT_INVENTORY;
+  // menuItems and stockInventory already loaded from localStorage at page init — never reset here.
   setDBStatus('disconnected','Offline mode');
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
@@ -2267,9 +2427,10 @@ function loginPinSubmit() {
     if(typeof shiftLog!=='undefined'){ shiftLog.unshift(_entry); if(shiftLog.length>30) shiftLog.length=30; }
     if(typeof renderShiftLog==='function') renderShiftLog();
     if(typeof pushShiftToSheets==='function') pushShiftToSheets(_entry);
-    // Load inventory
-    if(SHEETS_URL){ loadInventoryFromSheets(); }
-    else { inventory=DEFAULT_INVENTORY; setDBStatus('disconnected','No Sheet'); renderCatTabs();renderMenu();renderInventory(); }
+    // Inventory already loaded from localStorage at page init — never reset here.
+    if(SHEETS_URL){ loadInventoryFromSheets(); }  // confirms connection + backs up, doesn't overwrite
+    else { setDBStatus('disconnected','No Sheet'); }
+    renderCatTabs();renderMenu();renderInventory();
     renderCashierRoster();
     showToast('Welcome, '+c.name.split(' ')[0]+'!','success');
   }, 400);
