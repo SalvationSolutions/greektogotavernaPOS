@@ -60,7 +60,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .menu-item{background:#fff;border-radius:var(--radius);padding:13px 10px;cursor:pointer;border:2px solid transparent;box-shadow:var(--shadow-card);transition:all .2s;text-align:center;position:relative;}
 .menu-item:hover{border-color:var(--blue-accent);transform:translateY(-2px);box-shadow:var(--shadow-lg);}
 .menu-item.oos{opacity:.5;cursor:not-allowed;}
-.item-emoji{font-size:32px;margin-bottom:6px;display:block;}
 .item-name{font-weight:700;font-size:11px;color:var(--blue-deep);margin-bottom:3px;line-height:1.3;}
 .item-price{font-size:13px;font-weight:800;color:var(--blue-accent);}
 .item-stock{font-size:10px;color:var(--gray-soft);margin-top:2px;}
@@ -114,7 +113,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .pay-btn{padding:9px 5px;border-radius:9px;border:none;font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:4px;}
 .pay-btn:hover{filter:brightness(1.1);transform:translateY(-1px);}
 .pay-btn.cash{background:var(--success);color:#fff;}
-.pay-btn.card{background:var(--blue-accent);color:#fff;}
 .pay-btn.gcash{background:var(--gcash);color:#fff;}
 .pay-btn.qrph{background:var(--qrph-dark);color:#fff;}
 .pay-btn.grab{background:var(--grab);color:#fff;}
@@ -417,7 +415,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   .menu-panel{border-right:none;border-bottom:2px solid var(--blue-pale);
     height:55vh;min-height:280px;flex-shrink:0;}
   .menu-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:8px;}
-  .item-emoji{font-size:26px;}
   .item-name{font-size:10px;}
   .item-price{font-size:12px;}
 
@@ -489,7 +486,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   .menu-panel{height:52vh;}
   .menu-grid{grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;padding:6px;}
   .menu-item{padding:10px 6px;}
-  .item-emoji{font-size:22px;margin-bottom:4px;}
   .item-name{font-size:9px;}
   .item-price{font-size:11px;}
   .order-panel{max-height:48vh;}
@@ -797,7 +793,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
       <div class="pay-label">💳 Payment Method</div>
       <div class="pay-grid">
         <button class="pay-btn cash"  onclick="processPayment('Cash')">💵 Cash</button>
-        <button class="pay-btn card"  onclick="processPayment('Card')">💳 Card</button>
         <button class="pay-btn gcash" onclick="openGCash()">📱 GCash</button>
         <button class="pay-btn qrph"  onclick="openQRPH()">📷 QR Ph</button>
         <button class="pay-btn grab"  onclick="processPayment('GrabFood')">🟢 Grab</button>
@@ -831,12 +826,9 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <table style="width:100%;min-width:600px;border-collapse:collapse;">
       <thead>
         <tr style="background:var(--blue-deep);color:#fff;">
-          <th style="padding:10px 14px;text-align:left;font-size:12px;">Emoji</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Name</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Category</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Price</th>
-          <th style="padding:10px 14px;text-align:left;font-size:12px;">Stock</th>
-          <th style="padding:10px 14px;text-align:left;font-size:12px;">Status</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Actions</th>
         </tr>
       </thead>
@@ -858,9 +850,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
           <option>Desserts</option><option>Drinks</option><option>Sides</option>
         </datalist>
       </div>
-      <div class="mf"><label>Emoji</label><input type="text" id="pm-emoji" placeholder="🥙" maxlength="2"></div>
-      <div class="mf"><label>Price (₱)</label><input type="number" id="pm-price" placeholder="0.00" min="0" step="0.50"></div>
-      <div class="mf"><label>Stock Qty</label><input type="number" id="pm-stock" placeholder="0" min="0"></div>
+      <div class="mf" style="grid-column:1/-1"><label>Price (₱)</label><input type="number" id="pm-price" placeholder="0.00" min="0" step="0.50"></div>
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="m-cancel" onclick="closeModal('menu-item-modal')">Cancel</button>
@@ -1233,7 +1223,24 @@ function _saveMenuLocally(){ try{ localStorage.setItem('gtg_menu_items', JSON.st
 let stockInventory = (function(){
   try {
     var saved = localStorage.getItem('gtg_stock_inventory');
-    if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length) {
+        // Migrate: if first item has old fields (name/cat) but not new fields (description/category),
+        // clear and let the user re-import — avoids showing "undefined" everywhere
+        var first = parsed[0];
+        if ((first.name||first.cat) && !first.description && !first.category && !first.itemCode) {
+          localStorage.removeItem('gtg_stock_inventory');
+          return [];
+        }
+        // Clear any items that have the string "undefined" stored as a value
+        var cleaned = parsed.map(function(i){
+          Object.keys(i).forEach(function(k){ if(String(i[k])==='undefined') i[k]=''; });
+          return i;
+        });
+        return cleaned;
+      }
+    }
   } catch(e) {}
   return [];
 })();
@@ -1473,17 +1480,15 @@ async function loadInventoryFromSheets(){
     // Pull Sheets data into Inventory tab (bidirectional sync)
     if(res.items && res.items.length > 0){
       stockInventory = res.items.map((it,idx)=>{
-        // Handle all possible key formats: camelCase, UPPERCASE, old names
-        // Google Sheets returns keys exactly as written in row 1
-        function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==''&&v!==null) return v; } return ''; }
+        function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
         return {
           id:          idx+1,
-          itemCode:    g(['itemCode','ITEM CODE','item_code','ItemCode','id']),
-          description: g(['description','ITEM DESCRIPTION','item_description','name','Description','NAME']),
+          itemCode:    g(['itemCode','ITEM CODE','item_code']),
+          description: g(['description','ITEM DESCRIPTION','item_description','name','Description']),
           category:    g(['category','CATEGORY','cat','Category']),
-          price:       parseFloat(g(['price','PRICE','Price'])) || 0,
-          begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal','begbal'])) || 0,
-          endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK'])) || 0,
+          price:       parseFloat(g(['price','PRICE','Price']))||0,
+          begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
+          endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK']))||0,
           uom:         g(['uom','UOM','Uom','unit','UNIT']),
           supplier:    g(['supplier','SUPPLIER','Supplier'])
         };
@@ -1527,10 +1532,20 @@ async function importFromSheets(){
   showToast('⬇ Importing from Sheets…','info');
   const res = await sheetsCall('getInventory');
   if(res && res.items){
-    stockInventory = res.items.map(it=>({
-      id: parseInt(it.id), name: it.name, cat: it.cat,
-      price: parseFloat(it.price), stock: parseInt(it.stock), emoji: it.emoji
-    }));
+    stockInventory = res.items.map((it,idx)=>{
+      function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+      return {
+        id:          idx+1,
+        itemCode:    g(['itemCode','ITEM CODE','item_code']),
+        description: g(['description','ITEM DESCRIPTION','item_description','name','Description']),
+        category:    g(['category','CATEGORY','cat','Category']),
+        price:       parseFloat(g(['price','PRICE','Price']))||0,
+        begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
+        endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK']))||0,
+        uom:         g(['uom','UOM','Uom','unit','UNIT']),
+        supplier:    g(['supplier','SUPPLIER','Supplier'])
+      };
+    });
     _saveStockLocally();
     renderInventory();
     showToast(`✅ Imported ${stockInventory.length} item(s) from Sheets!`,'success');
@@ -1568,12 +1583,9 @@ function renderMenu(search=''){
   const grid=document.getElementById('menu-grid');
   if(!items.length){grid.innerHTML=`<div class="loading-grid"><p>No items found.</p></div>`;return;}
   grid.innerHTML=items.map(it=>`
-    <div class="menu-item ${it.stock===0?'oos':''}" onclick="${it.stock>0?`addToOrder(${it.id})`:''}">
-      ${it.stock===0?'<span class="out-badge">OUT</span>':''}
-      <span class="item-emoji">${it.emoji}</span>
+    <div class="menu-item" onclick="addToOrder(${it.id})">
       <div class="item-name">${it.name}</div>
       <div class="item-price">₱${parseFloat(it.price).toFixed(2)}</div>
-      <div class="item-stock ${it.stock>0&&it.stock<=5?'stock-low':''}">Stock: ${it.stock}</div>
     </div>`).join('');
 }
 
@@ -1583,12 +1595,8 @@ let pmEditingId = null;
 function renderPosMenu(){
   // Stats
   const total = menuItems.length;
-  const oos   = menuItems.filter(i=>i.stock===0).length;
-  const low   = menuItems.filter(i=>i.stock>0&&i.stock<=5).length;
   document.getElementById('pm-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-lbl">Total Items</div><div class="stat-val">${total}</div></div>
-    <div class="stat-card stat-warn"><div class="stat-lbl">Low Stock</div><div class="stat-val">${low}</div></div>
-    <div class="stat-card stat-danger"><div class="stat-lbl">Out of Stock</div><div class="stat-val">${oos}</div></div>`;
+    <div class="stat-card"><div class="stat-lbl">Total Menu Items</div><div class="stat-val">${total}</div></div>`;
 
   // Pills
   const cats = ['All',...new Set(menuItems.map(i=>i.cat).filter(Boolean))];
@@ -1602,23 +1610,14 @@ function renderPosMenu(){
   let items = cat==='All' ? [...menuItems] : menuItems.filter(i=>i.cat===cat);
   const tbody = document.getElementById('pm-table-body');
   if(!items.length){
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-soft)">No items yet. Click + Add Menu Item to start.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--gray-soft)">No items yet. Click + Add Menu Item to start.</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(it=>`
     <tr style="border-bottom:1px solid var(--blue-ghost)">
-      <td style="padding:10px 14px;font-size:18px">${it.emoji||'🍽️'}</td>
       <td style="padding:10px 14px;font-weight:700;font-size:13px">${it.name||'—'}</td>
       <td style="padding:10px 14px;font-size:12px"><span class="cat-badge">${it.cat||'—'}</span></td>
       <td style="padding:10px 14px;font-size:13px">₱${parseFloat(it.price||0).toFixed(2)}</td>
-      <td style="padding:10px 14px;font-size:13px">${it.stock||0}</td>
-      <td style="padding:10px 14px">
-        <span style="padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;
-          background:${it.stock===0?'#FFE5E5':it.stock<=5?'#FFF8E1':'#E8F8EE'};
-          color:${it.stock===0?'var(--danger)':it.stock<=5?'#C9A84C':'#27AE60'}">
-          ${it.stock===0?'Out of Stock':it.stock<=5?'Low Stock':'In Stock'}
-        </span>
-      </td>
       <td style="padding:10px 14px;white-space:nowrap">
         <button class="ia" onclick="openEditMenuItemModal(${it.id})">✏️</button>
         <button class="ia del" onclick="deleteMenuItem(${it.id})">🗑</button>
@@ -1634,7 +1633,7 @@ function filterPosMenu(cat){
 function openAddMenuItemModal(){
   pmEditingId = null;
   document.getElementById('menu-modal-title').textContent = '➕ Add Menu Item';
-  ['pm-name','pm-cat','pm-emoji','pm-price','pm-stock'].forEach(id=>{
+  ['pm-name','pm-cat','pm-price'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   // Refresh category suggestions from current menu items
@@ -1655,26 +1654,22 @@ function openEditMenuItemModal(id){
   document.getElementById('menu-modal-title').textContent = '✏️ Edit Menu Item';
   document.getElementById('pm-name').value  = it.name  || '';
   document.getElementById('pm-cat').value   = it.cat   || '';
-  document.getElementById('pm-emoji').value = it.emoji || '';
   document.getElementById('pm-price').value = it.price || '';
-  document.getElementById('pm-stock').value = it.stock || 0;
   openModal('menu-item-modal');
 }
 
 function saveMenuItem(){
   const name  = document.getElementById('pm-name').value.trim();
   const cat   = document.getElementById('pm-cat').value.trim();
-  const emoji = document.getElementById('pm-emoji').value.trim() || '🍽️';
   const price = parseFloat(document.getElementById('pm-price').value) || 0;
-  const stock = parseInt(document.getElementById('pm-stock').value) || 0;
   if(!name){ showToast('Enter item name.','error'); return; }
   if(pmEditingId){
     const idx = menuItems.findIndex(i=>i.id===pmEditingId);
-    if(idx>-1) menuItems[idx] = {...menuItems[idx], name, cat, emoji, price, stock};
+    if(idx>-1) menuItems[idx] = {...menuItems[idx], name, cat, price};
     showToast('Menu item updated!','success');
   } else {
     const newId = menuItems.length ? Math.max(...menuItems.map(i=>i.id))+1 : 1;
-    menuItems.push({id:newId, name, cat, emoji, price, stock});
+    menuItems.push({id:newId, name, cat, price});
     showToast('Menu item added!','success');
   }
   closeModal('menu-item-modal');
@@ -1964,82 +1959,73 @@ function renderInventoryPills(){
 }
 function setInvCat(cat){
   window._invActiveCat=cat;
-  renderInventoryPills();
-  filterInventory();
+  renderInventory();  // renders pills + table with new fields
 }
 function filterInventory(){
-  const q=(document.getElementById('inv-search').value||'').toLowerCase().trim();
-  const cat=window._invActiveCat||'All';
-  const sort=document.getElementById('inv-sort').value;
-  const clearBtn=document.getElementById('inv-search-clear');
-  if(clearBtn) clearBtn.style.display=q?'block':'none';
-  let items=[...stockInventory];
-  if(cat!=='All') items=items.filter(i=>i.category===cat);
-  if(q) items=items.filter(i=>i.name.toLowerCase().includes(q)||i.cat.toLowerCase().includes(q));
-  if(sort==='name-asc') items.sort((a,b)=>a.name.localeCompare(b.name));
-  else if(sort==='name-desc') items.sort((a,b)=>b.name.localeCompare(a.name));
-  else if(sort==='price-asc') items.sort((a,b)=>parseFloat(a.price)-parseFloat(b.price));
-  else if(sort==='price-desc') items.sort((a,b)=>parseFloat(b.price)-parseFloat(a.price));
-  else if(sort==='stock-asc') items.sort((a,b)=>a.stock-b.stock);
-  else if(sort==='stock-desc') items.sort((a,b)=>b.stock-a.stock);
-  const tbody=document.getElementById('inv-table-body');
-  const noRes=document.getElementById('inv-no-results');
-  if(!items.length){
-    tbody.innerHTML='';
-    if(noRes) noRes.style.display='block';
-  } else {
-    if(noRes) noRes.style.display='none';
-    tbody.innerHTML=items.map(it=>{
-      const[cls,lbl]=stockStatus(it.stock);
-      return `<tr>
-        <td>${it.emoji} <strong>${it.name}</strong></td>
-        <td>${it.cat}</td><td>₱${parseFloat(it.price).toFixed(2)}</td><td>${it.stock}</td>
-        <td><span class="sp ${cls}">${lbl}</span></td>
-        <td><button class="ia" onclick="openEditModal(${it.id})">✏️ Edit</button><button class="ia del" onclick="deleteItem(${it.id})">🗑</button></td></tr>`;
-    }).join('');
-  }
+  // Delegates to renderInventory which handles all filtering/sorting with new field names
+  renderInventory();
 }
 function clearInvSearch(){
   document.getElementById('inv-search').value='';
-  document.getElementById('inv-search-clear').style.display='none';
-  filterInventory();
+  const clr=document.getElementById('inv-search-clear');
+  if(clr) clr.style.display='none';
+  renderInventory();
 }
 function renderInventory(){
-  const oos = stockInventory.filter(i=>i.endingStock===0).length;
-  const low = stockInventory.filter(i=>i.endingStock>0&&i.endingStock<=5).length;
-  const val = stockInventory.reduce((s,i)=>s+(parseFloat(i.price)||0)*(parseInt(i.endingStock)||0),0);
-  document.getElementById('inv-stats').innerHTML=`
+  const oos = stockInventory.filter(i=>parseInt(i.endingStock||0)===0).length;
+  const low = stockInventory.filter(i=>parseInt(i.endingStock||0)>0&&parseInt(i.endingStock||0)<=5).length;
+  const val = stockInventory.reduce((s,i)=>s+(parseFloat(i.price||0))*(parseInt(i.endingStock||0)),0);
+  const statsEl = document.getElementById('inv-stats');
+  if(statsEl) statsEl.innerHTML=`
     <div class="stat-card"><div class="stat-lbl">Total Items</div><div class="stat-val">${stockInventory.length}</div></div>
     <div class="stat-card stat-warn"><div class="stat-lbl">Low Ending Stock</div><div class="stat-val">${low}</div></div>
     <div class="stat-card stat-danger"><div class="stat-lbl">Out of Stock</div><div class="stat-val">${oos}</div></div>
     <div class="stat-card"><div class="stat-lbl">Inventory Value</div><div class="stat-val">₱${val.toFixed(2)}</div></div>`;
   renderInventoryPills();
-  const cat = document.querySelector('.inv-pill.active')?.dataset?.cat||'All';
-  let items=[...stockInventory];
-  if(cat!=='All') items=items.filter(i=>i.category===cat);
-  const q=(document.getElementById('inv-search')?.value||'').toLowerCase();
-  if(q) items=items.filter(i=>(i.description||'').toLowerCase().includes(q)||(i.category||'').toLowerCase().includes(q)||(i.itemCode||'').toLowerCase().includes(q));
-  const el=document.getElementById('inv-table-body');
+  // Filter by active category
+  const cat = window._invActiveCat||'All';
+  // Filter by search
+  const q = (document.getElementById('inv-search')?.value||'').toLowerCase().trim();
+  // Sort
+  const sort = document.getElementById('inv-sort')?.value||'';
+  let items = [...stockInventory];
+  if(cat!=='All') items = items.filter(i=>(i.category||'')=== cat);
+  if(q) items = items.filter(i=>
+    (i.description||'').toLowerCase().includes(q)||
+    (i.category||'').toLowerCase().includes(q)||
+    (i.itemCode||'').toLowerCase().includes(q)||
+    (i.supplier||'').toLowerCase().includes(q)
+  );
+  if(sort==='name-asc')    items.sort((a,b)=>(a.description||'').localeCompare(b.description||''));
+  else if(sort==='name-desc')   items.sort((a,b)=>(b.description||'').localeCompare(a.description||''));
+  else if(sort==='price-asc')   items.sort((a,b)=>parseFloat(a.price||0)-parseFloat(b.price||0));
+  else if(sort==='price-desc')  items.sort((a,b)=>parseFloat(b.price||0)-parseFloat(a.price||0));
+  else if(sort==='stock-asc')   items.sort((a,b)=>parseInt(a.endingStock||0)-parseInt(b.endingStock||0));
+  else if(sort==='stock-desc')  items.sort((a,b)=>parseInt(b.endingStock||0)-parseInt(a.endingStock||0));
+  const el = document.getElementById('inv-table-body');
   if(!el) return;
   if(!items.length){
     el.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-soft)">No items found.</td></tr>';
     return;
   }
-  el.innerHTML=items.map(it=>`
-    <tr>
+  el.innerHTML = items.map(it=>{
+    const ending = parseInt(it.endingStock||0);
+    const cls = ending===0?'oos-cell':ending<=5?'low-cell':'';
+    return `<tr>
       <td>${it.itemCode||'—'}</td>
-      <td style="font-weight:700;min-width:180px;word-break:break-word;white-space:normal">${it.description||'—'}</td>
+      <td style="font-weight:700;word-break:break-word;white-space:normal;min-width:160px">${it.description||'—'}</td>
       <td>${it.category||'—'}</td>
       <td>₱${parseFloat(it.price||0).toFixed(2)}</td>
       <td>${it.begBal||0}</td>
-      <td class="${parseInt(it.endingStock||0)===0?'oos-cell':parseInt(it.endingStock||0)<=5?'low-cell':''}">${it.endingStock||0}</td>
+      <td class="${cls}">${ending}</td>
       <td>${it.uom||'—'}</td>
       <td>${it.supplier||'—'}</td>
       <td class="ia-cell">
         <button class="ia" onclick="openEditModal(${it.id})">✏️</button>
         <button class="ia del" onclick="deleteItem(${it.id})">🗑</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function openAddModal(){
@@ -2796,5 +2782,6 @@ window.doLogin = function(){
 
 })();
 </script>
+
 </body>
 </html>
