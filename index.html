@@ -736,6 +736,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   </div>
   <nav class="header-nav">
     <button class="nav-btn active"      onclick="showTab('pos',this)">🧾 POS</button>
+    <button class="nav-btn"             onclick="showTab('pos-menu',this)">🍽️ POS Menu</button>
     <button class="nav-btn"             onclick="showTab('inventory',this)">📦 Inventory</button>
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
@@ -807,6 +808,67 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 </div>
 
 <!-- ══════════ GRAB VIEW ══════════ -->
+<!-- ══════════ POS MENU VIEW ══════════ -->
+<div id="pos-menu-view" class="tab-view" style="flex-direction:column;padding:22px;gap:18px;overflow-y:auto;height:calc(100vh - 64px);">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-family:'Cinzel',serif;font-size:21px;color:var(--blue-deep);margin:0">🍽️ POS Menu Management</h2>
+      <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">These are the dishes shown on the ordering screen. Separate from Inventory.</div>
+    </div>
+    <button class="add-btn" onclick="openAddMenuItemModal()">+ Add Menu Item</button>
+  </div>
+
+  <!-- Category filter pills -->
+  <div id="pm-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+  <!-- Stats bar -->
+  <div id="pm-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;"></div>
+
+  <!-- Menu table -->
+  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);overflow-x:auto;">
+    <table style="width:100%;min-width:600px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:var(--blue-deep);color:#fff;">
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Emoji</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Name</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Category</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Price</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Stock</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Status</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="pm-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- POS MENU ITEM MODAL -->
+<div class="modal-overlay" id="menu-item-modal">
+  <div class="modal" style="max-width:420px;width:95vw">
+    <h3 id="menu-modal-title">➕ Add Menu Item</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="mf" style="grid-column:1/-1"><label>Item Name</label><input type="text" id="pm-name" placeholder="e.g. Chicken Souvlaki"></div>
+      <div class="mf"><label>Category</label>
+        <input type="text" id="pm-cat" list="pm-cat-suggestions" placeholder="e.g. Mains" autocomplete="off">
+        <datalist id="pm-cat-suggestions">
+          <option>Mains</option><option>Appetizers</option><option>Soups &amp; Salads</option>
+          <option>Desserts</option><option>Drinks</option><option>Sides</option>
+        </datalist>
+      </div>
+      <div class="mf"><label>Emoji</label><input type="text" id="pm-emoji" placeholder="🥙" maxlength="2"></div>
+      <div class="mf"><label>Price (₱)</label><input type="number" id="pm-price" placeholder="0.00" min="0" step="0.50"></div>
+      <div class="mf"><label>Stock Qty</label><input type="number" id="pm-stock" placeholder="0" min="0"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="m-cancel" onclick="closeModal('menu-item-modal')">Cancel</button>
+      <button class="m-save" onclick="saveMenuItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
 <div id="grab-view" class="tab-view delivery-view">
   <!-- Platform Strip -->
   <div class="platform-strip grab-strip">
@@ -1204,7 +1266,8 @@ function showTab(tab, btn) {
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById(tab+'-view').classList.add('active');
   btn.classList.add('active');
-  if(tab==='inventory') renderInventory();
+  if(tab==='inventory')  renderInventory();
+  if(tab==='pos-menu')   renderPosMenu();
   if(tab==='grab')    { renderDeliveryStats('grab');  renderDeliveryTable('grab');  setNow('grab-dt');  }
   if(tab==='cashier') { renderCashierRoster(); renderShiftLog(); }
 }
@@ -1409,17 +1472,22 @@ async function loadInventoryFromSheets(){
     _sheetsOnline = true; _startHeartbeat();
     // Pull Sheets data into Inventory tab (bidirectional sync)
     if(res.items && res.items.length > 0){
-      stockInventory = res.items.map((it,idx)=>({
-        id: idx+1,
-        itemCode:    it.itemCode    || it['ITEM CODE']        || '',
-        description: it.description || it['ITEM DESCRIPTION'] || it.name || '',
-        category:    it.category    || it['CATEGORY']         || it.cat  || '',
-        price:       parseFloat(it.price  || it['PRICE'] || 0),
-        begBal:      parseInt(it.begBal   || it['BEG BAL STOCKS'] || it['BEG BAL'] || 0),
-        endingStock: parseInt(it.endingStock || it['ENDING STOCKS'] || it.stock || 0),
-        uom:         it.uom      || it['UOM']      || '',
-        supplier:    it.supplier || it['SUPPLIER'] || ''
-      }));
+      stockInventory = res.items.map((it,idx)=>{
+        // Handle all possible key formats: camelCase, UPPERCASE, old names
+        // Google Sheets returns keys exactly as written in row 1
+        function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==''&&v!==null) return v; } return ''; }
+        return {
+          id:          idx+1,
+          itemCode:    g(['itemCode','ITEM CODE','item_code','ItemCode','id']),
+          description: g(['description','ITEM DESCRIPTION','item_description','name','Description','NAME']),
+          category:    g(['category','CATEGORY','cat','Category']),
+          price:       parseFloat(g(['price','PRICE','Price'])) || 0,
+          begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal','begbal'])) || 0,
+          endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK'])) || 0,
+          uom:         g(['uom','UOM','Uom','unit','UNIT']),
+          supplier:    g(['supplier','SUPPLIER','Supplier'])
+        };
+      });
       _saveStockLocally();
       showToast('✅ Inventory synced from Google Sheets!','success');
     } else {
@@ -1507,6 +1575,120 @@ function renderMenu(search=''){
       <div class="item-price">₱${parseFloat(it.price).toFixed(2)}</div>
       <div class="item-stock ${it.stock>0&&it.stock<=5?'stock-low':''}">Stock: ${it.stock}</div>
     </div>`).join('');
+}
+
+/* ═══════════════════ POS MENU MANAGEMENT ═══════════════════ */
+let pmEditingId = null;
+
+function renderPosMenu(){
+  // Stats
+  const total = menuItems.length;
+  const oos   = menuItems.filter(i=>i.stock===0).length;
+  const low   = menuItems.filter(i=>i.stock>0&&i.stock<=5).length;
+  document.getElementById('pm-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-lbl">Total Items</div><div class="stat-val">${total}</div></div>
+    <div class="stat-card stat-warn"><div class="stat-lbl">Low Stock</div><div class="stat-val">${low}</div></div>
+    <div class="stat-card stat-danger"><div class="stat-lbl">Out of Stock</div><div class="stat-val">${oos}</div></div>`;
+
+  // Pills
+  const cats = ['All',...new Set(menuItems.map(i=>i.cat).filter(Boolean))];
+  const activePill = document.querySelector('#pm-pills .inv-pill.active')?.dataset?.cat||'All';
+  document.getElementById('pm-pills').innerHTML = cats.map(c=>
+    `<button class="inv-pill ${c===activePill?'active':''}" data-cat="${c}" onclick="filterPosMenu('${c}')">${c}</button>`
+  ).join('');
+
+  // Table
+  const cat = activePill;
+  let items = cat==='All' ? [...menuItems] : menuItems.filter(i=>i.cat===cat);
+  const tbody = document.getElementById('pm-table-body');
+  if(!items.length){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-soft)">No items yet. Click + Add Menu Item to start.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(it=>`
+    <tr style="border-bottom:1px solid var(--blue-ghost)">
+      <td style="padding:10px 14px;font-size:18px">${it.emoji||'🍽️'}</td>
+      <td style="padding:10px 14px;font-weight:700;font-size:13px">${it.name||'—'}</td>
+      <td style="padding:10px 14px;font-size:12px"><span class="cat-badge">${it.cat||'—'}</span></td>
+      <td style="padding:10px 14px;font-size:13px">₱${parseFloat(it.price||0).toFixed(2)}</td>
+      <td style="padding:10px 14px;font-size:13px">${it.stock||0}</td>
+      <td style="padding:10px 14px">
+        <span style="padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;
+          background:${it.stock===0?'#FFE5E5':it.stock<=5?'#FFF8E1':'#E8F8EE'};
+          color:${it.stock===0?'var(--danger)':it.stock<=5?'#C9A84C':'#27AE60'}">
+          ${it.stock===0?'Out of Stock':it.stock<=5?'Low Stock':'In Stock'}
+        </span>
+      </td>
+      <td style="padding:10px 14px;white-space:nowrap">
+        <button class="ia" onclick="openEditMenuItemModal(${it.id})">✏️</button>
+        <button class="ia del" onclick="deleteMenuItem(${it.id})">🗑</button>
+      </td>
+    </tr>`).join('');
+}
+
+function filterPosMenu(cat){
+  document.querySelectorAll('#pm-pills .inv-pill').forEach(p=>p.classList.toggle('active',p.dataset.cat===cat));
+  renderPosMenu();
+}
+
+function openAddMenuItemModal(){
+  pmEditingId = null;
+  document.getElementById('menu-modal-title').textContent = '➕ Add Menu Item';
+  ['pm-name','pm-cat','pm-emoji','pm-price','pm-stock'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  // Refresh category suggestions from current menu items
+  const dl = document.getElementById('pm-cat-suggestions');
+  if(dl){
+    const existing = Array.from(dl.options).map(o=>o.value);
+    [...new Set(menuItems.map(i=>i.cat).filter(c=>c&&!existing.includes(c)))].forEach(c=>{
+      const o=document.createElement('option'); o.value=c; dl.appendChild(o);
+    });
+  }
+  openModal('menu-item-modal');
+}
+
+function openEditMenuItemModal(id){
+  pmEditingId = id;
+  const it = menuItems.find(i=>i.id===id);
+  if(!it) return;
+  document.getElementById('menu-modal-title').textContent = '✏️ Edit Menu Item';
+  document.getElementById('pm-name').value  = it.name  || '';
+  document.getElementById('pm-cat').value   = it.cat   || '';
+  document.getElementById('pm-emoji').value = it.emoji || '';
+  document.getElementById('pm-price').value = it.price || '';
+  document.getElementById('pm-stock').value = it.stock || 0;
+  openModal('menu-item-modal');
+}
+
+function saveMenuItem(){
+  const name  = document.getElementById('pm-name').value.trim();
+  const cat   = document.getElementById('pm-cat').value.trim();
+  const emoji = document.getElementById('pm-emoji').value.trim() || '🍽️';
+  const price = parseFloat(document.getElementById('pm-price').value) || 0;
+  const stock = parseInt(document.getElementById('pm-stock').value) || 0;
+  if(!name){ showToast('Enter item name.','error'); return; }
+  if(pmEditingId){
+    const idx = menuItems.findIndex(i=>i.id===pmEditingId);
+    if(idx>-1) menuItems[idx] = {...menuItems[idx], name, cat, emoji, price, stock};
+    showToast('Menu item updated!','success');
+  } else {
+    const newId = menuItems.length ? Math.max(...menuItems.map(i=>i.id))+1 : 1;
+    menuItems.push({id:newId, name, cat, emoji, price, stock});
+    showToast('Menu item added!','success');
+  }
+  closeModal('menu-item-modal');
+  _saveMenuLocally();
+  renderCatTabs(); renderMenu(); renderPosMenu();
+}
+
+function deleteMenuItem(id){
+  if(!confirm('Remove this item from the POS Menu?')) return;
+  menuItems = menuItems.filter(i=>i.id!==id);
+  order = order.filter(o=>o.id!==id);
+  _saveMenuLocally();
+  renderCatTabs(); renderMenu(); renderPosMenu();
+  showToast('Menu item removed.','success');
 }
 
 /* ═══════════════════ ORDER ═══════════════════ */
@@ -1846,7 +2028,7 @@ function renderInventory(){
   el.innerHTML=items.map(it=>`
     <tr>
       <td>${it.itemCode||'—'}</td>
-      <td style="font-weight:700">${it.description||'—'}</td>
+      <td style="font-weight:700;min-width:180px;word-break:break-word;white-space:normal">${it.description||'—'}</td>
       <td>${it.category||'—'}</td>
       <td>₱${parseFloat(it.price||0).toFixed(2)}</td>
       <td>${it.begBal||0}</td>
