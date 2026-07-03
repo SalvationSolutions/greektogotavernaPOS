@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GREEK TO GO TAVERNA POS</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -275,6 +275,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .pin-circle.p-error{background:var(--danger);border-color:var(--danger);animation:pshake .3s ease;}
 .pin-circle.p-ok{background:var(--success);border-color:var(--success);}
 @keyframes pshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@-webkit-keyframes loginShake{0%,100%{-webkit-transform:translateX(0)}20%,60%{-webkit-transform:translateX(-8px)}40%,80%{-webkit-transform:translateX(8px)}}
 @keyframes loginShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 .c-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:8px;}
 .ckbtn{padding:10px;font-size:15px;font-weight:700;border:1.5px solid var(--blue-pale);border-radius:10px;background:#fff;color:var(--blue-deep);cursor:pointer;text-align:center;transition:all .12s;font-family:'Nunito',sans-serif;}
@@ -1600,7 +1601,7 @@ function renderPosMenu(){
 
   // Pills
   const cats = ['All',...new Set(menuItems.map(i=>i.cat).filter(Boolean))];
-  const activePill = document.querySelector('#pm-pills .inv-pill.active')?.dataset?.cat||'All';
+  const activePill = (document.querySelector('#pm-pills .inv-pill.active')||{dataset:{}}).dataset.cat||'All';
   document.getElementById('pm-pills').innerHTML = cats.map(c=>
     `<button class="inv-pill ${c===activePill?'active':''}" data-cat="${c}" onclick="filterPosMenu('${c}')">${c}</button>`
   ).join('');
@@ -1985,9 +1986,9 @@ function renderInventory(){
   // Filter by active category
   const cat = window._invActiveCat||'All';
   // Filter by search
-  const q = (document.getElementById('inv-search')?.value||'').toLowerCase().trim();
+  const q = ((document.getElementById('inv-search')||{value:''}).value||'').toLowerCase().trim();
   // Sort
-  const sort = document.getElementById('inv-sort')?.value||'';
+  const sort = (document.getElementById('inv-sort')||{value:''}).value||'';
   let items = [...stockInventory];
   if(cat!=='All') items = items.filter(i=>(i.category||'')=== cat);
   if(q) items = items.filter(i=>
@@ -2650,134 +2651,93 @@ document.getElementById('order-num').textContent=`Order #${String(orderCount).pa
 <script>
 (function(){
 
-window.OWNER_ACCOUNT = {
-  username: "owner",
-  password: "1234",
-  role: "Owner"
-};
-
-window.CASHIER_ACCOUNTS = [
-  {username:"cashier1", password:"1111", role:"Cashier"},
-  {username:"cashier2", password:"2222", role:"Cashier"}
+// ── Credentials — edit these to change login details ──────────────────────
+var ACCOUNTS = [
+  { username:'owner',    password:'1234', role:'Owner',   badge:'👑 Owner Logged In',   color:'av-b' },
+  { username:'cashier1', password:'1111', role:'Cashier', badge:'👤 Cashier 1',          color:'av-t' },
+  { username:'cashier2', password:'2222', role:'Cashier', badge:'👤 Cashier 2',          color:'av-t' }
 ];
 
-const originalLogin = window.doLogin;
-
+// ── Single unified login function ─────────────────────────────────────────
 window.doLogin = function(){
+  var userEl = document.getElementById('login-name');
+  var passEl = document.getElementById('login-pass');
+  var errEl  = document.getElementById('login-err');
+  if(!userEl || !passEl) return false;
 
-  const userEl = document.getElementById('login-name');
-  const passEl = document.getElementById('login-pass');
-  const errEl = document.getElementById('login-err');
+  var username = userEl.value.trim();
+  var password = passEl.value.trim();
+  if(errEl){ errEl.textContent = ''; errEl.style.color = '#E05050'; }
 
-  if(!userEl || !passEl){
-      if(typeof originalLogin === 'function'){
-          return originalLogin();
+  if(!username || !password){
+    if(errEl) errEl.textContent = '❌ Please enter username and password.';
+    return false;
+  }
+
+  // ── 1. Check hardcoded accounts ──────────────────────────────────────
+  var match = null;
+  for(var i=0; i<ACCOUNTS.length; i++){
+    if(ACCOUNTS[i].username.toLowerCase() === username.toLowerCase() &&
+       ACCOUNTS[i].password === password){
+      match = ACCOUNTS[i]; break;
+    }
+  }
+
+  // ── 2. Check cashiers added via Cashier tab (name + PIN) ────────────
+  if(!match){
+    var stored = [];
+    try{ stored = JSON.parse(localStorage.getItem('gtg_cashiers') || '[]'); }catch(e){}
+    for(var j=0; j<stored.length; j++){
+      var c = stored[j];
+      if(c.name && c.name.toLowerCase() === username.toLowerCase() &&
+         String(c.pin) === String(password)){
+        match = { username: c.name, password: password, role: c.role||'Staff',
+                  badge: '👤 '+c.name.split(' ')[0], color: c.color||'av-t' };
+        break;
       }
-      return false;
+    }
   }
 
-  const username = userEl.value.trim();
-  const password = passEl.value.trim();
-
-  if(errEl) errEl.innerText = "";
-
-  // OWNER
-  if(
-    username === OWNER_ACCOUNT.username &&
-    password === OWNER_ACCOUNT.password
-  ){
-      localStorage.setItem('gtg_user', JSON.stringify(OWNER_ACCOUNT));
-
-      const loginScreen = document.getElementById('login-screen');
-      if(loginScreen) loginScreen.style.display = 'none';
-
-      const active = document.getElementById('active-cashier');
-      if(active) active.innerHTML = '👑 Owner Logged In';
-      var _lb = document.getElementById('logout-btn');
-      if(_lb) _lb.style.display = 'inline-flex';
-
-      // ── Log owner sign-in to Shift Log ──
-      const _ownerEntry = {
-        name: 'Owner',
-        type: 'IN',
-        shift: document.getElementById('c-shift-sel') ? document.getElementById('c-shift-sel').value : 'Owner Access',
-        color: 'av-b',
-        time: new Date().toLocaleString('en-PH')
-      };
-      if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_ownerEntry); if(shiftLog.length>30) shiftLog.length=30; }
-      if(typeof renderShiftLog === 'function') renderShiftLog();
-      if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_ownerEntry);
-
-      return true;
+  // ── No match ─────────────────────────────────────────────────────────
+  if(!match){
+    if(errEl) errEl.textContent = '❌ Invalid username or password.';
+    var box = document.querySelector('.login-box');
+    if(box){ box.style.animation='none'; void box.offsetWidth; box.style.animation='loginShake .35s ease'; }
+    return false;
   }
 
-  // CASHIER
-  const cashier = CASHIER_ACCOUNTS.find(acc =>
-      acc.username === username &&
-      acc.password === password
-  );
+  // ── Login success — set googleUser then call onSignedIn() ─────────────
+  localStorage.setItem('gtg_user', JSON.stringify(match));
+  googleUser = {
+    name:  match.username,
+    email: match.role,
+    sub:   match.username.toLowerCase().replace(/\s+/g,'_')
+  };
+  localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
 
-  if(cashier){
-      localStorage.setItem('gtg_user', JSON.stringify(cashier));
+  // Set cashier badge
+  var active = document.getElementById('active-cashier');
+  if(active) active.innerHTML = match.badge;
 
-      const loginScreen = document.getElementById('login-screen');
-      if(loginScreen) loginScreen.style.display = 'none';
+  // Show logout button
+  var lb = document.getElementById('logout-btn');
+  if(lb) lb.style.display = 'inline-flex';
 
-      const active = document.getElementById('active-cashier');
-      if(active) active.innerHTML = '👤 ' + cashier.username;
-      var _lb2 = document.getElementById('logout-btn');
-      if(_lb2) _lb2.style.display = 'inline-flex';
+  // Log shift in
+  var shiftEntry = {
+    name:  match.username,
+    type:  'IN',
+    shift: (document.getElementById('c-shift-sel') || {value:''}).value || 'Shift',
+    color: match.color,
+    time:  new Date().toLocaleString('en-PH')
+  };
+  if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(shiftEntry); if(shiftLog.length>30) shiftLog.length=30; }
+  if(typeof renderShiftLog === 'function') renderShiftLog();
+  if(typeof pushShiftToSheets === 'function') pushShiftToSheets(shiftEntry);
 
-      // ── Log cashier sign-in to Shift Log ──
-      const _cashierEntry = {
-        name: cashier.username,
-        type: 'IN',
-        shift: document.getElementById('c-shift-sel') ? document.getElementById('c-shift-sel').value : 'Shift',
-        color: 'av-t',
-        time: new Date().toLocaleString('en-PH')
-      };
-      if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_cashierEntry); if(shiftLog.length>30) shiftLog.length=30; }
-      if(typeof renderShiftLog === 'function') renderShiftLog();
-      if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_cashierEntry);
-
-      return true;
-  }
-
-  // ── Check cashiers created in Cashier tab (name + PIN) ──
-  var storedCashiers = [];
-  try { storedCashiers = JSON.parse(localStorage.getItem('gtg_cashiers') || '[]'); } catch(e){}
-  var staffMatch = storedCashiers.find(function(c){
-    return c.name.toLowerCase() === username.toLowerCase() && String(c.pin) === String(password);
-  });
-
-  if(staffMatch){
-    localStorage.setItem('gtg_user', JSON.stringify({username: staffMatch.name, role: staffMatch.role}));
-    googleUser = { name: staffMatch.name, email: staffMatch.role || 'Staff', sub: staffMatch.name.toLowerCase().replace(/\s+/g,'_') };
-    localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
-    var _lb3 = document.getElementById('logout-btn');
-    if(_lb3) _lb3.style.display = 'inline-flex';
-    var active2 = document.getElementById('active-cashier');
-    if(active2) active2.innerHTML = '👤 ' + staffMatch.name.split(' ')[0];
-    var _staffEntry = {
-      name: staffMatch.name, type: 'IN',
-      shift: document.getElementById('c-shift-sel') ? document.getElementById('c-shift-sel').value : 'Shift',
-      color: staffMatch.color || 'av-t',
-      time: new Date().toLocaleString('en-PH')
-    };
-    if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(_staffEntry); if(shiftLog.length>30) shiftLog.length=30; }
-    if(typeof pushShiftToSheets === 'function') pushShiftToSheets(_staffEntry);
-    if(typeof onSignedIn === 'function') onSignedIn();
-    return true;
-  }
-
-  // ── No match anywhere — block entry ──
-  if(errEl){
-    errEl.innerText = '❌ Invalid username or password.';
-    errEl.style.color = '#E05050';
-  }
-  var box = document.querySelector('.login-box');
-  if(box){ box.style.animation='none'; void box.offsetWidth; box.style.animation='loginShake .35s ease'; }
-  return false;
+  // Boot the app — loads inventory, renders everything, saves session
+  if(typeof onSignedIn === 'function') onSignedIn();
+  return true;
 };
 
 })();
