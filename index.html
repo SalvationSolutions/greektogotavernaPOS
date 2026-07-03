@@ -183,7 +183,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .empty-table .et-icon{font-size:36px;margin-bottom:8px;}
 
 /* INVENTORY */
-#inventory-view{height:calc(100vh - 64px);flex-direction:column;padding:22px;overflow-y:auto;gap:18px;}
+#inventory-view{min-height:calc(100vh - 64px);flex-direction:column;padding:22px;overflow-y:auto;gap:18px;}
 .inv-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0;}
 /* INVENTORY SEARCH BAR */
 .inv-search-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
@@ -207,7 +207,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .stat-lbl{font-size:10px;color:var(--gray-soft);text-transform:uppercase;font-weight:700;}
 .stat-val{font-size:21px;font-weight:800;color:var(--blue-deep);margin-top:3px;}
 .stat-val.gold{color:var(--gold);}
-.inv-table{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;}
+.inv-table{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);overflow-x:auto;}
 .inv-table table{width:100%;border-collapse:collapse;}
 .inv-table th{background:var(--blue-deep);color:#fff;padding:11px 15px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
 .inv-table td{padding:11px 15px;border-bottom:1px solid var(--blue-ghost);font-size:13px;}
@@ -439,7 +439,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   .dlv-orders-card table{min-width:600px;}
 
   /* Inventory */
-  #inventory-view{padding:14px;gap:12px;}
+  #inventory-view{padding:14px;gap:12px;min-height:calc(100vh - 90px);}
   .inv-header{flex-direction:column;align-items:flex-start;gap:8px;}
   .inv-header h2{font-size:17px;}
   .stats-bar{grid-template-columns:repeat(2,1fr);gap:8px;}
@@ -512,7 +512,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   .comm-rate-val{font-size:22px;}
 
   /* Inventory */
-  #inventory-view{padding:10px;}
+  #inventory-view{padding:10px;min-height:calc(100vh - 90px);}
   .stats-bar{grid-template-columns:1fr 1fr;}
   .stat-card{padding:10px 12px;}
   .stat-val{font-size:15px;}
@@ -804,7 +804,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
 <!-- ══════════ GRAB VIEW ══════════ -->
 <!-- ══════════ POS MENU VIEW ══════════ -->
-<div id="pos-menu-view" class="tab-view" style="flex-direction:column;padding:22px;gap:18px;overflow-y:auto;height:calc(100vh - 64px);">
+<div id="pos-menu-view" class="tab-view" style="flex-direction:column;padding:22px;gap:18px;overflow-y:auto;min-height:calc(100vh - 64px);">
 
   <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -822,7 +822,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   <div id="pm-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;"></div>
 
   <!-- Menu table -->
-  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);overflow-x:auto;">
+  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);">
     <table style="width:100%;min-width:600px;border-collapse:collapse;">
       <thead>
         <tr style="background:var(--blue-deep);color:#fff;">
