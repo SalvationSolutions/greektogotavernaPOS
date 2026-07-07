@@ -813,7 +813,11 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
       <h2 style="font-family:'Cinzel',serif;font-size:21px;color:var(--blue-deep);margin:0">🍽️ POS Menu Management</h2>
       <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">These are the dishes shown on the ordering screen. Separate from Inventory.</div>
     </div>
-    <button class="add-btn" onclick="openAddMenuItemModal()">+ Add Menu Item</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="add-btn" style="background:#5B7FBF" onclick="importMenuFromSheets()" title="Pull POS MENU CREATION sheet into this tab">⬇ Import from Sheet</button>
+      <button class="add-btn" style="background:var(--success)" onclick="backupMenuToSheets()" title="Push this menu list to POS MENU CREATION sheet">⬆ Backup to Sheet</button>
+      <button class="add-btn" onclick="openAddMenuItemModal()">+ Add Menu Item</button>
+    </div>
   </div>
 
   <!-- Category filter pills -->
@@ -1181,7 +1185,12 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
 <script>
 /* ═══════════════════ CONFIG ═══════════════════ */
-let SHEETS_URL = localStorage.getItem('greektogo_sheets_url') || '';
+// ── Google Sheets URL — hardcoded, works on every browser/device ──
+// ── HARDCODED — never needs localStorage or manual setup ──────────────────
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbxK-uKxkx2IWvzWVoaLdKsHcNxavKUcC8QkTnli9AVBTNFEn5MpEgyDHVJek8QheCgcLQ/exec';
+let SHEETS_URL = SHEETS_URL_PERMANENT;
+// Sync to localStorage so existing connect-modal logic still works
+try{ localStorage.setItem('greektogo_sheets_url', SHEETS_URL); }catch(e){}
 const DEFAULT_INVENTORY = [
   {id:1,name:"Chicken Souvlaki",cat:"Mains",price:185,stock:30,emoji:"🥙"},
   {id:2,name:"Lamb Gyros",cat:"Mains",price:195,stock:25,emoji:"🌯"},
@@ -1675,6 +1684,7 @@ function saveMenuItem(){
   }
   closeModal('menu-item-modal');
   _saveMenuLocally();
+  backupMenuToSheets();
   renderCatTabs(); renderMenu(); renderPosMenu();
 }
 
@@ -1683,9 +1693,45 @@ function deleteMenuItem(id){
   menuItems = menuItems.filter(i=>i.id!==id);
   order = order.filter(o=>o.id!==id);
   _saveMenuLocally();
+  backupMenuToSheets();
   renderCatTabs(); renderMenu(); renderPosMenu();
   showToast('Menu item removed.','success');
 }
+
+// ── POS Menu ↔ Google Sheets (POS MENU CREATION tab) ─────────────────────────
+async function backupMenuToSheets(){
+  if(!SHEETS_URL) return;
+  var rows = menuItems.map(function(i){ return { name:i.name, cat:i.cat, price:i.price }; });
+  await sheetsCall('savePosMenu', {items: rows});
+}
+
+async function importMenuFromSheets(){
+  if(!SHEETS_URL){ showToast('No Sheet connected.','error'); return; }
+  var ok = confirm('This will REPLACE your current POS Menu list with whatever is in the POS MENU CREATION sheet.\n\nContinue?');
+  if(!ok) return;
+  showToast('⬇ Importing POS Menu from Sheet…','info');
+  var res = await sheetsCall('getPosMenu');
+  if(res && res.items){
+    menuItems = res.items.map(function(it, idx){
+      function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+      return {
+        id:    idx + 1,
+        name:  g(['name','NAME','Item Name','ITEM NAME','item_name']),
+        cat:   g(['cat','category','CATEGORY','Category']),
+        price: parseFloat(g(['price','PRICE','Price'])) || 0
+      };
+    }).filter(function(i){ return i.name; });
+    _saveMenuLocally();
+    renderCatTabs(); renderMenu(); renderPosMenu();
+    showToast('✅ Imported ' + menuItems.length + ' menu item(s) from Sheet!', 'success');
+  } else {
+    showToast('❌ Could not import — check your connection.','error');
+  }
+}
+
+// Auto-backup to Sheet whenever a menu item is saved
+var _origSaveMenuItem = saveMenuItem;
+// (backup is called inside saveMenuItem via backupMenuToSheets below)
 
 /* ═══════════════════ ORDER ═══════════════════ */
 function addToOrder(id){
@@ -1840,7 +1886,9 @@ async function finalizePayment(method,gcashNum,gcashRef){
 function newOrder(){
   clearOrder();
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
-if(!SHEETS_URL){ setDBStatus('disconnected','No Sheet — Offline'); }
+// Auto-connect to Google Sheets on load (URL is hardcoded above)
+if(SHEETS_URL){ loadInventoryFromSheets(); }
+else { setDBStatus('disconnected','No Sheet — Offline'); }
 }
 
 /* ═══════════════════ DELIVERY ORDERS ═══════════════════ */
@@ -2342,7 +2390,19 @@ function onSignedIn() {
   document.getElementById('g-menu-email').textContent = googleUser.email || 'Local account';
   // Inventory already loaded from localStorage at page init — never reset here.
   if (SHEETS_URL) {
-    loadInventoryFromSheets();  // confirms connection + backs up, doesn't overwrite
+    loadInventoryFromSheets();
+    // Pull POS Menu from Sheet after short delay (let inventory load first)
+    setTimeout(function(){
+      sheetsCall('getPosMenu').then(function(res){
+        if(res && res.items && res.items.length > 0){
+          menuItems = res.items.map(function(it,idx){
+            function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+            return { id:idx+1, name:g(['name','NAME','Item Name','ITEM NAME']), cat:g(['cat','category','CATEGORY','Category']), price:parseFloat(g(['price','PRICE','Price']))||0 };
+          }).filter(function(i){ return i.name; });
+          if(menuItems.length > 0){ _saveMenuLocally(); renderCatTabs(); renderMenu(); }
+        }
+      });
+    }, 1500);
   } else {
     setDBStatus('disconnected','No Sheet connected');
   }
@@ -2437,8 +2497,7 @@ async function connectSheets() {
 
     if (data && data.items !== undefined) {
       SHEETS_URL = url;
-      localStorage.setItem('greektogo_sheets_url', url);
-      if (googleUser) localStorage.setItem('gtg_sheets_url_' + googleUser.sub, url);
+      try{ localStorage.setItem('greektogo_sheets_url', url); }catch(e){}
       statusEl.textContent = '✅ Connected successfully!';
       statusEl.style.color = '#27AE60';
       _sheetsOnline = true;
@@ -2651,11 +2710,15 @@ document.getElementById('order-num').textContent=`Order #${String(orderCount).pa
 <script>
 (function(){
 
-// ── Credentials — edit these to change login details ──────────────────────
+// ── Credentials — hardcoded, works on every browser/device ───────────────
+// To add staff: add a new line below, upload to GitHub once. Done.
 var ACCOUNTS = [
-  { username:'owner',    password:'1234', role:'Owner',   badge:'👑 Owner Logged In',   color:'av-b' },
-  { username:'cashier1', password:'1111', role:'Cashier', badge:'👤 Cashier 1',          color:'av-t' },
-  { username:'cashier2', password:'2222', role:'Cashier', badge:'👤 Cashier 2',          color:'av-t' }
+  { username:'owner',    password:'1234', role:'Owner',   badge:'👑 Owner Logged In', color:'av-b' },
+  { username:'Wahlene',  password:'1234', role:'Staff',   badge:'👤 Wahlene',         color:'av-t' },
+  { username:'Beth',     password:'5678', role:'Staff',   badge:'👤 Beth',            color:'av-o' },
+  { username:'Zap',      password:'9999', role:'Staff',   badge:'👤 Zap',             color:'av-p' },
+  { username:'cashier1', password:'1111', role:'Cashier', badge:'👤 Cashier 1',       color:'av-t' },
+  { username:'cashier2', password:'2222', role:'Cashier', badge:'👤 Cashier 2',       color:'av-t' }
 ];
 
 // ── Single unified login function ─────────────────────────────────────────
