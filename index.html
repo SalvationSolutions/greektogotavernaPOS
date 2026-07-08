@@ -831,9 +831,11 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <table style="width:100%;min-width:600px;border-collapse:collapse;">
       <thead>
         <tr style="background:var(--blue-deep);color:#fff;">
-          <th style="padding:10px 14px;text-align:left;font-size:12px;">Name</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Product ID</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Menu Name</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Category</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Price</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;">Detail/Variant</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;">Actions</th>
         </tr>
       </thead>
@@ -844,18 +846,20 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
 <!-- POS MENU ITEM MODAL -->
 <div class="modal-overlay" id="menu-item-modal">
-  <div class="modal" style="max-width:420px;width:95vw">
+  <div class="modal" style="max-width:480px;width:95vw">
     <h3 id="menu-modal-title">➕ Add Menu Item</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div class="mf" style="grid-column:1/-1"><label>Item Name</label><input type="text" id="pm-name" placeholder="e.g. Chicken Souvlaki"></div>
-      <div class="mf"><label>Category</label>
+      <div class="mf"><label>Product ID</label><input type="text" id="pm-pid" placeholder="e.g. M-001"></div>
+      <div class="mf"><label>Price (₱)</label><input type="number" id="pm-price" placeholder="0.00" min="0" step="0.50"></div>
+      <div class="mf" style="grid-column:1/-1"><label>Menu Name</label><input type="text" id="pm-name" placeholder="e.g. Chicken Souvlaki"></div>
+      <div class="mf" style="grid-column:1/-1"><label>Category</label>
         <input type="text" id="pm-cat" list="pm-cat-suggestions" placeholder="e.g. Mains" autocomplete="off">
         <datalist id="pm-cat-suggestions">
           <option>Mains</option><option>Appetizers</option><option>Soups &amp; Salads</option>
           <option>Desserts</option><option>Drinks</option><option>Sides</option>
         </datalist>
       </div>
-      <div class="mf" style="grid-column:1/-1"><label>Price (₱)</label><input type="number" id="pm-price" placeholder="0.00" min="0" step="0.50"></div>
+      <div class="mf" style="grid-column:1/-1"><label>Detail / Variant</label><input type="text" id="pm-detail" placeholder="e.g. Spicy, Large, With Rice"></div>
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="m-cancel" onclick="closeModal('menu-item-modal')">Cancel</button>
@@ -1620,14 +1624,16 @@ function renderPosMenu(){
   let items = cat==='All' ? [...menuItems] : menuItems.filter(i=>i.cat===cat);
   const tbody = document.getElementById('pm-table-body');
   if(!items.length){
-    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--gray-soft)">No items yet. Click + Add Menu Item to start.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray-soft)">No items yet. Click + Add Menu Item to start.</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(it=>`
     <tr style="border-bottom:1px solid var(--blue-ghost)">
+      <td style="padding:10px 14px;font-size:12px;color:var(--gray-soft)">${it.pid||'—'}</td>
       <td style="padding:10px 14px;font-weight:700;font-size:13px">${it.name||'—'}</td>
       <td style="padding:10px 14px;font-size:12px"><span class="cat-badge">${it.cat||'—'}</span></td>
       <td style="padding:10px 14px;font-size:13px">₱${parseFloat(it.price||0).toFixed(2)}</td>
+      <td style="padding:10px 14px;font-size:12px;color:var(--gray-soft)">${it.detail||'—'}</td>
       <td style="padding:10px 14px;white-space:nowrap">
         <button class="ia" onclick="openEditMenuItemModal(${it.id})">✏️</button>
         <button class="ia del" onclick="deleteMenuItem(${it.id})">🗑</button>
@@ -1643,7 +1649,7 @@ function filterPosMenu(cat){
 function openAddMenuItemModal(){
   pmEditingId = null;
   document.getElementById('menu-modal-title').textContent = '➕ Add Menu Item';
-  ['pm-name','pm-cat','pm-price'].forEach(id=>{
+  ['pm-pid','pm-name','pm-cat','pm-price','pm-detail'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   // Refresh category suggestions from current menu items
@@ -1662,24 +1668,28 @@ function openEditMenuItemModal(id){
   const it = menuItems.find(i=>i.id===id);
   if(!it) return;
   document.getElementById('menu-modal-title').textContent = '✏️ Edit Menu Item';
-  document.getElementById('pm-name').value  = it.name  || '';
-  document.getElementById('pm-cat').value   = it.cat   || '';
-  document.getElementById('pm-price').value = it.price || '';
+  document.getElementById('pm-pid').value    = it.pid    || '';
+  document.getElementById('pm-name').value   = it.name   || '';
+  document.getElementById('pm-cat').value    = it.cat    || '';
+  document.getElementById('pm-price').value  = it.price  || '';
+  document.getElementById('pm-detail').value = it.detail || '';
   openModal('menu-item-modal');
 }
 
 function saveMenuItem(){
-  const name  = document.getElementById('pm-name').value.trim();
-  const cat   = document.getElementById('pm-cat').value.trim();
-  const price = parseFloat(document.getElementById('pm-price').value) || 0;
-  if(!name){ showToast('Enter item name.','error'); return; }
+  const pid    = document.getElementById('pm-pid').value.trim();
+  const name   = document.getElementById('pm-name').value.trim();
+  const cat    = document.getElementById('pm-cat').value.trim();
+  const price  = parseFloat(document.getElementById('pm-price').value) || 0;
+  const detail = document.getElementById('pm-detail').value.trim();
+  if(!name){ showToast('Enter menu name.','error'); return; }
   if(pmEditingId){
     const idx = menuItems.findIndex(i=>i.id===pmEditingId);
-    if(idx>-1) menuItems[idx] = {...menuItems[idx], name, cat, price};
+    if(idx>-1) menuItems[idx] = {...menuItems[idx], pid, name, cat, price, detail};
     showToast('Menu item updated!','success');
   } else {
     const newId = menuItems.length ? Math.max(...menuItems.map(i=>i.id))+1 : 1;
-    menuItems.push({id:newId, name, cat, price});
+    menuItems.push({id:newId, pid, name, cat, price, detail});
     showToast('Menu item added!','success');
   }
   closeModal('menu-item-modal');
@@ -1701,7 +1711,7 @@ function deleteMenuItem(id){
 // ── POS Menu ↔ Google Sheets (POS MENU CREATION tab) ─────────────────────────
 async function backupMenuToSheets(){
   if(!SHEETS_URL) return;
-  var rows = menuItems.map(function(i){ return { name:i.name, cat:i.cat, price:i.price }; });
+  var rows = menuItems.map(function(i){ return { pid:i.pid||'', name:i.name||'', cat:i.cat||'', price:i.price||0, detail:i.detail||'' }; });
   await sheetsCall('savePosMenu', {items: rows});
 }
 
@@ -2397,7 +2407,14 @@ function onSignedIn() {
         if(res && res.items && res.items.length > 0){
           menuItems = res.items.map(function(it,idx){
             function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-            return { id:idx+1, name:g(['name','NAME','Item Name','ITEM NAME']), cat:g(['cat','category','CATEGORY','Category']), price:parseFloat(g(['price','PRICE','Price']))||0 };
+            return {
+              id:     idx+1,
+              pid:    g(['pid','PRODUCT ID','product_id','ProductID']),
+              name:   g(['name','MENU NAME','menu_name','MenuName','NAME','Item Name','ITEM NAME']),
+              cat:    g(['cat','category','CATEGORY','Category']),
+              price:  parseFloat(g(['price','PRICE','Price']))||0,
+              detail: g(['detail','Detail/Variant','DETAIL','Variant','variant','VARIANT'])
+            };
           }).filter(function(i){ return i.name; });
           if(menuItems.length > 0){ _saveMenuLocally(); renderCatTabs(); renderMenu(); }
         }
