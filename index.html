@@ -54,7 +54,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .search-input{width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:8px 13px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--blue-deep);background:var(--blue-ghost);outline:none;transition:border-color .2s;}
 .search-input:focus{border-color:var(--blue-accent);background:#fff;}
 .category-tabs{display:flex;gap:7px;padding:9px 16px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--blue-pale);}
-.cat-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:none;transition:all .2s;background:var(--blue-ghost);color:var(--gray-soft);}
+.cat-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:none;transition:all .2s;background:var(--blue-ghost);color:var(--gray-soft);flex-shrink:0;}
 .cat-tab.active{background:var(--blue-accent);color:#fff;}
 .menu-grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:11px;align-content:start;}
 .menu-item{background:#fff;border-radius:var(--radius);padding:13px 10px;cursor:pointer;border:2px solid transparent;box-shadow:var(--shadow-card);transition:all .2s;text-align:center;position:relative;}
@@ -78,7 +78,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .order-empty{text-align:center;padding:30px 20px;color:var(--gray-soft);}
 .order-empty .ei{font-size:42px;margin-bottom:7px;}
 .order-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--blue-ghost);}
-.ol-emoji{font-size:19px;min-width:24px;}
 .ol-info{flex:1;}
 .ol-name{font-weight:700;font-size:12px;}
 .ol-sub{font-size:10px;color:var(--gray-soft);}
@@ -115,7 +114,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .pay-btn.cash{background:var(--success);color:#fff;}
 .pay-btn.gcash{background:var(--gcash);color:#fff;}
 .pay-btn.qrph{background:var(--qrph-dark);color:#fff;}
-.pay-btn.grab{background:var(--grab);color:#fff;}
 .clear-btn{width:100%;padding:7px;border-radius:9px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;margin-top:5px;}
 .clear-btn:hover{background:var(--danger);color:#fff;}
 
@@ -756,7 +754,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <div class="menu-search-bar">
       <input class="search-input" type="text" placeholder="🔍  Search menu items…" oninput="filterMenu(this.value)">
     </div>
-    <div class="category-tabs" id="cat-tabs"></div>
+    <div class="category-tabs" id="cat-tabs" style="display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:4px;scrollbar-width:none;-ms-overflow-style:none;"></div>
     <div class="menu-grid" id="menu-grid">
       <div class="loading-grid"><div class="spinner"></div><p>Loading menu…</p></div>
     </div>
@@ -781,13 +779,42 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
         <div class="disc-types">
           <button class="dt-btn active" onclick="setDType('pct',this)">% Pct</button>
           <button class="dt-btn" onclick="setDType('amt',this)">₱ Amt</button>
-          <button class="dt-btn" onclick="setDType('senior',this)">👴 Sr</button>
+          <button class="dt-btn" onclick="setDType('senior',this)">👴 Senior</button>
           <button class="dt-btn" onclick="setDType('pwd',this)">♿ PWD</button>
         </div>
-        <div class="disc-row">
+
+        <!-- % Pct and ₱ Amt row -->
+        <div id="disc-standard-row" class="disc-row">
           <input class="disc-val" type="number" id="dval" placeholder="0" min="0">
           <button class="disc-apply" onclick="applyDisc()">Apply</button>
           <button class="disc-remove" id="dremove" onclick="removeDisc()">✕</button>
+        </div>
+
+        <!-- Senior / PWD multi-person counter -->
+        <div id="disc-srp-row" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+            <div style="background:var(--blue-ghost);border-radius:10px;padding:8px 10px;">
+              <div style="font-size:10px;color:var(--gray-soft);font-weight:700;margin-bottom:4px;">👴 SENIORS</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button class="qty-btn minus" onclick="changeSrpCount('sr',-1)" style="width:28px;height:28px;">−</button>
+                <span id="sr-count" style="font-size:16px;font-weight:900;color:var(--blue-deep);min-width:24px;text-align:center;">0</span>
+                <button class="qty-btn plus" onclick="changeSrpCount('sr',1)" style="width:28px;height:28px;">+</button>
+              </div>
+            </div>
+            <div style="background:var(--blue-ghost);border-radius:10px;padding:8px 10px;">
+              <div style="font-size:10px;color:var(--gray-soft);font-weight:700;margin-bottom:4px;">♿ PWD</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button class="qty-btn minus" onclick="changeSrpCount('pwd',-1)" style="width:28px;height:28px;">−</button>
+                <span id="pwd-count" style="font-size:16px;font-weight:900;color:var(--blue-deep);min-width:24px;text-align:center;">0</span>
+                <button class="qty-btn plus" onclick="changeSrpCount('pwd',1)" style="width:28px;height:28px;">+</button>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--gray-soft);text-align:center;margin-bottom:6px;" id="srp-summary">Set counts then tap Apply</div>
+          <div style="display:flex;gap:6px;">
+            <button class="disc-apply" style="flex:1" onclick="applySrpDisc()">Apply Discount</button>
+            <button class="disc-remove" id="dremove" onclick="removeDisc()">✕</button>
+          </div>
         </div>
       </div>
       <!-- PAYMENT -->
@@ -796,7 +823,6 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
         <button class="pay-btn cash"  onclick="processPayment('Cash')">💵 Cash</button>
         <button class="pay-btn gcash" onclick="openGCash()">📱 GCash</button>
         <button class="pay-btn qrph"  onclick="openQRPH()">📷 QR Ph</button>
-        <button class="pay-btn grab"  onclick="processPayment('GrabFood')">🟢 Grab</button>
       </div>
       <button class="clear-btn" onclick="clearOrder()">🗑 Clear Order</button>
     </div>
@@ -1293,193 +1319,168 @@ function showTab(tab, btn) {
   if(tab==='cashier') { renderCashierRoster(); renderShiftLog(); }
 }
 
-/* ═══════════════════ SHEETS — AUTO-RECONNECT ENGINE ═══════════════════ */
-let _sheetsOnline    = false;
-let _reconnectTimer  = null;
-let _heartbeatTimer  = null;
-let _reconnectDelay  = 5000;
-const MAX_RETRY_DELAY    = 60000;
-const HEARTBEAT_INTERVAL = 30000;
-const OFFLINE_QUEUE_KEY  = 'gtg_offline_queue';
+/* ═══════════════════ SHEETS CONNECTION ENGINE ═══════════════════
+   Simple, stable, browser-compatible connection to Google Apps Script.
+   Uses JSONP as the primary transport (bypasses Brave/Safari blocking),
+   with a plain fetch fallback. Single reconnect loop, no conflicting timers.
+═══════════════════════════════════════════════════════════════════ */
 
-function _queueLoad(){ try{ return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]'); }catch(e){ return []; } }
-function _queueSave(q){ try{ localStorage.setItem(OFFLINE_QUEUE_KEY,JSON.stringify(q)); }catch(e){} }
+let _sheetsOnline     = false;
+let _reconnectTimer   = null;
+let _heartbeatTimer   = null;
+let _isReconnecting   = false;      // prevent multiple concurrent loops
+const RETRY_DELAY_MS  = 15000;      // 15s between reconnect attempts
+const HEARTBEAT_MS    = 60000;      // ping every 60s when connected
+const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
+const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
+
+// ── Offline queue ────────────────────────────────────────────────────────────
+function _qLoad(){ try{ return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]'); }catch(e){ return []; } }
+function _qSave(q){ try{ localStorage.setItem(OFFLINE_QUEUE_KEY,JSON.stringify(q)); }catch(e){} }
 function _enqueue(action,body){
-  const q=_queueLoad(); q.push({action,body,ts:Date.now()});
-  if(q.length>200) q.splice(0,q.length-200);
-  _queueSave(q); _updateQueueBadge(q.length);
-}
-function _clearQueue(){ _queueSave([]); _updateQueueBadge(0); }
-function _updateQueueBadge(count){
-  const el=document.getElementById('db-status-txt');
-  if(!el) return;
-  if(count>0 && !_sheetsOnline) el.textContent=`Offline — ${count} pending`;
+  var q=_qLoad(); q.push({action:action,body:body,ts:Date.now()});
+  if(q.length>100) q.splice(0,q.length-100);
+  _qSave(q);
 }
 
-window._lastSheetsError = '';  // human-readable reason for the most recent failure
-
-// ── JSONP fallback ────────────────────────────────────────────────────────
-// Some browsers/extensions (Brave Shields, certain ad-blockers, some mobile
-// privacy modes) block fetch()/XHR calls to script.google.com outright —
-// the request never even completes, so fetch() throws "Failed to fetch"
-// before any response can be read. JSONP sidesteps this entirely: it loads
-// the URL as a plain <script> tag (the same mechanism used by Google Maps
-// embeds, analytics snippets, etc.), which privacy tools essentially never
-// block. This is the standard, battle-tested workaround for this exact
-// failure mode and makes the connection bulletproof regardless of browser.
-function _jsonpRequest(url, timeoutMs){
-  return new Promise((resolve, reject) => {
-    const cbName = '_gtg_jsonp_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
-    const script = document.createElement('script');
-    let settled = false;
-    function cleanup(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
-    window[cbName] = function(data){ if(settled) return; settled=true; cleanup(); resolve(data); };
-    const timer = setTimeout(()=>{ if(settled) return; settled=true; cleanup(); reject(new Error('Request timed out after '+Math.round(timeoutMs/1000)+'s — slow connection or unresponsive script.')); }, timeoutMs);
-    script.onerror = function(){ if(settled) return; settled=true; cleanup(); reject(new Error('Could not load script — check the URL is correct and ends in /exec.')); };
-    const sep = url.indexOf('?')>-1 ? '&' : '?';
-    script.src = url + sep + 'callback=' + cbName;
+// ── JSONP transport (primary — works through Brave Shields and mobile browsers) ──
+function _jsonp(fullUrl){
+  return new Promise(function(resolve,reject){
+    var cb='_gtgcb'+Date.now()+'_'+Math.floor(Math.random()*1e6);
+    var script=document.createElement('script');
+    var done=false;
+    var timer=setTimeout(function(){ if(done) return; done=true; cleanup(); reject(new Error('timeout')); }, CALL_TIMEOUT_MS);
+    function cleanup(){ delete window[cb]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cb]=function(data){ if(done) return; done=true; cleanup(); resolve(data); };
+    script.onerror=function(){ if(done) return; done=true; cleanup(); reject(new Error('script load failed')); };
+    script.src=fullUrl+(fullUrl.indexOf('?')>-1?'&':'?')+'callback='+cb;
     document.head.appendChild(script);
   });
 }
 
-// ── Smart GET: tries fetch() first, auto-falls-back to JSONP if blocked ───
-async function _smartGet(fullUrl, timeoutMs){
-  let res, raw;
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
-    res = await fetch(fullUrl, { method:'GET', signal: ctrl.signal });
-    clearTimeout(tid);
-  } catch(fetchErr){
-    if (fetchErr.name === 'AbortError') {
-      throw new Error('Request timed out after '+Math.round(timeoutMs/1000)+'s — slow connection or unresponsive script.');
-    }
-    // fetch() was blocked before any response arrived (e.g. "Failed to fetch")
-    // — fall back to JSONP, which bypasses most shield/extension blocking.
-    const data = await _jsonpRequest(fullUrl, timeoutMs);
-    if (data && data.error) throw new Error('Script error: ' + data.error);
-    return data;
-  }
-
-  raw = await res.text();
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-
-  let data;
-  try { data = JSON.parse(raw); }
-  catch(parseErr){
-    if (/accounts\.google\.com|ServiceLogin|<html/i.test(raw)) {
-      throw new Error('Got a Google sign-in page instead of data. Fix: Apps Script → Deploy → Manage deployments → pencil icon → set "Execute as: Me" → Deploy → New version.');
-    }
-    throw new Error('Script returned a non-JSON response. Re-check the script code is the latest version.');
-  }
-  if (data && data.error) throw new Error('Script error: ' + data.error);
-  return data;
+// ── Fetch transport (fallback) ────────────────────────────────────────────────
+function _fetchTransport(fullUrl){
+  return new Promise(function(resolve,reject){
+    var ctrl=new AbortController();
+    var timer=setTimeout(function(){ ctrl.abort(); },CALL_TIMEOUT_MS);
+    fetch(fullUrl,{method:'GET',signal:ctrl.signal})
+      .then(function(r){ clearTimeout(timer); return r.text(); })
+      .then(function(t){ resolve(JSON.parse(t)); })
+      .catch(function(e){ clearTimeout(timer); reject(e); });
+  });
 }
 
-async function _fetchWithRetry(url, payload, retries=3, delayMs=2000){
-  // Use GET with query params, not POST — Apps Script /exec issues a 302
-  // redirect internally, and many mobile browsers drop POST bodies on
-  // redirect. GET carries no body, so nothing can be lost in transit.
-  const action = payload.action;
-  const rest = Object.assign({}, payload);
-  delete rest.action;
-  let qs = 'action=' + encodeURIComponent(action);
-  if (Object.keys(rest).length > 0) {
-    qs += '&data=' + encodeURIComponent(JSON.stringify(rest));
-  }
-  const fullUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + qs;
-
-  let lastErr = '';
-  for(let i=0;i<retries;i++){
-    try{
-      const data = await _smartGet(fullUrl, 10000);
-      window._lastSheetsError = '';
-      return data;
-    } catch(e){
-      lastErr = e.message || 'Network error — cannot reach the script URL.';
-      window._lastSheetsError = lastErr;
-      if(i<retries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));
+// ── Single call — JSONP first, fetch fallback ─────────────────────────────────
+async function _call(url, action, data){
+  var qs = '?action=' + encodeURIComponent(action);
+  if(data && Object.keys(data).length){
+    var encoded = encodeURIComponent(JSON.stringify(data));
+    // Skip URL encoding for large payloads (>1800 chars) — use fetch POST instead
+    if(encoded.length > 1800){
+      try{
+        var ctrl=new AbortController();
+        var timer=setTimeout(function(){ctrl.abort();},CALL_TIMEOUT_MS);
+        var r=await fetch(url,{
+          method:'POST',
+          headers:{'Content-Type':'text/plain'},
+          body:JSON.stringify(Object.assign({action:action},data)),
+          signal:ctrl.signal
+        });
+        clearTimeout(timer);
+        return await r.json();
+      } catch(e){ return null; }
     }
+    qs += '&data=' + encoded;
   }
-  return null;
+  var fullUrl = url + qs;
+  try{ return await _jsonp(fullUrl); } catch(e){
+    try{ return await _fetchTransport(fullUrl); } catch(e2){ return null; }
+  }
 }
 
-async function sheetsCall(action, body={}){
+// ── Main sheetsCall ───────────────────────────────────────────────────────────
+async function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
-  const result = await _fetchWithRetry(SHEETS_URL,{action,...body});
+  var result = await _call(SHEETS_URL, action, body||{});
   if(result !== null){
     if(!_sheetsOnline) _onReconnected();
   } else {
     _onDisconnected();
-    const writeOps=['saveInventory','updateStock','logSale','logShift'];
-    if(writeOps.includes(action)) _enqueue(action,body);
+    var writeOps=['saveInventory','updateStock','logSale','logShift','savePosMenu'];
+    if(writeOps.indexOf(action)>-1) _enqueue(action, body||{});
   }
   return result;
 }
 
+// ── Connection state ──────────────────────────────────────────────────────────
 function _onDisconnected(){
-  const reasonShort = window._lastSheetsError ? (' (' + window._lastSheetsError.split('.')[0] + ')') : '';
   if(_sheetsOnline){
     _sheetsOnline=false;
     setDBStatus('disconnected','Reconnecting…');
-    showToast('⚠️ Google Sheets disconnected' + reasonShort + '. Working offline.','warning');
-  } else {
-    setDBStatus('disconnected','Offline — retrying…');
+    showToast('⚠️ Google Sheets disconnected. Working offline.','warning');
   }
-  _startReconnectLoop();
+  _stopHeartbeat();
+  _scheduleReconnect();
 }
 
 function _onReconnected(){
   _sheetsOnline=true;
-  _reconnectDelay=5000;
-  _stopReconnectLoop();
+  _isReconnecting=false;
+  _stopReconnect();
   setDBStatus('connected','Google Sheets ✓');
-  showToast('✅ Google Sheets reconnected!','success');
+  if(!_heartbeatTimer) _startHeartbeat();
   _flushQueue();
-  _startHeartbeat();
 }
 
-function _startReconnectLoop(){
-  _stopReconnectLoop(); _stopHeartbeat();
-  _reconnectTimer=setTimeout(async()=>{
-    if(!SHEETS_URL) return;
+// ── Reconnect loop (single, non-overlapping) ──────────────────────────────────
+function _scheduleReconnect(){
+  if(_isReconnecting) return;   // already running — don't start another
+  _isReconnecting=true;
+  _stopReconnect();
+  _reconnectTimer=setTimeout(async function(){
+    if(!SHEETS_URL){ _isReconnecting=false; return; }
     setDBStatus('loading','Reconnecting…');
-    const res=await _fetchWithRetry(SHEETS_URL,{action:'ping'},1,1000);
-    if(res!==null){ _onReconnected(); }
-    else{
-      _reconnectDelay=Math.min(_reconnectDelay*1.5,MAX_RETRY_DELAY);
-      setDBStatus('disconnected',`Retry in ${Math.round(_reconnectDelay/1000)}s…`);
-      _startReconnectLoop();
+    var res=await _call(SHEETS_URL,'ping',{});
+    if(res!==null){
+      _onReconnected();
+    } else {
+      setDBStatus('disconnected','Retry in '+Math.round(RETRY_DELAY_MS/1000)+'s…');
+      _isReconnecting=false;
+      _scheduleReconnect();
     }
-  },_reconnectDelay);
+  }, RETRY_DELAY_MS);
 }
-function _stopReconnectLoop(){ if(_reconnectTimer){clearTimeout(_reconnectTimer);_reconnectTimer=null;} }
+function _stopReconnect(){ if(_reconnectTimer){ clearTimeout(_reconnectTimer); _reconnectTimer=null; } }
 
+// ── Heartbeat (only runs when connected) ─────────────────────────────────────
 function _startHeartbeat(){
   _stopHeartbeat();
-  _heartbeatTimer=setInterval(async()=>{
-    if(!SHEETS_URL) return;
-    const res=await _fetchWithRetry(SHEETS_URL,{action:'ping'},1,1000);
+  _heartbeatTimer=setInterval(async function(){
+    if(!SHEETS_URL||!_sheetsOnline) return;
+    var res=await _call(SHEETS_URL,'ping',{});
     if(res===null && _sheetsOnline) _onDisconnected();
-  },HEARTBEAT_INTERVAL);
+  }, HEARTBEAT_MS);
 }
-function _stopHeartbeat(){ if(_heartbeatTimer){clearInterval(_heartbeatTimer);_heartbeatTimer=null;} }
+function _stopHeartbeat(){ if(_heartbeatTimer){ clearInterval(_heartbeatTimer); _heartbeatTimer=null; } }
 
+// ── Flush offline queue ───────────────────────────────────────────────────────
 async function _flushQueue(){
-  const q=_queueLoad(); if(!q.length) return;
-  showToast(`🔄 Syncing ${q.length} offline action(s)…`,'info');
-  const failed=[];
-  for(const item of q){
-    const res=await _fetchWithRetry(SHEETS_URL,{action:item.action,...item.body},2,1000);
+  var q=_qLoad(); if(!q.length) return;
+  showToast('🔄 Syncing '+q.length+' offline action(s)…','info');
+  var failed=[];
+  for(var i=0;i<q.length;i++){
+    var item=q[i];
+    var res=await _call(SHEETS_URL,item.action,item.body);
     if(res===null) failed.push(item);
   }
-  _queueSave(failed); _updateQueueBadge(failed.length);
+  _qSave(failed);
   if(!failed.length) showToast('✅ All offline data synced!','success');
-  else showToast(`⚠️ ${failed.length} item(s) could not sync. Will retry.`,'warning');
+  else showToast('⚠️ '+failed.length+' item(s) could not sync.','warning');
 }
 
-window.addEventListener('online',  ()=>{ if(SHEETS_URL&&!_sheetsOnline) _startReconnectLoop(); });
-window.addEventListener('offline', ()=>{ if(_sheetsOnline) _onDisconnected(); });
+// ── Browser network events ────────────────────────────────────────────────────
+window.addEventListener('online',  function(){ if(SHEETS_URL&&!_sheetsOnline&&!_isReconnecting) _scheduleReconnect(); });
+window.addEventListener('offline', function(){ if(_sheetsOnline) _onDisconnected(); });
 
 // Bidirectional sync — on connect, PULLS latest from Sheets first (so any
 // edits you made directly in the spreadsheet are reflected immediately),
@@ -1489,8 +1490,7 @@ async function loadInventoryFromSheets(){
   setDBStatus('loading','Syncing…');
   const res = await sheetsCall('getInventory');
   if(res){
-    setDBStatus('connected','Google Sheets ✓');
-    _sheetsOnline = true; _startHeartbeat();
+    // _onReconnected() already called by sheetsCall — just update inventory
     // Pull Sheets data into Inventory tab (bidirectional sync)
     if(res.items && res.items.length > 0){
       stockInventory = res.items.map((it,idx)=>{
@@ -1515,7 +1515,7 @@ async function loadInventoryFromSheets(){
     }
     renderInventory();
   } else {
-    if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _startReconnectLoop(); }
+    if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect(); }
     else { setDBStatus('disconnected','No Sheet — Offline'); }
   }
 }
@@ -1746,11 +1746,11 @@ var _origSaveMenuItem = saveMenuItem;
 /* ═══════════════════ ORDER ═══════════════════ */
 function addToOrder(id){
   const item=menuItems.find(i=>i.id===id);
-  if(!item||item.stock<=0) return;
+  if(!item) return;
   const ex=order.find(o=>o.id===id);
-  if(ex){ if(ex.qty>=item.stock){showToast('Not enough stock!','error');return;} ex.qty++; }
-  else order.push({...item,qty:1});
-  renderOrder(); showToast(`${item.emoji} ${item.name} added`,'success');
+  if(ex){ ex.qty++; }
+  else order.push({id:item.id,name:item.name,cat:item.cat,price:item.price,qty:1});
+  renderOrder(); showToast(item.name+' added','success');
 }
 function changeQty(id,d){
   const idx=order.findIndex(o=>o.id===id);
@@ -1767,7 +1767,6 @@ function renderOrder(){
   }
   el.innerHTML=order.map(o=>`
     <div class="order-line">
-      <span class="ol-emoji">${o.emoji}</span>
       <div class="ol-info"><div class="ol-name">${o.name}</div><div class="ol-sub">₱${parseFloat(o.price).toFixed(2)} each</div></div>
       <div class="qty-ctrl">
         <button class="qty-btn minus" onclick="changeQty(${o.id},-1)">−</button>
@@ -1780,12 +1779,56 @@ function renderOrder(){
 }
 
 /* ═══════════════════ DISCOUNT ═══════════════════ */
+var srpCounts = {sr:0, pwd:0};
+
 function setDType(type,btn){
   disc.type=type; disc.applied=false;
   document.querySelectorAll('.dt-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  const inp=document.getElementById('dval');
-  if(type==='senior'||type==='pwd'){inp.value=20;inp.readOnly=true;}
-  else{inp.value='';inp.readOnly=false;}
+  const isSrp = type==='senior'||type==='pwd';
+  document.getElementById('disc-standard-row').style.display = isSrp?'none':'flex';
+  document.getElementById('disc-srp-row').style.display = isSrp?'block':'none';
+  if(!isSrp){
+    const inp=document.getElementById('dval');
+    inp.value=''; inp.readOnly=false;
+  } else {
+    // Reset to senior mode — both counters show
+    srpCounts = {sr:0, pwd:0};
+    document.getElementById('sr-count').textContent='0';
+    document.getElementById('pwd-count').textContent='0';
+    updateSrpSummary();
+  }
+}
+
+function changeSrpCount(type, delta){
+  srpCounts[type] = Math.max(0, (srpCounts[type]||0) + delta);
+  document.getElementById('sr-count').textContent = srpCounts.sr;
+  document.getElementById('pwd-count').textContent = srpCounts.pwd;
+  updateSrpSummary();
+}
+
+function updateSrpSummary(){
+  const total = (srpCounts.sr||0) + (srpCounts.pwd||0);
+  const el = document.getElementById('srp-summary');
+  if(!el) return;
+  if(total === 0){
+    el.textContent = 'Set counts then tap Apply';
+  } else {
+    const sub = order.reduce((s,o)=>s+parseFloat(o.price)*o.qty,0);
+    const discAmt = sub * 0.20;
+    el.textContent = total + ' qualifying person(s) → 20% off = -₱' + discAmt.toFixed(2);
+  }
+}
+
+function applySrpDisc(){
+  if(!order.length){showToast('Add items first!','error');return;}
+  const total = (srpCounts.sr||0) + (srpCounts.pwd||0);
+  if(total===0){showToast('Add at least 1 Senior or PWD!','error');return;}
+  disc.value = 20;
+  disc.srCount = srpCounts.sr;
+  disc.pwdCount = srpCounts.pwd;
+  disc.applied = true;
+  document.getElementById('dremove').style.display='flex';
+  renderOrder(); showToast('✅ Senior/PWD discount applied!','success');
 }
 function applyDisc(){
   if(!order.length){showToast('Add items first!','error');return;}
@@ -1807,10 +1850,14 @@ function calcDisc(sub){
   return Math.min(disc.value,sub);
 }
 function discLabel(){
-  if(disc.type==='senior') return `Senior Citizen (${disc.value}%)`;
-  if(disc.type==='pwd')    return `PWD Discount (${disc.value}%)`;
-  if(disc.type==='pct')    return `Discount (${disc.value}%)`;
-  return `Discount (-₱${disc.value.toFixed(2)})`;
+  if(disc.type==='senior'||disc.type==='pwd'){
+    const parts=[];
+    if(disc.srCount>0) parts.push(disc.srCount+' Senior'+(disc.srCount>1?'s':''));
+    if(disc.pwdCount>0) parts.push(disc.pwdCount+' PWD'+(disc.pwdCount>1?'s':''));
+    return (parts.join(' + ')||'Senior/PWD')+' (20% off)';
+  }
+  if(disc.type==='pct') return 'Discount ('+disc.value+'%)';
+  return 'Discount (-₱'+disc.value.toFixed(2)+')';
 }
 function updateTotals(sub){
   const da=calcDisc(sub),net=sub-da,vat=net*0.12,tot=net+vat;
@@ -2506,21 +2553,14 @@ async function connectSheets() {
   statusEl.textContent = '⏳ Testing connection…';
   statusEl.style.color = '#C9A84C';
   try {
-    // _smartGet tries a normal fetch() first, then automatically falls back
-    // to JSONP if the browser blocks the direct request (e.g. Brave Shields,
-    // ad blockers) — same logic used everywhere else in the app.
-    var testUrl = url + (url.indexOf('?') > -1 ? '&' : '?') + 'action=getInventory';
-    var data = await _smartGet(testUrl, 10000);
+    var data = await _call(url, 'getInventory', {});
 
     if (data && data.items !== undefined) {
       SHEETS_URL = url;
       try{ localStorage.setItem('greektogo_sheets_url', url); }catch(e){}
       statusEl.textContent = '✅ Connected successfully!';
       statusEl.style.color = '#27AE60';
-      _sheetsOnline = true;
-      window._lastSheetsError = '';
-      setDBStatus('connected','Google Sheets ✓');
-      _startHeartbeat();
+      _onReconnected();
       closeModal('sheets-setup-modal');
       await loadInventoryFromSheets();
       showToast('Google Sheets connected!','success');
