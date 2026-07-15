@@ -49,15 +49,15 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 
 /* POS */
 #pos-view{height:calc(100vh - 64px);}
-.menu-panel{flex:1;display:flex;flex-direction:column;background:var(--white-warm);border-right:1px solid var(--blue-pale);overflow:hidden;}
+.menu-panel{flex:1;display:flex;flex-direction:column;background:var(--white-warm);border-right:1px solid var(--blue-pale);overflow:visible;min-width:0;}
 .menu-search-bar{padding:12px 16px 8px;background:#fff;border-bottom:1px solid var(--blue-pale);}
 .search-input{width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:8px 13px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--blue-deep);background:var(--blue-ghost);outline:none;transition:border-color .2s;}
 .search-input:focus{border-color:var(--blue-accent);background:#fff;}
-.category-tabs{display:flex;flex-wrap:nowrap;gap:7px;padding:9px 16px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--blue-pale);-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;}
+.category-tabs{display:flex;flex-wrap:nowrap;gap:7px;padding:9px 16px 9px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;min-width:0;}
 .category-tabs::-webkit-scrollbar{display:none;}
 .cat-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:none;transition:all .2s;background:var(--blue-ghost);color:var(--gray-soft);flex-shrink:0;}
 .cat-tab.active{background:var(--blue-accent);color:#fff;}
-.menu-grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:11px;align-content:start;}
+.menu-grid{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:11px;align-content:start;min-height:0;}
 .menu-item{background:#fff;border-radius:var(--radius);padding:13px 10px;cursor:pointer;border:2px solid transparent;box-shadow:var(--shadow-card);transition:all .2s;text-align:center;position:relative;}
 .menu-item:hover{border-color:var(--blue-accent);transform:translateY(-2px);box-shadow:var(--shadow-lg);}
 .menu-item.oos{opacity:.5;cursor:not-allowed;}
@@ -755,7 +755,11 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <div class="menu-search-bar">
       <input class="search-input" type="text" placeholder="🔍  Search menu items…" oninput="filterMenu(this.value)">
     </div>
-    <div class="category-tabs" id="cat-tabs"></div>
+    <div style="display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--blue-pale);">
+      <button id="cat-prev" onclick="scrollCats(-1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❮</button>
+      <div class="category-tabs" id="cat-tabs" style="flex:1;min-width:0;"></div>
+      <button id="cat-next" onclick="scrollCats(1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❯</button>
+    </div>
     <div class="menu-grid" id="menu-grid">
       <div class="loading-grid"><div class="spinner"></div><p>Loading menu…</p></div>
     </div>
@@ -1609,11 +1613,50 @@ function setDBStatus(state,txt){
 }
 
 /* ═══════════════════ MENU ═══════════════════ */
+function scrollCats(dir){
+  var el = document.getElementById('cat-tabs');
+  if(!el) return;
+  el.scrollBy({left: dir * 180, behavior:'smooth'});
+  setTimeout(updateCatArrows, 300);
+}
+function updateCatArrows(){
+  var el = document.getElementById('cat-tabs');
+  var btnL = document.getElementById('cat-prev');
+  var btnR = document.getElementById('cat-next');
+  if(!el) return;
+  var hasOverflow = el.scrollWidth > el.clientWidth + 4;
+  if(btnL) btnL.style.display = (hasOverflow && el.scrollLeft > 4) ? 'flex' : 'none';
+  if(btnR) btnR.style.display = hasOverflow ? 'flex' : 'none';
+}
+
 function renderCatTabs(){
-  const cats=['All',...new Set(menuItems.map(i=>i.cat))];
-  document.getElementById('cat-tabs').innerHTML=cats.map(c=>`<button class="cat-tab ${c===currentCat?'active':''}" onclick="setCategory('${c}')">${c}</button>`).join('');
+  // Filter out empty/undefined/null categories
+  const cats=['All',...new Set(menuItems.map(i=>i.cat).filter(function(c){ return c && String(c).trim() !== '' && String(c) !== 'undefined'; }))];
+  var strip = document.getElementById('cat-tabs');
+  strip.innerHTML = cats.map(function(c){
+    return '<button class="cat-tab '+(c===currentCat?'active':'')+'" onclick="setCategory(''+c.replace(/'/g,"\\'")+'')">' + c + '</button>';
+  }).join('');
+  // Update scroll arrows after render
+  setTimeout(updateCatArrows, 80);
+  var strip2=document.getElementById('cat-tabs');
+  if(strip2) strip2.onscroll = updateCatArrows;
 }
 function setCategory(c){currentCat=c;renderCatTabs();renderMenu();}
+
+function scrollCats(dir){
+  var strip = document.getElementById('cat-tabs');
+  if(strip) strip.scrollBy({left: dir*200, behavior:'smooth'});
+}
+
+function updateCatArrows(){
+  var strip = document.getElementById('cat-tabs');
+  var prev  = document.getElementById('cat-prev');
+  var next  = document.getElementById('cat-next');
+  if(!strip||!prev||!next) return;
+  var hasOverflow = strip.scrollWidth > strip.clientWidth + 2;
+  prev.style.display = (hasOverflow && strip.scrollLeft > 4) ? 'block' : 'none';
+  next.style.display = (hasOverflow && strip.scrollLeft < strip.scrollWidth - strip.clientWidth - 4) ? 'block' : 'none';
+}
 function filterMenu(q){renderMenu(q);}
 function renderMenu(search=''){
   let items=menuItems;
