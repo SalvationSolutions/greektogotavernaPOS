@@ -2852,97 +2852,96 @@ document.getElementById('order-num').textContent=`Order #${String(orderCount).pa
 <script>
 // ── Staff Credentials — hardcoded permanently in this file ─────────────────
 // Works on every browser/device. To add staff: add a line, upload to GitHub.
-var ACCOUNTS = [
-  { username:'owner',    password:'1234', role:'Owner',   badge:'👑 Owner Logged In', color:'av-b' },
-  { username:'Wahlene',  password:'1234', role:'Staff',   badge:'👤 Wahlene',         color:'av-t' },
-  { username:'Beth',     password:'5678', role:'Staff',   badge:'👤 Beth',            color:'av-o' },
-  { username:'Zap',      password:'9999', role:'Staff',   badge:'👤 Zap',             color:'av-p' },
-  { username:'cashier1', password:'1111', role:'Cashier', badge:'👤 Cashier 1',       color:'av-t' },
-  { username:'cashier2', password:'2222', role:'Cashier', badge:'👤 Cashier 2',       color:'av-t' }
-];
+</script>
 
-// ── Single unified login function ─────────────────────────────────────────
+<script>
+/* ══ LOGIN — completely self-contained, no dependencies on other scripts ══ */
 function doLogin(){
+  /* Credentials — edit here and re-upload to GitHub to change */
+  var ACCOUNTS = [
+    { username:'owner',    password:'1234', role:'Owner',   badge:'&#128081; Owner Logged In', color:'av-b' },
+    { username:'Wahlene',  password:'1234', role:'Staff',   badge:'&#128100; Wahlene',         color:'av-t' },
+    { username:'Beth',     password:'5678', role:'Staff',   badge:'&#128100; Beth',             color:'av-o' },
+    { username:'Zap',      password:'9999', role:'Staff',   badge:'&#128100; Zap',              color:'av-p' },
+    { username:'cashier1', password:'1111', role:'Cashier', badge:'&#128100; Cashier 1',        color:'av-t' },
+    { username:'cashier2', password:'2222', role:'Cashier', badge:'&#128100; Cashier 2',        color:'av-t' }
+  ];
+
   var userEl = document.getElementById('login-name');
   var passEl = document.getElementById('login-pass');
   var errEl  = document.getElementById('login-err');
-  if(!userEl || !passEl) return false;
 
-  var username = userEl.value.trim();
-  var password = passEl.value.trim();
-  if(errEl){ errEl.textContent = ''; errEl.style.color = '#E05050'; }
+  var username = (userEl ? userEl.value : '').trim();
+  var password = (passEl ? passEl.value : '').trim();
+  if(errEl) errEl.textContent = '';
 
   if(!username || !password){
-    if(errEl) errEl.textContent = '❌ Please enter username and password.';
-    return false;
+    if(errEl) errEl.textContent = 'Please enter username and password.';
+    return;
   }
 
-  // ── 1. Check hardcoded accounts ──────────────────────────────────────
+  /* Check hardcoded accounts */
   var match = null;
-  for(var i=0; i<ACCOUNTS.length; i++){
+  for(var i = 0; i < ACCOUNTS.length; i++){
     if(ACCOUNTS[i].username.toLowerCase() === username.toLowerCase() &&
        ACCOUNTS[i].password === password){
-      match = ACCOUNTS[i]; break;
+      match = ACCOUNTS[i];
+      break;
     }
   }
 
-  // ── 2. Check cashiers added via Cashier tab (name + PIN) ────────────
+  /* Check cashiers added in the Cashier tab */
   if(!match){
     var stored = [];
     try{ stored = JSON.parse(localStorage.getItem('gtg_cashiers') || '[]'); }catch(e){}
-    for(var j=0; j<stored.length; j++){
-      var c = stored[j];
-      if(c.name && c.name.toLowerCase() === username.toLowerCase() &&
-         String(c.pin) === String(password)){
-        match = { username: c.name, password: password, role: c.role||'Staff',
-                  badge: '👤 '+c.name.split(' ')[0], color: c.color||'av-t' };
+    for(var j = 0; j < stored.length; j++){
+      var sc = stored[j];
+      if(sc.name && sc.name.toLowerCase() === username.toLowerCase() &&
+         String(sc.pin) === String(password)){
+        match = { username:sc.name, password:password, role:sc.role||'Staff',
+                  badge:'&#128100; '+sc.name.split(' ')[0], color:sc.color||'av-t' };
         break;
       }
     }
   }
 
-  // ── No match ─────────────────────────────────────────────────────────
+  /* Wrong credentials */
   if(!match){
-    if(errEl) errEl.textContent = '❌ Invalid username or password.';
+    if(errEl) errEl.textContent = 'Invalid username or password.';
     var box = document.querySelector('.login-box');
     if(box){ box.style.animation='none'; void box.offsetWidth; box.style.animation='loginShake .35s ease'; }
-    return false;
+    return;
   }
 
-  // ── Login success — set googleUser then call onSignedIn() ─────────────
-  localStorage.setItem('gtg_user', JSON.stringify(match));
-  googleUser = {
-    name:  match.username,
-    email: match.role,
-    sub:   match.username.toLowerCase().replace(/\s+/g,'_')
-  };
-  localStorage.setItem('gtg_google_user', JSON.stringify(googleUser));
+  /* ── Success ── */
+  try{ localStorage.setItem('gtg_user', JSON.stringify(match)); }catch(e){}
 
-  // Set cashier badge
+  if(typeof googleUser !== 'undefined'){
+    googleUser = { name:match.username, email:match.role,
+                   sub:match.username.toLowerCase().replace(/\s+/g,'_') };
+    try{ localStorage.setItem('gtg_google_user', JSON.stringify(googleUser)); }catch(e){}
+  }
+
   var active = document.getElementById('active-cashier');
   if(active) active.innerHTML = match.badge;
 
-  // Show logout button
   var lb = document.getElementById('logout-btn');
   if(lb) lb.style.display = 'inline-flex';
 
-  // Log shift in
-  var shiftEntry = {
-    name:  match.username,
-    type:  'IN',
-    shift: (document.getElementById('c-shift-sel') || {value:''}).value || 'Shift',
-    color: match.color,
-    time:  new Date().toLocaleString('en-PH')
-  };
-  if(typeof shiftLog !== 'undefined'){ shiftLog.unshift(shiftEntry); if(shiftLog.length>30) shiftLog.length=30; }
-  if(typeof renderShiftLog === 'function') renderShiftLog();
-  if(typeof pushShiftToSheets === 'function') pushShiftToSheets(shiftEntry);
+  try{
+    if(typeof shiftLog !== 'undefined'){
+      var entry = { name:match.username, type:'IN',
+        shift:(document.getElementById('c-shift-sel')||{value:''}).value||'Shift',
+        color:match.color, time:new Date().toLocaleString('en-PH') };
+      shiftLog.unshift(entry);
+      if(shiftLog.length > 30) shiftLog.length = 30;
+      if(typeof renderShiftLog === 'function') renderShiftLog();
+      if(typeof pushShiftToSheets === 'function') pushShiftToSheets(entry);
+    }
+  }catch(e){}
 
-  // Boot the app — loads inventory, renders everything, saves session
   if(typeof onSignedIn === 'function') onSignedIn();
-  return true;
 }
-
 </script>
 
 </body>
