@@ -2513,11 +2513,7 @@ function showToast(msg,type='success'){
 /* ═══════════════════ LOGIN SYSTEM ═══════════════════ */
 let googleUser = null;
 
-function doLogin() {
-  // Overridden below — this base version should not grant access
-  var errEl = document.getElementById('login-err');
-  if (errEl) errEl.textContent = 'Please enter valid credentials.';
-}
+// doLogin defined below in the credentials block
 
 function showSheetsSetupOnLogin() {
   // open sheets setup modal without closing login (login closes on Enter POS)
@@ -2854,10 +2850,8 @@ document.getElementById('order-num').textContent=`Order #${String(orderCount).pa
 
 
 <script>
-(function(){
-
-// ── Credentials — hardcoded, works on every browser/device ───────────────
-// To add staff: add a new line below, upload to GitHub once. Done.
+// ── Staff Credentials — hardcoded permanently in this file ─────────────────
+// Works on every browser/device. To add staff: add a line, upload to GitHub.
 var ACCOUNTS = [
   { username:'owner',    password:'1234', role:'Owner',   badge:'👑 Owner Logged In', color:'av-b' },
   { username:'Wahlene',  password:'1234', role:'Staff',   badge:'👤 Wahlene',         color:'av-t' },
@@ -2868,7 +2862,7 @@ var ACCOUNTS = [
 ];
 
 // ── Single unified login function ─────────────────────────────────────────
-window.doLogin = function(){
+function doLogin(){
   var userEl = document.getElementById('login-name');
   var passEl = document.getElementById('login-pass');
   var errEl  = document.getElementById('login-err');
@@ -2947,9 +2941,8 @@ window.doLogin = function(){
   // Boot the app — loads inventory, renders everything, saves session
   if(typeof onSignedIn === 'function') onSignedIn();
   return true;
-};
+}
 
-})();
 </script>
 
 </body>
