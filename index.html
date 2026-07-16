@@ -1018,11 +1018,10 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <div class="c-reg-list" id="c-reg-list"></div>
     <button class="add-cashier-btn" onclick="openCashierModal()">+ Add Cashier</button>
     <div class="cashier-data-btns">
-      <button class="cdata-btn export-btn" onclick="exportCashiers()" title="Save cashiers to a file">⬇ Export</button>
-      <button class="cdata-btn import-btn" onclick="document.getElementById('cashier-import-input').click()" title="Load cashiers from a file">⬆ Import</button>
-      <input type="file" id="cashier-import-input" accept=".json" style="display:none" onchange="importCashiers(event)">
+      <button class="cdata-btn import-btn" onclick="loadCashiersFromSheets()" title="Pull roster from Google Sheets">⬇ Sync from Sheet</button>
+      <button class="cdata-btn export-btn" onclick="saveCashiers()" title="Push roster to Google Sheets">⬆ Backup to Sheet</button>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.3);text-align:center;margin-top:-6px;line-height:1.4;">Export saves your staff list.<br>Import restores it on any device.</div>
+    <div style="font-size:9px;color:rgba(255,255,255,.3);text-align:center;margin-top:-6px;line-height:1.4;">Add a cashier → auto-saves to Sheet.<br>Opens on any device automatically.</div>
   </div>
   <!-- RIGHT: Sign in/out + log -->
   <div class="cashier-right">
@@ -1358,8 +1357,8 @@ let _sheetsOnline     = false;
 let _reconnectTimer   = null;
 let _heartbeatTimer   = null;
 let _isReconnecting   = false;      // prevent multiple concurrent loops
-const RETRY_DELAY_MS  = 15000;      // 15s between reconnect attempts
-const HEARTBEAT_MS    = 60000;      // ping every 60s when connected
+const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
+const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
 const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
 
@@ -1634,7 +1633,7 @@ function renderCatTabs(){
   const cats=['All',...new Set(menuItems.map(i=>i.cat).filter(function(c){ return c && String(c).trim() !== '' && String(c) !== 'undefined'; }))];
   var strip = document.getElementById('cat-tabs');
   strip.innerHTML = cats.map(function(c){
-    return '<button class="cat-tab '+(c===currentCat?'active':'')+'" onclick="setCategory(''+c.replace(/'/g,"\\'")+'')">' + c + '</button>';
+    return '<button class="cat-tab '+(c===currentCat?'active':'')+' " onclick="setCategory(\'' + c.replace(/'/g,"\\'") + '\')">' + c + '</button>';
   }).join('');
   // Update scroll arrows after render
   setTimeout(updateCatArrows, 80);
@@ -2032,9 +2031,13 @@ async function finalizePayment(method,gcashNum,gcashRef){
 function newOrder(){
   clearOrder();
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
-// Auto-connect to Google Sheets on load (URL is hardcoded above)
-if(SHEETS_URL){ loadInventoryFromSheets(); }
-else { setDBStatus('disconnected','No Sheet — Offline'); }
+// Auto-connect to Google Sheets on load (URL is hardcoded)
+if(SHEETS_URL){
+  setDBStatus('loading','Connecting…');
+  setTimeout(function(){ if(!_sheetsOnline){ loadInventoryFromSheets(); } }, 800);
+} else {
+  setDBStatus('disconnected','No Sheet — Offline');
+}
 }
 
 /* ═══════════════════ DELIVERY ORDERS ═══════════════════ */
@@ -2300,7 +2303,38 @@ let cPinEntry='';
 let mPinEntry='';
 let editingCashierId=null;
 
-function saveCashiers(){localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));}
+function saveCashiers(){
+  localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));
+  // Auto-sync to Google Sheets Cashiers tab
+  if(typeof SHEETS_URL!=='undefined' && SHEETS_URL){
+    sheetsCall('saveCashiers',{items:cashiers.map(function(c){
+      return {id:c.id,name:c.name,role:c.role,pin:c.pin,color:c.color||'av-t',active:c.active||false};
+    })});
+  }
+}
+
+async function loadCashiersFromSheets(){
+  if(!SHEETS_URL) return;
+  var res = await sheetsCall('getCashiers');
+  if(res && res.items && res.items.length){
+    cashiers = res.items.map(function(it){
+      return {
+        id:     parseInt(it.id)||1,
+        name:   it.name||'',
+        role:   it.role||'Cashier',
+        pin:    String(it.pin||'0000'),
+        color:  it.color||'av-t',
+        active: it.active==='true'||it.active===true||false
+      };
+    });
+    localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));
+    if(typeof renderCashierRoster==='function') renderCashierRoster();
+    showToast('✅ Cashier roster synced from Sheet!','success');
+  } else if(cashiers.length){
+    // Sheet empty — push local up as first backup
+    saveCashiers();
+  }
+}
 
 function exportCashiers(){
   if(!cashiers.length){ showToast('No cashiers to export.','error'); return; }
@@ -2557,6 +2591,10 @@ function onSignedIn() {
   }
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
+  // Auto-load cashier roster from Sheets on every login
+  if(SHEETS_URL){
+    setTimeout(function(){ loadCashiersFromSheets(); }, 2000);
+  }
   showToast('Welcome, ' + googleUser.name.split(' ')[0] + '!', 'success');
 }
 
