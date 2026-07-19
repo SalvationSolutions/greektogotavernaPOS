@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="utf-8">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GREEK TO GO TAVERNA POS</title>
@@ -823,6 +824,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
         </div>
       </div>
       <!-- PAYMENT -->
+      <button onclick="printReceipt()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px;">🖨️ Print Receipt</button>
       <div class="pay-label">💳 Payment Method</div>
       <div class="pay-grid">
         <button class="pay-btn cash"  onclick="processPayment('Cash')">💵 Cash</button>
@@ -1515,7 +1517,6 @@ window.addEventListener('offline', function(){ if(_sheetsOnline) _onDisconnected
 // then the Inventory tab becomes the live view of that data.
 // The POS Menu (ordering screen) is entirely separate and is NEVER touched.
 async function loadInventoryFromSheets(){
-  setDBStatus('loading','Syncing…');
   const res = await sheetsCall('getInventory');
   if(res){
     // _onReconnected() already called by sheetsCall — just update inventory
@@ -2033,8 +2034,7 @@ function newOrder(){
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
 // Auto-connect to Google Sheets on load (URL is hardcoded)
 if(SHEETS_URL){
-  setDBStatus('loading','Connecting…');
-  setTimeout(function(){ if(!_sheetsOnline){ loadInventoryFromSheets(); } }, 800);
+  setDBStatus('loading','Connecting to Google Sheets…');
 } else {
   setDBStatus('disconnected','No Sheet — Offline');
 }
@@ -2564,38 +2564,63 @@ function onSignedIn() {
   document.getElementById('g-user-initials').textContent = initials;
   document.getElementById('g-menu-name').textContent = googleUser.name;
   document.getElementById('g-menu-email').textContent = googleUser.email || 'Local account';
-  // Inventory already loaded from localStorage at page init — never reset here.
-  if (SHEETS_URL) {
-    loadInventoryFromSheets();
-    // Pull POS Menu from Sheet after short delay (let inventory load first)
-    setTimeout(function(){
-      sheetsCall('getPosMenu').then(function(res){
-        if(res && res.items && res.items.length > 0){
-          menuItems = res.items.map(function(it,idx){
-            function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-            return {
-              id:     idx+1,
-              pid:    g(['pid','PRODUCT ID','product_id','ProductID']),
-              name:   g(['name','MENU NAME','menu_name','MenuName','NAME','Item Name','ITEM NAME']),
-              cat:    g(['cat','category','CATEGORY','Category']),
-              price:  parseFloat(g(['price','PRICE','Price']))||0,
-              detail: g(['detail','Detail/Variant','DETAIL','Variant','variant','VARIANT'])
-            };
-          }).filter(function(i){ return i.name; });
-          if(menuItems.length > 0){ _saveMenuLocally(); renderCatTabs(); renderMenu(); }
-        }
-      });
-    }, 1500);
-  } else {
-    setDBStatus('disconnected','No Sheet connected');
-  }
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
-  // Auto-load cashier roster from Sheets on every login
   if(SHEETS_URL){
-    setTimeout(function(){ loadCashiersFromSheets(); }, 2000);
+    setTimeout(function(){ _initialSync(); }, 700);
+  } else {
+    setDBStatus('disconnected','No Sheet — Offline');
   }
   showToast('Welcome, ' + googleUser.name.split(' ')[0] + '!', 'success');
+}
+
+/* ── Single batched sync after login — runs ONCE per session ─────────────── */
+var _syncDone = false;
+async function _initialSync(){
+  if(_syncDone) return; _syncDone = true;
+  setDBStatus('loading','Syncing…');
+  try {
+    // 1. Inventory
+    var invRes = await sheetsCall('getInventory');
+    if(invRes && invRes.items && invRes.items.length){
+      function _g(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+      stockInventory = invRes.items.map(function(it,idx){
+        return { id:idx+1, itemCode:_g(it,['itemCode','ITEM CODE']), description:_g(it,['description','ITEM DESCRIPTION','name']),
+          category:_g(it,['category','CATEGORY','cat']), price:parseFloat(_g(it,['price','PRICE']))||0,
+          begBal:parseInt(_g(it,['begBal','BEG BAL STOCKS']))||0, endingStock:parseInt(_g(it,['endingStock','ENDING STOCKS','stock']))||0,
+          uom:_g(it,['uom','UOM']), supplier:_g(it,['supplier','SUPPLIER']) };
+      });
+      _saveStockLocally(); renderInventory();
+    } else { await pushInventoryToSheets(); }
+
+    // 2. POS Menu
+    var menuRes = await sheetsCall('getPosMenu');
+    if(menuRes && menuRes.items && menuRes.items.length){
+      function _gm(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+      var loaded = menuRes.items.map(function(it,idx){
+        return { id:idx+1, pid:_gm(it,['pid','PRODUCT ID']), name:_gm(it,['name','MENU NAME','NAME']),
+          cat:_gm(it,['cat','category','CATEGORY']), price:parseFloat(_gm(it,['price','PRICE']))||0,
+          detail:_gm(it,['detail','Detail/Variant']) };
+      }).filter(function(i){ return i.name; });
+      if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
+    }
+
+    // 3. Cashiers
+    var cashRes = await sheetsCall('getCashiers');
+    if(cashRes && cashRes.items && cashRes.items.length){
+      cashiers = cashRes.items.map(function(it){
+        return { id:parseInt(it.id)||1, name:it.name||'', role:it.role||'Cashier',
+          pin:String(it.pin||'0000'), color:it.color||'av-t', active:it.active===true||it.active==='true' };
+      });
+      localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));
+      renderCashierRoster();
+    }
+    setDBStatus('connected','Google Sheets ✓');
+    _sheetsOnline=true; _startHeartbeat();
+  } catch(e){
+    _syncDone=false; // allow retry
+    setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect();
+  }
 }
 
 function continueOffline() {
@@ -2608,6 +2633,7 @@ function continueOffline() {
 }
 
 function doLogout() {
+  _syncDone = false;  // allow re-sync on next login
   // Clear local session
   localStorage.removeItem('gtg_user');
   localStorage.removeItem('gtg_auto_login');
@@ -2980,7 +3006,139 @@ function doLogin(){
 
   if(typeof onSignedIn === 'function') onSignedIn();
 }
+
+/* ═══════════════════ BLUETOOTH PRINTER ═══════════════════ */
+var _btDevice = null;
+
+function printReceipt(){
+  if(!order.length){ showToast('No items in order to print.','error'); return; }
+  openModal('bt-printer-modal');
+}
+
+async function printBluetooth(){
+  var el = document.getElementById('bt-status-msg');
+  if(!navigator.bluetooth){
+    el.textContent='Web Bluetooth not supported. Use Chrome or Edge on Android/Desktop.';
+    el.style.color='#E05050'; return;
+  }
+  try {
+    el.textContent='Scanning for printer...'; el.style.color='var(--gray-soft)';
+    var device = await navigator.bluetooth.requestDevice({
+      filters:[
+        {services:['000018f0-0000-1000-8000-00805f9b34fb']},
+        {services:['49535343-fe7d-4ae5-8fa9-9fafd205e455']},
+        {services:['0000ff00-0000-1000-8000-00805f9b34fb']}
+      ]
+    });
+    el.textContent='Connecting to '+device.name+'...';
+    var server = await device.gatt.connect();
+    var service=null, char=null;
+    var sUUIDs=['000018f0-0000-1000-8000-00805f9b34fb','49535343-fe7d-4ae5-8fa9-9fafd205e455','0000ff00-0000-1000-8000-00805f9b34fb'];
+    var cUUIDs=['00002af1-0000-1000-8000-00805f9b34fb','49535343-8841-43f4-a8d4-ecbe34729bb3','0000ff02-0000-1000-8000-00805f9b34fb'];
+    for(var si=0;si<sUUIDs.length&&!service;si++){
+      try{ service=await server.getPrimaryService(sUUIDs[si]); }catch(e){}
+    }
+    if(!service){ el.textContent='Printer service not found. Is the printer paired?'; el.style.color='#E05050'; return; }
+    for(var ci=0;ci<cUUIDs.length&&!char;ci++){
+      try{ char=await service.getCharacteristic(cUUIDs[ci]); }catch(e){}
+    }
+    if(!char){ el.textContent='Could not access printer channel.'; el.style.color='#E05050'; return; }
+    el.textContent='Printing...';
+    await _sendESCPOS(char);
+    el.textContent='Printed successfully!'; el.style.color='#27AE60';
+    setTimeout(function(){ closeModal('bt-printer-modal'); },1500);
+  } catch(e){
+    el.textContent = e.name==='NotFoundError'?'No printer selected.':'Error: '+e.message;
+    el.style.color='#E05050';
+  }
+}
+
+async function _sendESCPOS(char){
+  var ESC=27,GS=29,enc=new TextEncoder(),totals=getTotals(),parts=[];
+  function p(a){parts=parts.concat(Array.from(a));}
+  function t(s){p(enc.encode(s+'\n'));}
+  p([ESC,0x40]);
+  p([ESC,0x61,0x01]);
+  t('GREEK TO GO TAVERNA');
+  t('================================');
+  p([ESC,0x61,0x00]);
+  t('Order #'+String(orderCount).padStart(4,'0'));
+  t(new Date().toLocaleString('en-PH'));
+  if(typeof googleUser!=='undefined'&&googleUser) t('Cashier: '+googleUser.name);
+  var cn=document.getElementById('cust-name');
+  if(cn&&cn.value) t('Customer: '+cn.value);
+  t('--------------------------------');
+  order.forEach(function(o){
+    t(o.name.slice(0,20).padEnd(20,' ')+'x'+o.qty+' \u20B1'+parseFloat(o.price*o.qty).toFixed(2));
+  });
+  t('--------------------------------');
+  t('Subtotal:     \u20B1'+totals.sub.toFixed(2));
+  if(totals.da>0) t('Discount:    -\u20B1'+totals.da.toFixed(2));
+  t('VAT (12%):    \u20B1'+totals.vat.toFixed(2));
+  p([ESC,0x45,1]);
+  t('TOTAL:        \u20B1'+totals.tot.toFixed(2));
+  p([ESC,0x45,0]);
+  t('================================');
+  p([ESC,0x61,0x01]);
+  t('Thank you! Please come again.\n\n');
+  p([GS,0x56,0x41,0x03]);
+  for(var i=0;i<parts.length;i+=100){
+    await char.writeValue(new Uint8Array(parts.slice(i,i+100)));
+    await new Promise(function(r){setTimeout(r,20);});
+  }
+}
+function printBrowser(){
+  closeModal('bt-printer-modal');
+  var totals=getTotals();
+  var rows=order.map(function(o){
+    return '<tr><td>'+o.name+'</td><td align="center">x'+o.qty+'</td><td align="right">&#8369;'+parseFloat(o.price*o.qty).toFixed(2)+'</td></tr>';
+  }).join('');
+  var disc=totals.da>0?'<tr><td colspan="2">Discount</td><td align="right">-&#8369;'+totals.da.toFixed(2)+'</td></tr>':'';
+  var cn=document.getElementById('cust-name');
+  var cu=(cn&&cn.value)?cn.value:'';
+  var cas=(typeof googleUser!=='undefined'&&googleUser)?googleUser.name:'';
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title>'
+    +'<style>body{font-family:monospace;font-size:12px;width:72mm;margin:0 auto;padding:8px}'
+    +'table{width:100%;border-collapse:collapse}td{padding:2px}hr{border:none;border-top:1px dashed #000}'
+    +'@media print{@page{size:80mm auto;margin:0}}</style></head><body>'
+    +'<center><b>GREEK TO GO TAVERNA</b><br>Order #'+String(orderCount).padStart(4,'0')
+    +'<br>'+new Date().toLocaleString('en-PH')
+    +(cu?'<br>Customer: '+cu:'')+(cas?'<br>Cashier: '+cas:'')+'</center>'
+    +'<hr><table><tr><th align="left">Item</th><th>Qty</th><th align="right">Amt</th></tr>'+rows+'</table><hr>'
+    +'<table><tr><td>Subtotal</td><td></td><td align="right">&#8369;'+totals.sub.toFixed(2)+'</td></tr>'
+    +disc
+    +'<tr><td>VAT 12%</td><td></td><td align="right">&#8369;'+totals.vat.toFixed(2)+'</td></tr>'
+    +'<tr><td><b>TOTAL</b></td><td></td><td align="right"><b>&#8369;'+totals.tot.toFixed(2)+'</b></td></tr>'
+    +'</table><hr><center>Thank you! Please come again.</center>'
+    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>'
+    +'</body></html>';
+  var w=window.open('','_blank','width=420,height=620');
+  if(w){w.document.write(html);w.document.close();}
+  else{showToast('Allow popups to print receipts.','error');}
+}
+/* ══════════════════════════════════════════════════════════ */
+
 </script>
+
+
+<!-- BLUETOOTH PRINTER MODAL -->
+<div class="modal-overlay" id="bt-printer-modal" onclick="if(event.target===this)closeModal('bt-printer-modal')">
+  <div class="modal" style="max-width:380px;width:95vw;">
+    <h3>🖨️ Print Receipt</h3>
+    <div id="bt-status-msg" style="font-size:13px;color:var(--gray-soft);margin:10px 0;text-align:center;">Choose a print method below.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0;">
+      <button class="m-save" style="background:#27AE60" onclick="printBluetooth()">📶 Print via Bluetooth</button>
+      <button class="m-save" style="background:var(--blue-accent)" onclick="printBrowser()">🖥️ Print via Browser (PDF)</button>
+    </div>
+    <div style="font-size:10px;color:var(--gray-soft);text-align:center;line-height:1.5;">
+      Bluetooth: Chrome/Edge only · requires paired thermal printer<br>
+      Browser: works on all devices · saves as PDF or prints
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="m-cancel" onclick="closeModal('bt-printer-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
