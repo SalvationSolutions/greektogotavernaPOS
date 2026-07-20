@@ -1437,11 +1437,12 @@ async function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
   var result = await _call(SHEETS_URL, action, body||{});
   if(result !== null){
-    if(!_sheetsOnline) _onReconnected();
+    if(!_sheetsOnline){ _sheetsOnline=true; setDBStatus('connected','Google Sheets ✓'); }
   } else {
-    _onDisconnected();
-    var writeOps=['saveInventory','updateStock','logSale','logShift','savePosMenu'];
+    // Queue write ops for later; don't trigger reconnect loop during initial sync
+    var writeOps=['saveInventory','updateStock','logSale','logShift','savePosMenu','saveCashiers','savePosMenu'];
     if(writeOps.indexOf(action)>-1) _enqueue(action, body||{});
+    if(_sheetsOnline){ _sheetsOnline=false; setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect(); }
   }
   return result;
 }
@@ -2039,6 +2040,13 @@ function newOrder(){
 // Auto-connect to Google Sheets on load (URL is hardcoded)
 if(SHEETS_URL){
   setDBStatus('loading','Connecting to Google Sheets…');
+  // Try a quick ping on page load so status resolves even before login
+  setTimeout(function(){
+    _call(SHEETS_URL,'ping',{}).then(function(r){
+      if(r){ _sheetsOnline=true; setDBStatus('connected','Google Sheets ✓'); _startHeartbeat(); }
+      else { setDBStatus('disconnected','Offline — login to retry'); }
+    });
+  }, 1200);
 } else {
   setDBStatus('disconnected','No Sheet — Offline');
 }
@@ -2582,49 +2590,61 @@ function onSignedIn() {
 var _syncDone = false;
 async function _initialSync(){
   if(_syncDone) return; _syncDone = true;
-  setDBStatus('loading','Syncing…');
-  try {
-    // 1. Inventory
-    var invRes = await sheetsCall('getInventory');
-    if(invRes && invRes.items && invRes.items.length){
-      function _g(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-      stockInventory = invRes.items.map(function(it,idx){
-        return { id:idx+1, itemCode:_g(it,['itemCode','ITEM CODE']), description:_g(it,['description','ITEM DESCRIPTION','name']),
-          category:_g(it,['category','CATEGORY','cat']), price:parseFloat(_g(it,['price','PRICE']))||0,
-          begBal:parseInt(_g(it,['begBal','BEG BAL STOCKS']))||0, endingStock:parseInt(_g(it,['endingStock','ENDING STOCKS','stock']))||0,
-          uom:_g(it,['uom','UOM']), supplier:_g(it,['supplier','SUPPLIER']) };
-      });
-      _saveStockLocally(); renderInventory();
-    } else { await pushInventoryToSheets(); }
+  setDBStatus('loading','Connecting…');
 
-    // 2. POS Menu
-    var menuRes = await sheetsCall('getPosMenu');
-    if(menuRes && menuRes.items && menuRes.items.length){
-      function _gm(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-      var loaded = menuRes.items.map(function(it,idx){
-        return { id:idx+1, pid:_gm(it,['pid','PRODUCT ID']), name:_gm(it,['name','MENU NAME','NAME']),
-          cat:_gm(it,['cat','category','CATEGORY']), price:parseFloat(_gm(it,['price','PRICE']))||0,
-          detail:_gm(it,['detail','Detail/Variant']) };
-      }).filter(function(i){ return i.name; });
-      if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
-    }
-
-    // 3. Cashiers
-    var cashRes = await sheetsCall('getCashiers');
-    if(cashRes && cashRes.items && cashRes.items.length){
-      cashiers = cashRes.items.map(function(it){
-        return { id:parseInt(it.id)||1, name:it.name||'', role:it.role||'Cashier',
-          pin:String(it.pin||'0000'), color:it.color||'av-t', active:it.active===true||it.active==='true' };
-      });
-      localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));
-      renderCashierRoster();
-    }
-    setDBStatus('connected','Google Sheets ✓');
-    _sheetsOnline=true; _startHeartbeat();
-  } catch(e){
-    _syncDone=false; // allow retry
-    setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect();
+  // Step 1: ping first to confirm connectivity
+  var ping = await _call(SHEETS_URL,'ping',{});
+  if(!ping){
+    _syncDone = false;
+    setDBStatus('disconnected','Cannot reach Google Sheets');
+    showToast('⚠️ Cannot reach Google Sheets. Retrying…','warning');
+    setTimeout(function(){ if(!_sheetsOnline){ _initialSync(); } }, 20000);
+    return;
   }
+
+  // Connected — mark online and fetch all data
+  _sheetsOnline = true;
+  setDBStatus('loading','Syncing…');
+
+  function _g(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+
+  // Step 2: Inventory
+  var invRes = await _call(SHEETS_URL,'getInventory',{});
+  if(invRes && invRes.items && invRes.items.length){
+    stockInventory = invRes.items.map(function(it,idx){
+      return { id:idx+1, itemCode:_g(it,['itemCode','ITEM CODE']), description:_g(it,['description','ITEM DESCRIPTION','name']),
+        category:_g(it,['category','CATEGORY','cat']), price:parseFloat(_g(it,['price','PRICE']))||0,
+        begBal:parseInt(_g(it,['begBal','BEG BAL STOCKS']))||0, endingStock:parseInt(_g(it,['endingStock','ENDING STOCKS','stock']))||0,
+        uom:_g(it,['uom','UOM']), supplier:_g(it,['supplier','SUPPLIER']) };
+    });
+    _saveStockLocally(); renderInventory();
+  }
+
+  // Step 3: POS Menu
+  var menuRes = await _call(SHEETS_URL,'getPosMenu',{});
+  if(menuRes && menuRes.items && menuRes.items.length){
+    var loaded = menuRes.items.map(function(it,idx){
+      return { id:idx+1, pid:_g(it,['pid','PRODUCT ID']), name:_g(it,['name','MENU NAME','NAME']),
+        cat:_g(it,['cat','category','CATEGORY']), price:parseFloat(_g(it,['price','PRICE']))||0,
+        detail:_g(it,['detail','Detail/Variant']) };
+    }).filter(function(i){ return i.name; });
+    if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
+  }
+
+  // Step 4: Cashiers
+  var cashRes = await _call(SHEETS_URL,'getCashiers',{});
+  if(cashRes && cashRes.items && cashRes.items.length){
+    cashiers = cashRes.items.map(function(it){
+      return { id:parseInt(it.id)||1, name:it.name||'', role:it.role||'Cashier',
+        pin:String(it.pin||'0000'), color:it.color||'av-t', active:it.active===true||it.active==='true' };
+    });
+    localStorage.setItem('gtg_cashiers',JSON.stringify(cashiers));
+    renderCashierRoster();
+  }
+
+  setDBStatus('connected','Google Sheets ✓');
+  _startHeartbeat();
+  showToast('✅ Google Sheets connected!','success');
 }
 
 function continueOffline() {
