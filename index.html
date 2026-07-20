@@ -1251,23 +1251,7 @@ const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbxK-uKxkx2
 let SHEETS_URL = SHEETS_URL_PERMANENT;
 // Sync to localStorage so existing connect-modal logic still works
 try{ localStorage.setItem('greektogo_sheets_url', SHEETS_URL); }catch(e){}
-const DEFAULT_INVENTORY = [
-  {id:1,name:"Chicken Souvlaki",cat:"Mains",price:185,stock:30,emoji:"🥙"},
-  {id:2,name:"Lamb Gyros",cat:"Mains",price:195,stock:25,emoji:"🌯"},
-  {id:3,name:"Greek Salad",cat:"Soups & Salads",price:145,stock:40,emoji:"🥗"},
-  {id:4,name:"Spanakopita",cat:"Appetizers",price:125,stock:20,emoji:"🥐"},
-  {id:5,name:"Tzatziki Dip",cat:"Sides",price:95,stock:50,emoji:"🫙"},
-  {id:6,name:"Loukoumades",cat:"Desserts",price:135,stock:18,emoji:"🍩"},
-  {id:7,name:"Moussaka",cat:"Mains",price:215,stock:12,emoji:"🫕"},
-  {id:8,name:"Lemon Soup",cat:"Soups & Salads",price:115,stock:22,emoji:"🍜"},
-  {id:9,name:"Pita Bread",cat:"Sides",price:55,stock:80,emoji:"🫓"},
-  {id:10,name:"Greek Coffee",cat:"Drinks",price:75,stock:100,emoji:"☕"},
-  {id:11,name:"Frappe",cat:"Drinks",price:85,stock:60,emoji:"🥤"},
-  {id:12,name:"Baklava",cat:"Desserts",price:110,stock:5,emoji:"🍰"},
-  {id:13,name:"Tiropita",cat:"Appetizers",price:105,stock:15,emoji:"🥧"},
-  {id:14,name:"Pork Souvlaki",cat:"Mains",price:175,stock:0,emoji:"🍢"},
-  {id:15,name:"Feta Saganaki",cat:"Appetizers",price:155,stock:10,emoji:"🧀"},
-];
+// POS Menu loads exclusively from Google Sheets POS MENU CREATION tab — no defaults.
 
 // ══════════════════════════════════════════════════════════════════════════
 // MENU and INVENTORY are two fully independent lists. Nothing you do to one
@@ -1283,9 +1267,29 @@ let menuItems = (function(){
     var saved = localStorage.getItem('gtg_menu_items');
     if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length) return parsed; }
   } catch(e) {}
-  return DEFAULT_INVENTORY.slice();  // fresh copy so edits don't mutate the const
+  return [];  // always starts empty — loaded from Google Sheets POS MENU CREATION tab
 })();
 function _saveMenuLocally(){ try{ localStorage.setItem('gtg_menu_items', JSON.stringify(menuItems)); }catch(e){} }
+
+// ── On first load: clear any cached DEFAULT_INVENTORY items so Sheets takes over
+(function(){
+  try {
+    var OLD_DEFAULTS = ["Chicken Souvlaki","Lamb Gyros","Greek Salad","Spanakopita",
+      "Tzatziki Dip","Loukoumades","Moussaka","Lemon Soup","Pita Bread",
+      "Greek Coffee","Frappe","Baklava","Tiropita","Pork Souvlaki","Feta Saganaki"];
+    var saved = localStorage.getItem('gtg_menu_items');
+    if(saved){
+      var items = JSON.parse(saved);
+      // If the saved items are ALL default items, clear them so Sheets re-imports
+      var names = items.map(function(i){ return i.name; });
+      var isAllDefault = names.every(function(n){ return OLD_DEFAULTS.indexOf(n) > -1; });
+      if(isAllDefault){
+        localStorage.removeItem('gtg_menu_items');
+        console.log('Cleared old default menu — will reload from Google Sheets');
+      }
+    }
+  } catch(e){}
+})();
 
 // ── INVENTORY (stock tracking) — starts empty. You build this list
 // yourself via the Inventory tab. Backs up to Google Sheets, but Sheets
