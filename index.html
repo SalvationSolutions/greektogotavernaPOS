@@ -1300,19 +1300,24 @@ let stockInventory = (function(){
     if (saved) {
       var parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length) {
-        // Migrate: if first item has old fields (name/cat) but not new fields (description/category),
-        // clear and let the user re-import — avoids showing "undefined" everywhere
-        var first = parsed[0];
-        if ((first.name||first.cat) && !first.description && !first.category && !first.itemCode) {
-          localStorage.removeItem('gtg_stock_inventory');
-          return [];
-        }
-        // Clear any items that have the string "undefined" stored as a value
-        var cleaned = parsed.map(function(i){
-          Object.keys(i).forEach(function(k){ if(String(i[k])==='undefined') i[k]=''; });
-          return i;
+        // Normalize: convert UPPERCASE Sheet headers → camelCase field names
+        var normalized = parsed.map(function(it, idx){
+          function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+          return {
+            id:          it.id || idx+1,
+            itemCode:    g(['itemCode','ITEM CODE','item_code']),
+            description: g(['description','ITEM DESCRIPTION','name','Description']),
+            category:    g(['category','CATEGORY','cat','Category']),
+            price:       parseFloat(g(['price','PRICE']))||0,
+            begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL']))||0,
+            endingStock: parseInt(g(['endingStock','ENDING STOCKS','stock']))||0,
+            uom:         g(['uom','UOM']),
+            supplier:    g(['supplier','SUPPLIER'])
+          };
         });
-        return cleaned;
+        // Re-save in normalized format
+        try{ localStorage.setItem('gtg_stock_inventory', JSON.stringify(normalized)); }catch(e){}
+        return normalized;
       }
     }
   } catch(e) {}
@@ -1527,12 +1532,12 @@ async function loadInventoryFromSheets(){
     // _onReconnected() already called by sheetsCall — just update inventory
     // Pull Sheets data into Inventory tab (bidirectional sync)
     if(res.items && res.items.length > 0){
-      stockInventory = res.items.map((it,idx)=>{
-        function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+      stockInventory = res.items.map(function(it,idx){
+        function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
         return {
           id:          idx+1,
           itemCode:    g(['itemCode','ITEM CODE','item_code']),
-          description: g(['description','ITEM DESCRIPTION','item_description','name','Description']),
+          description: g(['description','ITEM DESCRIPTION','name','Description']),
           category:    g(['category','CATEGORY','cat','Category']),
           price:       parseFloat(g(['price','PRICE','Price']))||0,
           begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
@@ -2161,7 +2166,7 @@ function renderDeliveryTable(platform){
 /* ═══════════════════ INVENTORY ═══════════════════ */
 function stockStatus(n){ if(n===0) return ['none','Out of Stock']; if(n<=5) return ['low','Low']; if(n<=20) return ['medium','Medium']; return ['high','Good']; }
 function renderInventoryPills(){
-  const cats=['All',...new Set(stockInventory.map(i=>i.category).filter(Boolean))];
+  const cats=['All',...new Set(stockInventory.map(i=>(i.category||i['CATEGORY']||i.cat||'').trim()).filter(c=>c&&c!=='undefined'))];
   const active=window._invActiveCat||'All';
   const el=document.getElementById('inv-filter-pills');
   if(!el) return;
@@ -2219,17 +2224,26 @@ function renderInventory(){
     return;
   }
   el.innerHTML = items.map(it=>{
-    const ending = parseInt(it.endingStock||0);
-    const cls = ending===0?'oos-cell':ending<=5?'low-cell':'';
+    // Support both camelCase (our format) and UPPERCASE (direct from Sheet headers)
+    function _v(a,b,c){ return a||b||c||''; }
+    var iCode  = _v(it.itemCode,   it['ITEM CODE'],   '');
+    var iDesc  = _v(it.description,it['ITEM DESCRIPTION'],it.name||'');
+    var iCat   = _v(it.category,   it['CATEGORY'],    it.cat||'');
+    var iPrice = parseFloat(it.price||it['PRICE']||0);
+    var iBeg   = parseInt(it.begBal||it['BEG BAL STOCKS']||it['BEG BAL']||0);
+    var iEnd   = parseInt(it.endingStock||it['ENDING STOCKS']||it.stock||0);
+    var iUom   = _v(it.uom,    it['UOM'],      '');
+    var iSupp  = _v(it.supplier,it['SUPPLIER'], '');
+    const cls  = iEnd===0?'oos-cell':iEnd<=5?'low-cell':'';
     return `<tr>
-      <td>${it.itemCode||'—'}</td>
-      <td style="font-weight:700;word-break:break-word;white-space:normal;min-width:160px">${it.description||'—'}</td>
-      <td>${it.category||'—'}</td>
-      <td>₱${parseFloat(it.price||0).toFixed(2)}</td>
-      <td>${it.begBal||0}</td>
-      <td class="${cls}">${ending}</td>
-      <td>${it.uom||'—'}</td>
-      <td>${it.supplier||'—'}</td>
+      <td>${iCode||'—'}</td>
+      <td style="font-weight:700;word-break:break-word;white-space:normal;min-width:160px">${iDesc||'—'}</td>
+      <td>${iCat||'—'}</td>
+      <td>₱${iPrice.toFixed(2)}</td>
+      <td>${iBeg}</td>
+      <td class="${cls}">${iEnd}</td>
+      <td>${iUom||'—'}</td>
+      <td>${iSupp||'—'}</td>
       <td class="ia-cell">
         <button class="ia" onclick="openEditModal(${it.id})">✏️</button>
         <button class="ia del" onclick="deleteItem(${it.id})">🗑</button>
@@ -2251,14 +2265,15 @@ function openEditModal(id){
   const it=stockInventory.find(i=>i.id===id);
   if(!it) return;
   document.getElementById('modal-title').textContent='✏️ Edit Inventory Item';
-  document.getElementById('m-code').value    = it.itemCode    || '';
-  document.getElementById('m-name').value    = it.description || '';
-  document.getElementById('m-cat').value     = it.category    || '';
-  document.getElementById('m-price').value   = it.price       || '';
-  document.getElementById('m-uom').value     = it.uom         || '';
-  document.getElementById('m-begbal').value  = it.begBal      || 0;
-  document.getElementById('m-ending').value  = it.endingStock || 0;
-  document.getElementById('m-supplier').value= it.supplier    || '';
+  function _v(a,b,c){ return a||b||c||''; }
+  document.getElementById('m-code').value    = _v(it.itemCode,   it['ITEM CODE'],   '');
+  document.getElementById('m-name').value    = _v(it.description,it['ITEM DESCRIPTION'],it.name||'');
+  document.getElementById('m-cat').value     = _v(it.category,   it['CATEGORY'],    it.cat||'');
+  document.getElementById('m-price').value   = it.price||it['PRICE']||'';
+  document.getElementById('m-uom').value     = _v(it.uom,        it['UOM'],         '');
+  document.getElementById('m-begbal').value  = it.begBal||it['BEG BAL STOCKS']||it['BEG BAL']||0;
+  document.getElementById('m-ending').value  = it.endingStock||it['ENDING STOCKS']||it.stock||0;
+  document.getElementById('m-supplier').value= _v(it.supplier,   it['SUPPLIER'],    '');
   _refreshCatSuggestions();
   openModal('item-modal');
 }
@@ -2267,7 +2282,7 @@ function _refreshCatSuggestions(){
   const dl = document.getElementById('cat-suggestions');
   if(!dl) return;
   const existing = Array.from(dl.options).map(o=>o.value);
-  const custom = [...new Set(stockInventory.map(i=>i.category).filter(c=>c&&!existing.includes(c)))];
+  const custom = [...new Set(stockInventory.map(i=>(i.category||i['CATEGORY']||'').trim()).filter(c=>c&&!existing.includes(c)))];
   custom.forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); });
 }
 
