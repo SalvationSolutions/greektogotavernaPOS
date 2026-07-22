@@ -737,6 +737,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <button class="nav-btn"             onclick="showTab('inventory',this)">📦 Inventory</button>
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
+    <button class="nav-btn"             onclick="showTab('reports',this)">📊 Reports</button>
   </nav>
   <div class="header-right">
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
@@ -768,6 +769,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   <div class="order-panel">
     <div class="order-header">
       <div><div class="order-title">Current Order</div><div class="order-num" id="order-num">Order #0001</div></div>
+      <button id="held-orders-btn" onclick="showHeldOrders()" style="display:none;font-size:10px;background:#E8F0FE;color:var(--blue-accent);border:none;border-radius:8px;padding:3px 8px;cursor:pointer;font-weight:700;font-family:Nunito,sans-serif;">⏸ <span id="held-count">0</span> Held</button>
       <span style="font-size:20px">🛒</span>
     </div>
     <div class="order-items" id="order-items">
@@ -778,7 +780,19 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
       <div class="sum-row disc" id="disc-row" style="display:none"><span id="disc-lbl">Discount</span><span id="disc-amt">-₱0.00</span></div>
       <div class="sum-row"><span>VAT (12%)</span><span id="vat">₱0.00</span></div>
       <div class="sum-row total-row"><span>TOTAL</span><span id="ttl">₱0.00</span></div>
-      <input class="cust-input" type="text" id="cust-name" placeholder="Customer name (optional)">
+      <!-- Table # + Customer -->
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:6px;margin-bottom:6px;">
+        <select id="table-num" style="border:1.5px solid var(--blue-pale);border-radius:10px;padding:8px 10px;font-family:Nunito,sans-serif;font-size:13px;color:var(--blue-deep);background:#fff;">
+          <option value="">Table #</option>
+          <option>Table 1</option><option>Table 2</option><option>Table 3</option>
+          <option>Table 4</option><option>Table 5</option><option>Table 6</option>
+          <option>Table 7</option><option>Table 8</option><option>Table 9</option>
+          <option>Table 10</option><option>Takeout</option><option>Delivery</option>
+        </select>
+        <input class="cust-input" type="text" id="cust-name" placeholder="Customer name (optional)" style="margin:0">
+      </div>
+      <!-- Order Notes -->
+      <input type="text" id="order-notes" placeholder="📝 Order notes / special requests" style="width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:8px 12px;font-family:Nunito,sans-serif;font-size:12px;box-sizing:border-box;margin-bottom:6px;">
       <!-- DISCOUNT -->
       <div class="disc-section">
         <div class="disc-heading">🏷️ Discount</div>
@@ -823,6 +837,11 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
           </div>
         </div>
       </div>
+      <!-- HOLD & SPLIT -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <button onclick="holdOrder()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">⏸ Hold Order</button>
+        <button onclick="openSplitBill()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">✂️ Split Bill</button>
+      </div>
       <!-- PAYMENT -->
       <button onclick="printReceipt()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px;">🖨️ Print Receipt</button>
       <div class="pay-label">💳 Payment Method</div>
@@ -835,6 +854,75 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     </div>
   </div>
 </div>
+<!-- ══════════ REPORTS VIEW ══════════ -->
+<div id="reports-view" class="tab-view" style="flex-direction:column;padding:22px;gap:18px;overflow-y:auto;min-height:calc(100vh - 64px);">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-family:'Cinzel',serif;font-size:21px;color:var(--blue-deep);margin:0">📊 Sales Reports</h2>
+      <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Based on today's completed orders</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="add-btn" style="background:var(--blue-deep)" onclick="renderReports()">🔄 Refresh</button>
+      <button class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Send EOD to Sheet</button>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div id="rpt-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;"></div>
+
+  <!-- Sales by Category -->
+  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;">
+    <div style="font-weight:800;font-size:14px;color:var(--blue-deep);margin-bottom:12px;">📂 Sales by Category</div>
+    <div id="rpt-by-cat"></div>
+  </div>
+
+  <!-- Top Items -->
+  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;">
+    <div style="font-weight:800;font-size:14px;color:var(--blue-deep);margin-bottom:12px;">🏆 Top Selling Items</div>
+    <div id="rpt-top-items"></div>
+  </div>
+
+  <!-- Orders Timeline -->
+  <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;">
+    <div style="font-weight:800;font-size:14px;color:var(--blue-deep);margin-bottom:12px;">📋 Today's Orders</div>
+    <div id="rpt-orders" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+<!-- HELD ORDERS MODAL -->
+<div class="modal-overlay" id="held-modal" onclick="if(event.target===this)closeModal('held-modal')">
+  <div class="modal" style="max-width:400px;width:95vw;">
+    <h3>⏸ Held Orders</h3>
+    <div id="held-list" style="max-height:300px;overflow-y:auto;margin:12px 0;"></div>
+    <div class="modal-actions">
+      <button class="m-cancel" onclick="closeModal('held-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPLIT BILL MODAL -->
+<div class="modal-overlay" id="split-modal" onclick="if(event.target===this)closeModal('split-modal')">
+  <div class="modal" style="max-width:340px;width:95vw;text-align:center;">
+    <h3>✂️ Split Bill</h3>
+    <div style="font-size:13px;color:var(--gray-soft);margin-bottom:14px;">Divide the bill equally among guests</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px;">
+      <button class="qty-btn minus" onclick="changeSplit(-1)" style="width:36px;height:36px;font-size:18px;">−</button>
+      <span id="split-count" style="font-size:28px;font-weight:900;color:var(--blue-deep);min-width:40px;">2</span>
+      <button class="qty-btn plus" onclick="changeSplit(1)" style="width:36px;height:36px;font-size:18px;">+</button>
+    </div>
+    <div style="font-size:12px;color:var(--gray-soft);margin-bottom:6px;">guests</div>
+    <div id="split-result" style="background:var(--blue-ghost);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--gray-soft);">Total</div>
+      <div style="font-size:22px;font-weight:900;color:var(--blue-deep);" id="split-total">₱0.00</div>
+      <div style="font-size:12px;color:var(--gray-soft);margin-top:8px;">Each pays</div>
+      <div style="font-size:28px;font-weight:900;color:var(--success);" id="split-each">₱0.00</div>
+    </div>
+    <div class="modal-actions">
+      <button class="m-cancel" onclick="closeModal('split-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ══════════ GRAB VIEW ══════════ -->
 <!-- ══════════ POS MENU VIEW ══════════ -->
@@ -1356,6 +1444,7 @@ function showTab(tab, btn) {
   if(tab==='pos-menu')   renderPosMenu();
   if(tab==='grab')    { renderDeliveryStats('grab');  renderDeliveryTable('grab');  setNow('grab-dt');  }
   if(tab==='cashier') { renderCashierRoster(); renderShiftLog(); }
+  if(tab==='reports') renderReports();
 }
 
 /* ═══════════════════ SHEETS CONNECTION ENGINE ═══════════════════
@@ -1953,9 +2042,14 @@ function getTotals(){
 }
 function clearOrder(){
   order=[]; disc={type:'pct',value:0,applied:false};
-  document.getElementById('cust-name').value='';
-  document.getElementById('dval').value='';
-  document.getElementById('dremove').style.display='none';
+  var cn=document.getElementById('cust-name'); if(cn) cn.value='';
+  var tn=document.getElementById('table-num'); if(tn) tn.value='';
+  var nn=document.getElementById('order-notes'); if(nn) nn.value='';
+  var dv=document.getElementById('dval'); if(dv) dv.value='';
+  var dr=document.getElementById('dremove'); if(dr) dr.style.display='none';
+  var sc=document.getElementById('sr-count'); if(sc) sc.textContent='0';
+  var pc=document.getElementById('pwd-count'); if(pc) pc.textContent='0';
+  srpCounts={sr:0,pwd:0};
   renderOrder();
 }
 
@@ -3156,6 +3250,286 @@ function printBrowser(){
   else{showToast('Allow popups to print receipts.','error');}
 }
 /* ══════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════
+   NEW FEATURES: Table#, Notes, Hold, Split, Reports, AutoStock
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Local sales log for reports ──────────────────────────── */
+var salesLog = (function(){
+  try{ var s=localStorage.getItem('gtg_sales_log'); if(s){ var p=JSON.parse(s); if(Array.isArray(p)) return p; } }catch(e){}
+  return [];
+})();
+function _saveSalesLog(){ try{ localStorage.setItem('gtg_sales_log',JSON.stringify(salesLog.slice(-500))); }catch(e){} }
+function _addToSalesLog(sale){ salesLog.push(sale); _saveSalesLog(); }
+
+/* ── Upgrade finalizePayment to include table, notes, stock deduct ── */
+var _origFinalizePayment = finalizePayment;
+finalizePayment = async function(method, gcashNum, gcashRef){
+  var tableEl = document.getElementById('table-num');
+  var notesEl = document.getElementById('order-notes');
+  var tableNum = tableEl ? tableEl.value : '';
+  var notes    = notesEl ? notesEl.value : '';
+
+  // Auto-deduct from INVENTORY (stockInventory) when order is finalized
+  order.forEach(function(o){
+    var invItem = stockInventory.find(function(i){
+      return (i.name||i.description||'').toLowerCase().trim() === (o.name||'').toLowerCase().trim();
+    });
+    if(invItem && parseInt(invItem.endingStock||0) > 0){
+      invItem.endingStock = Math.max(0, parseInt(invItem.endingStock||0) - o.qty);
+    }
+  });
+  _saveStockLocally();
+  // Push stock update to Sheets in background
+  var stockUpdates = order.map(function(o){
+    var inv = stockInventory.find(function(i){
+      return (i.name||i.description||'').toLowerCase().trim() === (o.name||'').toLowerCase().trim();
+    });
+    if(inv) return { itemCode: inv.itemCode, endingStock: inv.endingStock };
+    return null;
+  }).filter(Boolean);
+  if(stockUpdates.length && SHEETS_URL) sheetsCall('updateStock',{updates:stockUpdates});
+
+  // Add to local sales log
+  var totals = getTotals();
+  var saleRecord = {
+    id:        Date.now(),
+    orderNum:  String(orderCount).padStart(4,'0'),
+    time:      new Date().toLocaleString('en-PH'),
+    date:      new Date().toLocaleDateString('en-PH'),
+    hour:      new Date().getHours(),
+    table:     tableNum||'Walk-in',
+    customer:  (document.getElementById('cust-name')||{}).value||'Walk-in',
+    notes:     notes,
+    cashier:   typeof activeCashier!=='undefined'?activeCashier:'—',
+    method:    method,
+    items:     order.map(function(o){ return {name:o.name, qty:o.qty, price:o.price, cat:o.cat||''}; }),
+    subtotal:  totals.sub,
+    discount:  totals.da,
+    vat:       totals.vat,
+    total:     totals.tot
+  };
+  _addToSalesLog(saleRecord);
+
+  // Clear table and notes after order
+  if(tableEl) tableEl.value='';
+  if(notesEl) notesEl.value='';
+
+  // Call original (handles receipt modal, order count, etc.)
+  await _origFinalizePayment.call(this, method, gcashNum, gcashRef);
+};
+
+/* ── Table # + Notes in receipt ──────────────────────────── */
+var _origRenderOrder = renderOrder;
+renderOrder = function(){
+  _origRenderOrder.call(this);
+  // Show table in order header
+  var tableEl = document.getElementById('table-num');
+  var numEl   = document.getElementById('order-num');
+  if(tableEl && numEl && tableEl.value){
+    numEl.textContent = 'Order #'+String(orderCount).padStart(4,'0')+' · '+tableEl.value;
+  }
+};
+
+/* ── HOLD ORDER ───────────────────────────────────────────── */
+var heldOrders = [];
+function holdOrder(){
+  if(!order.length){ showToast('No items to hold!','error'); return; }
+  var tableEl = document.getElementById('table-num');
+  var custEl  = document.getElementById('cust-name');
+  var notesEl = document.getElementById('order-notes');
+  heldOrders.push({
+    id:       Date.now(),
+    label:    (tableEl&&tableEl.value ? tableEl.value : 'Order')+ ' — ' + (custEl&&custEl.value ? custEl.value : '#'+(heldOrders.length+1)),
+    table:    tableEl ? tableEl.value : '',
+    customer: custEl  ? custEl.value  : '',
+    notes:    notesEl ? notesEl.value : '',
+    order:    JSON.parse(JSON.stringify(order)),
+    disc:     JSON.parse(JSON.stringify(disc))
+  });
+  _updateHeldBtn();
+  clearOrder();
+  showToast('Order held! Start a new order.','success');
+}
+function _updateHeldBtn(){
+  var btn = document.getElementById('held-orders-btn');
+  var cnt = document.getElementById('held-count');
+  if(btn){ btn.style.display = heldOrders.length ? 'inline-flex' : 'none'; }
+  if(cnt){ cnt.textContent = heldOrders.length; }
+}
+function showHeldOrders(){
+  var el = document.getElementById('held-list');
+  if(!heldOrders.length){ el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>'; }
+  else {
+    el.innerHTML = heldOrders.map(function(h){
+      var sub = h.order.reduce(function(s,o){ return s+parseFloat(o.price)*o.qty; },0);
+      return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:8px;">'
+        +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||'Held Order')+'</div>'
+        +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order.length)+' item(s) · ₱'+sub.toFixed(2)+'</div>'
+        +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
+        +'<div style="display:flex;gap:6px;margin-top:8px">'
+        +'<button class="m-save" style="flex:1;padding:7px" onclick="recallOrder('+h.id+')">Recall</button>'
+        +'<button class="m-cancel" style="padding:7px" onclick="discardHeld('+h.id+')">Discard</button>'
+        +'</div></div>';
+    }).join('');
+  }
+  openModal('held-modal');
+}
+function recallOrder(id){
+  var h = heldOrders.find(function(o){ return o.id===id; });
+  if(!h) return;
+  if(order.length && !confirm('Current order will be cleared. Recall held order?')) return;
+  order = JSON.parse(JSON.stringify(h.order));
+  disc  = JSON.parse(JSON.stringify(h.disc));
+  var tableEl = document.getElementById('table-num');
+  var custEl  = document.getElementById('cust-name');
+  var notesEl = document.getElementById('order-notes');
+  if(tableEl) tableEl.value = h.table||'';
+  if(custEl)  custEl.value  = h.customer||'';
+  if(notesEl) notesEl.value = h.notes||'';
+  heldOrders = heldOrders.filter(function(o){ return o.id!==id; });
+  _updateHeldBtn();
+  closeModal('held-modal');
+  renderOrder();
+  showToast('Order recalled!','success');
+}
+function discardHeld(id){
+  heldOrders = heldOrders.filter(function(o){ return o.id!==id; });
+  _updateHeldBtn();
+  showHeldOrders(); // refresh list
+}
+
+/* ── SPLIT BILL ───────────────────────────────────────────── */
+var _splitCount = 2;
+function openSplitBill(){
+  if(!order.length){ showToast('No items in order!','error'); return; }
+  _splitCount = 2;
+  _refreshSplit();
+  openModal('split-modal');
+}
+function changeSplit(d){
+  _splitCount = Math.max(2, _splitCount+d);
+  _refreshSplit();
+}
+function _refreshSplit(){
+  var tot = getTotals().tot;
+  document.getElementById('split-count').textContent = _splitCount;
+  document.getElementById('split-total').textContent = '₱'+tot.toFixed(2);
+  document.getElementById('split-each').textContent  = '₱'+(tot/_splitCount).toFixed(2);
+}
+
+/* ══════════════════════════════════════════════════════════
+   REPORTS
+   ══════════════════════════════════════════════════════════ */
+function renderReports(){
+  var today = new Date().toLocaleDateString('en-PH');
+  var todaySales = salesLog.filter(function(s){ return s.date===today; });
+  var totalRev   = todaySales.reduce(function(s,o){ return s+o.total; },0);
+  var totalOrds  = todaySales.length;
+  var totalDisc  = todaySales.reduce(function(s,o){ return s+o.discount; },0);
+  var totalVat   = todaySales.reduce(function(s,o){ return s+o.vat; },0);
+
+  // Cards
+  document.getElementById('rpt-cards').innerHTML = [
+    {lbl:'Orders Today',   val:totalOrds,             cls:''},
+    {lbl:'Total Revenue',  val:'₱'+totalRev.toFixed(2), cls:''},
+    {lbl:'Total Discount', val:'₱'+totalDisc.toFixed(2),cls:'stat-warn'},
+    {lbl:'VAT Collected',  val:'₱'+totalVat.toFixed(2), cls:''},
+  ].map(function(c){
+    return '<div class="stat-card '+c.cls+'"><div class="stat-lbl">'+c.lbl+'</div><div class="stat-val">'+c.val+'</div></div>';
+  }).join('');
+
+  // By category
+  var catMap = {};
+  todaySales.forEach(function(s){
+    s.items.forEach(function(it){
+      var cat = it.cat||'Other';
+      if(!catMap[cat]) catMap[cat]={qty:0,rev:0};
+      catMap[cat].qty += it.qty;
+      catMap[cat].rev += parseFloat(it.price)*it.qty;
+    });
+  });
+  var cats = Object.keys(catMap).sort(function(a,b){ return catMap[b].rev-catMap[a].rev; });
+  var maxRev = cats.length ? catMap[cats[0]].rev : 1;
+  document.getElementById('rpt-by-cat').innerHTML = cats.length
+    ? cats.map(function(c){
+        var pct = Math.round((catMap[c].rev/maxRev)*100);
+        return '<div style="margin-bottom:10px">'
+          +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+          +'<span style="font-weight:700">'+c+'</span>'
+          +'<span style="color:var(--gray-soft)">'+catMap[c].qty+' sold · ₱'+catMap[c].rev.toFixed(2)+'</span></div>'
+          +'<div style="background:var(--blue-ghost);border-radius:6px;height:8px">'
+          +'<div style="background:var(--blue-accent);border-radius:6px;height:8px;width:'+pct+'%"></div></div></div>';
+      }).join('')
+    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales today yet.</div>';
+
+  // Top items
+  var itemMap = {};
+  todaySales.forEach(function(s){
+    s.items.forEach(function(it){
+      if(!itemMap[it.name]) itemMap[it.name]={qty:0,rev:0};
+      itemMap[it.name].qty += it.qty;
+      itemMap[it.name].rev += parseFloat(it.price)*it.qty;
+    });
+  });
+  var items = Object.keys(itemMap).sort(function(a,b){ return itemMap[b].qty-itemMap[a].qty; }).slice(0,10);
+  document.getElementById('rpt-top-items').innerHTML = items.length
+    ? '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      +'<tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'
+      +items.map(function(n,i){
+        return '<tr style="border-top:1px solid var(--blue-ghost)">'
+          +'<td style="padding:6px 0">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'')+''+n+'</td>'
+          +'<td align="center" style="font-weight:700">'+itemMap[n].qty+'</td>'
+          +'<td align="right" style="color:var(--success)">₱'+itemMap[n].rev.toFixed(2)+'</td></tr>';
+      }).join('')+'</table>'
+    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales data yet.</div>';
+
+  // Orders table
+  document.getElementById('rpt-orders').innerHTML = todaySales.length
+    ? '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:500px">'
+      +'<tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order</th>'
+      +'<th align="left">Time</th><th align="left">Table</th><th align="left">Cashier</th>'
+      +'<th align="right">Total</th><th align="left">Payment</th></tr>'
+      +todaySales.slice().reverse().map(function(s){
+        return '<tr style="border-bottom:1px solid var(--blue-ghost)">'
+          +'<td style="padding:6px 8px">#'+s.orderNum+'</td>'
+          +'<td>'+s.time+'</td><td>'+(s.table||'—')+'</td><td>'+s.cashier+'</td>'
+          +'<td align="right" style="font-weight:700">₱'+s.total.toFixed(2)+'</td>'
+          +'<td><span style="background:var(--blue-ghost);border-radius:8px;padding:2px 7px;font-size:10px">'+s.method+'</span></td></tr>';
+      }).join('')+'</table>'
+    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders today.</div>';
+}
+
+/* ── EOD REPORT TO SHEETS ─────────────────────────────────── */
+async function sendEODReport(){
+  var today = new Date().toLocaleDateString('en-PH');
+  var todaySales = salesLog.filter(function(s){ return s.date===today; });
+  if(!todaySales.length){ showToast('No sales today to report.','error'); return; }
+  var totalRev = todaySales.reduce(function(s,o){ return s+o.total; },0);
+  var eod = {
+    date:        today,
+    generatedAt: new Date().toLocaleString('en-PH'),
+    totalOrders: todaySales.length,
+    totalRevenue:totalRev.toFixed(2),
+    totalDiscount:todaySales.reduce(function(s,o){ return s+o.discount; },0).toFixed(2),
+    totalVAT:    todaySales.reduce(function(s,o){ return s+o.vat; },0).toFixed(2),
+    cashier:     typeof activeCashier!=='undefined'?activeCashier:'—'
+  };
+  showToast('Sending EOD report…','info');
+  var ok = await sheetsCall('logEOD',{report: eod, orders: todaySales});
+  if(ok) showToast('✅ EOD Report saved to Google Sheets!','success');
+  else   showToast('❌ Could not send report. Check connection.','error');
+}
+
+/* ── Wire showTab to renderReports ─────────────────────────── */
+var _origShowTab = showTab;
+showTab = function(tab, btn){
+  _origShowTab.call(this, tab, btn);
+  if(tab==='reports') renderReports();
+};
+/* ════════════════════════════════════════════════════════════ */
 
 </script>
 
