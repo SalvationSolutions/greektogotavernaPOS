@@ -1637,9 +1637,6 @@ async function loadInventoryFromSheets(){
       });
       _saveStockLocally();
       showToast('✅ Inventory synced from Google Sheets!','success');
-    } else {
-      // Sheet is empty — push local data up as the first backup
-      await pushInventoryToSheets();
     }
     renderInventory();
   } else {
@@ -1654,12 +1651,20 @@ async function syncInventory(){
 }
 async function pushInventoryToSheets(){
   if(!SHEETS_URL) return;
-  const rows = stockInventory.map(i=>({
-    itemCode: i.itemCode||'', description: i.description||'',
-    category: i.category||'', price: i.price||0,
-    begBal: i.begBal||0, endingStock: i.endingStock||0,
-    uom: i.uom||'', supplier: i.supplier||''
-  }));
+  if(!stockInventory.length){ showToast('Nothing to backup — inventory is empty.','error'); return; }
+  function _v(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!=='') return v; } return ''; }
+  const rows = stockInventory.map(function(i){
+    return {
+      itemCode:    _v(i,['itemCode','ITEM CODE','item_code']),
+      description: _v(i,['description','ITEM DESCRIPTION','name','Description']),
+      category:    _v(i,['category','CATEGORY','cat','Category']),
+      price:       parseFloat(_v(i,['price','PRICE','Price']))||0,
+      begBal:      parseInt(_v(i,['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
+      endingStock: parseInt(_v(i,['endingStock','ENDING STOCKS','ENDING','stock','STOCK']))||0,
+      uom:         _v(i,['uom','UOM','Uom','unit']),
+      supplier:    _v(i,['supplier','SUPPLIER','Supplier'])
+    };
+  });
   await sheetsCall('saveInventory',{items:rows});
 }
 
@@ -2402,16 +2407,14 @@ async function saveItem(){
   }
   closeModal('item-modal');
   _saveStockLocally();
-  await pushInventoryToSheets();
   renderInventory();
 }
-async function deleteItem(id){
+function deleteItem(id){
   if(!confirm('Delete this item?')) return;
   stockInventory=stockInventory.filter(i=>i.id!==id);
   _saveStockLocally();
-  await pushInventoryToSheets();  // backup only — never overwrites local, never touches the Menu
   renderInventory();
-  showToast('Item deleted.','success');
+  showToast('Item deleted. Tap ⬆ Backup to Sheet when ready.','success');
 }
 
 /* ═══════════════════ CASHIER PIN MANAGER ═══════════════════ */
@@ -2721,12 +2724,20 @@ async function _initialSync(){
   var invRes = await _call(SHEETS_URL,'getInventory',{});
   if(invRes && invRes.items && invRes.items.length){
     stockInventory = invRes.items.map(function(it,idx){
-      return { id:idx+1, itemCode:_g(it,['itemCode','ITEM CODE']), description:_g(it,['description','ITEM DESCRIPTION','name']),
-        category:_g(it,['category','CATEGORY','cat']), price:parseFloat(_g(it,['price','PRICE']))||0,
-        begBal:parseInt(_g(it,['begBal','BEG BAL STOCKS']))||0, endingStock:parseInt(_g(it,['endingStock','ENDING STOCKS','stock']))||0,
-        uom:_g(it,['uom','UOM']), supplier:_g(it,['supplier','SUPPLIER']) };
+      return {
+        id:          idx+1,
+        itemCode:    _g(it,['itemCode','ITEM CODE','item_code']),
+        description: _g(it,['description','ITEM DESCRIPTION','name','Description']),
+        category:    _g(it,['category','CATEGORY','cat','Category']),
+        price:       parseFloat(_g(it,['price','PRICE','Price']))||0,
+        begBal:      parseInt(_g(it,['begBal','BEG BAL STOCKS','BEG BAL']))||0,
+        endingStock: parseInt(_g(it,['endingStock','ENDING STOCKS','ENDING','stock','STOCK']))||0,
+        uom:         _g(it,['uom','UOM','Uom']),
+        supplier:    _g(it,['supplier','SUPPLIER','Supplier'])
+      };
     });
     _saveStockLocally(); renderInventory();
+    // Never auto-push back — user controls backup via button
   }
 
   // Step 3: POS Menu
@@ -3271,26 +3282,6 @@ finalizePayment = async function(method, gcashNum, gcashRef){
   var notesEl = document.getElementById('order-notes');
   var tableNum = tableEl ? tableEl.value : '';
   var notes    = notesEl ? notesEl.value : '';
-
-  // Auto-deduct from INVENTORY (stockInventory) when order is finalized
-  order.forEach(function(o){
-    var invItem = stockInventory.find(function(i){
-      return (i.name||i.description||'').toLowerCase().trim() === (o.name||'').toLowerCase().trim();
-    });
-    if(invItem && parseInt(invItem.endingStock||0) > 0){
-      invItem.endingStock = Math.max(0, parseInt(invItem.endingStock||0) - o.qty);
-    }
-  });
-  _saveStockLocally();
-  // Push stock update to Sheets in background
-  var stockUpdates = order.map(function(o){
-    var inv = stockInventory.find(function(i){
-      return (i.name||i.description||'').toLowerCase().trim() === (o.name||'').toLowerCase().trim();
-    });
-    if(inv) return { itemCode: inv.itemCode, endingStock: inv.endingStock };
-    return null;
-  }).filter(Boolean);
-  if(stockUpdates.length && SHEETS_URL) sheetsCall('updateStock',{updates:stockUpdates});
 
   // Add to local sales log
   var totals = getTotals();
