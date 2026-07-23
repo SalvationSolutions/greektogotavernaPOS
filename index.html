@@ -1388,22 +1388,9 @@ let stockInventory = (function(){
     if (saved) {
       var parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length) {
-        // Normalize: convert UPPERCASE Sheet headers → camelCase field names
-        var normalized = parsed.map(function(it, idx){
-          function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-          return {
-            id:          it.id || idx+1,
-            itemCode:    g(['itemCode','ITEM CODE','item_code']),
-            description: g(['description','ITEM DESCRIPTION','name','Description']),
-            category:    g(['category','CATEGORY','cat','Category']),
-            price:       parseFloat(g(['price','PRICE']))||0,
-            begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL']))||0,
-            endingStock: parseInt(g(['endingStock','ENDING STOCKS','stock']))||0,
-            uom:         g(['uom','UOM']),
-            supplier:    g(['supplier','SUPPLIER'])
-          };
-        });
-        // Re-save in normalized format
+        // Normalize on load — handles UPPERCASE, camelCase, and mixed formats
+        var normalized = parsed.map(function(it,idx){ return _normalizeInvItem(it,idx); })
+                               .filter(function(i){ return i.itemCode||i.description; });
         try{ localStorage.setItem('gtg_stock_inventory', JSON.stringify(normalized)); }catch(e){}
         return normalized;
       }
@@ -1412,6 +1399,26 @@ let stockInventory = (function(){
   return [];
 })();
 function _saveStockLocally(){ try{ localStorage.setItem('gtg_stock_inventory', JSON.stringify(stockInventory)); }catch(e){} }
+function _normalizeInvItem(it, idx){
+  function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v)!=='undefined') return String(v).trim(); } return ''; }
+  return {
+    id:          it.id || idx+1,
+    itemCode:    g(['itemCode','ITEM CODE','item_code']),
+    description: g(['description','ITEM DESCRIPTION','name','Description']),
+    category:    g(['category','CATEGORY','cat','Category']),
+    price:       parseFloat(g(['price','PRICE','Price']))||0,
+    begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
+    endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK']))||0,
+    uom:         g(['uom','UOM','Uom','unit']),
+    supplier:    g(['supplier','SUPPLIER','Supplier'])
+  };
+}
+function _normalizeAndSaveInventory(items){
+  stockInventory = items.map(function(it,idx){ return _normalizeInvItem(it,idx); })
+                        .filter(function(i){ return i.itemCode||i.description; });
+  _saveStockLocally();
+}
+
 let order = [];
 let orderCount = parseInt(localStorage.getItem('greektogo_order_count') || '1');
 let editingId = null;
@@ -1617,28 +1624,12 @@ window.addEventListener('offline', function(){ if(_sheetsOnline) _onDisconnected
 // The POS Menu (ordering screen) is entirely separate and is NEVER touched.
 async function loadInventoryFromSheets(){
   const res = await sheetsCall('getInventory');
-  if(res){
-    // _onReconnected() already called by sheetsCall — just update inventory
-    // Pull Sheets data into Inventory tab (bidirectional sync)
-    if(res.items && res.items.length > 0){
-      stockInventory = res.items.map(function(it,idx){
-        function g(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-        return {
-          id:          idx+1,
-          itemCode:    g(['itemCode','ITEM CODE','item_code']),
-          description: g(['description','ITEM DESCRIPTION','name','Description']),
-          category:    g(['category','CATEGORY','cat','Category']),
-          price:       parseFloat(g(['price','PRICE','Price']))||0,
-          begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
-          endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK']))||0,
-          uom:         g(['uom','UOM','Uom','unit','UNIT']),
-          supplier:    g(['supplier','SUPPLIER','Supplier'])
-        };
-      });
-      _saveStockLocally();
-      showToast('✅ Inventory synced from Google Sheets!','success');
-    }
+  if(res && res.items && res.items.length){
+    _normalizeAndSaveInventory(res.items);
     renderInventory();
+    showToast('✅ Inventory synced from Google Sheets!','success');
+  } else if(res && res.items && res.items.length===0){
+    renderInventory(); // Sheet is empty — show empty state, don't push
   } else {
     if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect(); }
     else { setDBStatus('disconnected','No Sheet — Offline'); }
@@ -1668,38 +1659,24 @@ async function pushInventoryToSheets(){
   await sheetsCall('saveInventory',{items:rows});
 }
 
-// ── Manual pull, ONLY runs when the button is tapped — never automatic ──────
-// This is the one deliberate exception to "Sheets never overwrites local
-// data": the person explicitly chose to bring spreadsheet edits into the
-// app. It only ever affects the Inventory list — the POS Menu is untouched.
+// ── Manual pull from Sheet — only runs when user taps Import button ──────────
 async function importFromSheets(){
   if(!SHEETS_URL){ showToast('No Sheet connected yet.','error'); return; }
-  const ok = confirm('This will REPLACE your current Inventory list with whatever is in Google Sheets right now.\n\nYour POS Menu is not affected.\n\nContinue?');
-  if(!ok) return;
+  if(!confirm('REPLACE your current Inventory with Google Sheets data?\n\nPOS Menu is not affected.\n\nContinue?')) return;
   showToast('⬇ Importing from Sheets…','info');
   const res = await sheetsCall('getInventory');
-  if(res && res.items){
-    stockInventory = res.items.map((it,idx)=>{
-      function g(keys){ for(const k of keys){ const v=it[k]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-      return {
-        id:          idx+1,
-        itemCode:    g(['itemCode','ITEM CODE','item_code']),
-        description: g(['description','ITEM DESCRIPTION','item_description','name','Description']),
-        category:    g(['category','CATEGORY','cat','Category']),
-        price:       parseFloat(g(['price','PRICE','Price']))||0,
-        begBal:      parseInt(g(['begBal','BEG BAL STOCKS','BEG BAL','beg_bal']))||0,
-        endingStock: parseInt(g(['endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK']))||0,
-        uom:         g(['uom','UOM','Uom','unit','UNIT']),
-        supplier:    g(['supplier','SUPPLIER','Supplier'])
-      };
-    });
-    _saveStockLocally();
+  if(res && res.items && res.items.length){
+    _normalizeAndSaveInventory(res.items);
     renderInventory();
-    showToast(`✅ Imported ${stockInventory.length} item(s) from Sheets!`,'success');
+    showToast('✅ Imported '+stockInventory.length+' item(s) from Sheets!','success');
+  } else if(res && res.items){
+    showToast('Sheet is empty — nothing to import.','error');
   } else {
-    showToast('❌ Could not import — check your connection and try again.','error');
+    showToast('❌ Could not connect to Sheets. Try again.','error');
   }
 }
+
+
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
 async function pushSaleToSheets(s){ if(SHEETS_URL) await sheetsCall('logSale',{sale:s}); }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
@@ -2323,16 +2300,15 @@ function renderInventory(){
     return;
   }
   el.innerHTML = items.map(it=>{
-    // Support both camelCase (our format) and UPPERCASE (direct from Sheet headers)
-    function _v(a,b,c){ return a||b||c||''; }
-    var iCode  = _v(it.itemCode,   it['ITEM CODE'],   '');
-    var iDesc  = _v(it.description,it['ITEM DESCRIPTION'],it.name||'');
-    var iCat   = _v(it.category,   it['CATEGORY'],    it.cat||'');
-    var iPrice = parseFloat(it.price||it['PRICE']||0);
-    var iBeg   = parseInt(it.begBal||it['BEG BAL STOCKS']||it['BEG BAL']||0);
-    var iEnd   = parseInt(it.endingStock||it['ENDING STOCKS']||it.stock||0);
-    var iUom   = _v(it.uom,    it['UOM'],      '');
-    var iSupp  = _v(it.supplier,it['SUPPLIER'], '');
+    // Data is always normalized to camelCase by _normalizeInvItem
+    var iCode  = it.itemCode    || '—';
+    var iDesc  = it.description || '—';
+    var iCat   = it.category    || '—';
+    var iPrice = parseFloat(it.price||0);
+    var iBeg   = parseInt(it.begBal||0);
+    var iEnd   = parseInt(it.endingStock||0);
+    var iUom   = it.uom         || '—';
+    var iSupp  = it.supplier    || '—';
     const cls  = iEnd===0?'oos-cell':iEnd<=5?'low-cell':'';
     return `<tr>
       <td>${iCode||'—'}</td>
@@ -2723,21 +2699,8 @@ async function _initialSync(){
   // Step 2: Inventory
   var invRes = await _call(SHEETS_URL,'getInventory',{});
   if(invRes && invRes.items && invRes.items.length){
-    stockInventory = invRes.items.map(function(it,idx){
-      return {
-        id:          idx+1,
-        itemCode:    _g(it,['itemCode','ITEM CODE','item_code']),
-        description: _g(it,['description','ITEM DESCRIPTION','name','Description']),
-        category:    _g(it,['category','CATEGORY','cat','Category']),
-        price:       parseFloat(_g(it,['price','PRICE','Price']))||0,
-        begBal:      parseInt(_g(it,['begBal','BEG BAL STOCKS','BEG BAL']))||0,
-        endingStock: parseInt(_g(it,['endingStock','ENDING STOCKS','ENDING','stock','STOCK']))||0,
-        uom:         _g(it,['uom','UOM','Uom']),
-        supplier:    _g(it,['supplier','SUPPLIER','Supplier'])
-      };
-    });
-    _saveStockLocally(); renderInventory();
-    // Never auto-push back — user controls backup via button
+    _normalizeAndSaveInventory(invRes.items);
+    renderInventory();
   }
 
   // Step 3: POS Menu
