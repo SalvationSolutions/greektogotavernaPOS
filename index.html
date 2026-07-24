@@ -738,6 +738,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
     <button class="nav-btn"             onclick="showTab('reports',this)">📊 Reports</button>
+    <button class="nav-btn"             onclick="showTab('kitchen',this)">🍳 Kitchen</button>
   </nav>
   <div class="header-right">
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
@@ -837,6 +838,8 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
           </div>
         </div>
       </div>
+      <!-- SEND TO KITCHEN -->
+      <button onclick="sendToKitchen()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#E65100;color:#fff;font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:6px;">🍳 Send to Kitchen</button>
       <!-- HOLD & SPLIT -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
         <button onclick="holdOrder()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">⏸ Hold Order</button>
@@ -923,6 +926,40 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
   </div>
 </div>
 
+
+<!-- ══════════ KITCHEN DISPLAY ══════════ -->
+<div id="kitchen-view" class="tab-view" style="flex-direction:column;background:#1a1a2e;min-height:calc(100vh - 64px);padding:16px;gap:14px;overflow-y:auto;">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-family:'Cinzel',serif;font-size:22px;color:#fff;margin:0">🍳 Kitchen Display</h2>
+      <div id="kitchen-last-refresh" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;">Auto-refreshes every 30s</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div id="kitchen-pending-badge" style="background:#E65100;color:#fff;border-radius:20px;padding:4px 14px;font-weight:800;font-size:14px;display:none;"></div>
+      <button onclick="refreshKitchen()" style="padding:8px 14px;border-radius:10px;border:none;background:rgba(255,255,255,.1);color:#fff;font-family:Nunito,sans-serif;font-weight:700;font-size:12px;cursor:pointer;">🔄 Refresh</button>
+      <button onclick="toggleKitchenDone()" id="kitchen-show-done-btn" style="padding:8px 14px;border-radius:10px;border:none;background:rgba(255,255,255,.1);color:#fff;font-family:Nunito,sans-serif;font-weight:700;font-size:12px;cursor:pointer;">Show Done</button>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6)"><span style="width:10px;height:10px;border-radius:50%;background:#4CAF50;display:inline-block"></span>New (&lt;5 min)</span>
+    <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6)"><span style="width:10px;height:10px;border-radius:50%;background:#FF9800;display:inline-block"></span>Waiting (5–10 min)</span>
+    <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.6)"><span style="width:10px;height:10px;border-radius:50%;background:#F44336;display:inline-block"></span>Urgent (&gt;10 min)</span>
+  </div>
+
+  <!-- Order cards grid -->
+  <div id="kitchen-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
+
+  <!-- Empty state -->
+  <div id="kitchen-empty" style="display:none;text-align:center;padding:60px 20px;color:rgba(255,255,255,.3);">
+    <div style="font-size:64px;margin-bottom:12px;">✅</div>
+    <div style="font-size:18px;font-weight:700">All clear!</div>
+    <div style="font-size:13px;margin-top:6px">No pending orders in kitchen.</div>
+  </div>
+</div>
 
 <!-- ══════════ GRAB VIEW ══════════ -->
 <!-- ══════════ POS MENU VIEW ══════════ -->
@@ -3482,8 +3519,179 @@ var _origShowTab = showTab;
 showTab = function(tab, btn){
   _origShowTab.call(this, tab, btn);
   if(tab==='reports') renderReports();
+  if(tab==='kitchen'){ refreshKitchen(); startKitchenAutoRefresh(); startKitchenClock(); }
+  else { stopKitchenAutoRefresh(); stopKitchenClock(); }
 };
 /* ════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════
+   KITCHEN DISPLAY SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+
+var kitchenOrders = (function(){
+  try{ var s=localStorage.getItem('gtg_kitchen_orders'); if(s){ var p=JSON.parse(s); if(Array.isArray(p)) return p; } }catch(e){}
+  return [];
+})();
+var _kitchenShowDone = false;
+var _kitchenTimer    = null;
+
+function _saveKitchenOrders(){ try{ localStorage.setItem('gtg_kitchen_orders', JSON.stringify(kitchenOrders.slice(-200))); }catch(e){} }
+
+/* ── Send to Kitchen ──────────────────────────────────────── */
+function sendToKitchen(){
+  if(!order.length){ showToast('No items in order to send!','error'); return; }
+  var tableEl = document.getElementById('table-num');
+  var custEl  = document.getElementById('cust-name');
+  var notesEl = document.getElementById('order-notes');
+
+  var ko = {
+    id:       Date.now(),
+    orderNum: String(orderCount).padStart(4,'0'),
+    table:    (tableEl&&tableEl.value) ? tableEl.value : 'Walk-in',
+    customer: (custEl&&custEl.value)   ? custEl.value  : '',
+    notes:    (notesEl&&notesEl.value) ? notesEl.value : '',
+    cashier:  (typeof activeCashier!=='undefined') ? activeCashier : '',
+    items:    order.map(function(o){ return {name:o.name, qty:o.qty, cat:o.cat||''}; }),
+    sentAt:   Date.now(),
+    status:   'pending'
+  };
+
+  kitchenOrders.push(ko);
+  _saveKitchenOrders();
+
+  // Push to Google Sheets in background
+  if(SHEETS_URL) sheetsCall('addKitchenOrder',{order:ko});
+
+  showToast('🍳 Order sent to kitchen! Table: '+ko.table,'success');
+  // If kitchen tab is visible, refresh it
+  if(document.getElementById('kitchen-view').classList.contains('active')) renderKitchen();
+}
+
+/* ── Kitchen Display Render ───────────────────────────────── */
+function renderKitchen(){
+  var now      = Date.now();
+  var orders   = kitchenOrders.filter(function(o){
+    return _kitchenShowDone ? true : o.status!=='done';
+  }).sort(function(a,b){ return a.sentAt - b.sentAt; }); // oldest first
+
+  var pending  = kitchenOrders.filter(function(o){ return o.status==='pending'; }).length;
+  var badge    = document.getElementById('kitchen-pending-badge');
+  if(badge){
+    badge.style.display = pending>0 ? 'block' : 'none';
+    badge.textContent   = pending+' Pending';
+  }
+
+  var grid  = document.getElementById('kitchen-grid');
+  var empty = document.getElementById('kitchen-empty');
+  var refresh = document.getElementById('kitchen-last-refresh');
+  if(refresh) refresh.textContent = 'Last refreshed: '+new Date().toLocaleTimeString('en-PH');
+
+  if(!orders.length){
+    if(grid)  grid.innerHTML  = '';
+    if(empty) empty.style.display = 'block';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  if(grid) grid.innerHTML = orders.map(function(ko){
+    var elapsed = Math.floor((now - ko.sentAt)/1000);
+    var mins    = Math.floor(elapsed/60);
+    var secs    = elapsed % 60;
+    var timeStr = mins>0 ? mins+'m '+secs+'s' : secs+'s';
+    var color   = elapsed < 300 ? '#4CAF50' : elapsed < 600 ? '#FF9800' : '#F44336';
+    var isDone  = ko.status === 'done';
+    var bg      = isDone ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.08)';
+    var border  = isDone ? '2px solid rgba(255,255,255,.1)' : '2px solid '+color;
+
+    return '<div style="background:'+bg+';border:'+border+';border-radius:14px;padding:14px;opacity:'+(isDone?'0.5':'1')+'">'
+      // Header
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+      +'<div><div style="font-weight:900;font-size:15px;color:#fff">'+ko.table+'</div>'
+      +(ko.customer?'<div style="font-size:11px;color:rgba(255,255,255,.5)">'+ko.customer+'</div>':'')
+      +'<div style="font-size:10px;color:rgba(255,255,255,.4)">Order #'+ko.orderNum+'</div></div>'
+      +'<div style="text-align:right">'
+      +'<div style="font-size:18px;font-weight:900;color:'+color+'">'+timeStr+'</div>'
+      +'<div style="font-size:9px;color:rgba(255,255,255,.4)">'+(isDone?'DONE':'ELAPSED')+'</div>'
+      +'</div></div>'
+      // Items
+      +'<div style="border-top:1px solid rgba(255,255,255,.1);padding-top:10px;margin-bottom:10px">'
+      +ko.items.map(function(it){
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:#fff">'
+          +'<span>'+it.name+'</span>'
+          +'<span style="font-weight:900;color:'+color+'">x'+it.qty+'</span></div>';
+      }).join('')
+      +'</div>'
+      // Notes
+      +(ko.notes?'<div style="background:rgba(255,200,0,.15);border-radius:8px;padding:6px 10px;font-size:11px;color:#FFD54F;margin-bottom:10px">📝 '+ko.notes+'</div>':'')
+      // Cashier
+      +(ko.cashier?'<div style="font-size:10px;color:rgba(255,255,255,.3);margin-bottom:10px">Sent by: '+ko.cashier+'</div>':'')
+      // Action button
+      +(isDone
+        ? '<div style="text-align:center;font-size:12px;color:rgba(255,255,255,.3)">✅ Completed</div>'
+        : '<button onclick="markKitchenDone('+ko.id+')" style="width:100%;padding:10px;border:none;border-radius:10px;background:'+color+';color:#fff;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;cursor:pointer">✅ Mark Done</button>')
+      +'</div>';
+  }).join('');
+}
+
+function markKitchenDone(id){
+  var ko = kitchenOrders.find(function(o){ return o.id===id; });
+  if(!ko) return;
+  ko.status   = 'done';
+  ko.doneAt   = Date.now();
+  _saveKitchenOrders();
+  // Update Sheets in background
+  if(SHEETS_URL) sheetsCall('updateKitchenOrder',{id:id, status:'done'});
+  renderKitchen();
+  showToast('Order marked as done!','success');
+}
+
+function toggleKitchenDone(){
+  _kitchenShowDone = !_kitchenShowDone;
+  var btn = document.getElementById('kitchen-show-done-btn');
+  if(btn) btn.textContent = _kitchenShowDone ? 'Hide Done' : 'Show Done';
+  renderKitchen();
+}
+
+/* ── Auto-refresh kitchen from Sheets every 30s ────────────── */
+function startKitchenAutoRefresh(){
+  stopKitchenAutoRefresh();
+  _kitchenTimer = setInterval(function(){ refreshKitchen(); }, 30000);
+}
+function stopKitchenAutoRefresh(){ if(_kitchenTimer){ clearInterval(_kitchenTimer); _kitchenTimer=null; } }
+
+async function refreshKitchen(){
+  if(!SHEETS_URL){ renderKitchen(); return; }
+  var res = await sheetsCall('getKitchenOrders');
+  if(res && res.orders && res.orders.length){
+    // Merge Sheet orders with local (Sheet is the source of truth for multi-device)
+    var sheetOrders = res.orders.map(function(o){
+      return {
+        id:       parseInt(o.id)||0,
+        orderNum: String(o.orderNum||''),
+        table:    o.table||'Walk-in',
+        customer: o.customer||'',
+        notes:    o.notes||'',
+        cashier:  o.cashier||'',
+        items:    (function(){ try{ return JSON.parse(o.items||'[]'); }catch(e){ return []; } })(),
+        sentAt:   parseInt(o.sentAt)||Date.now(),
+        status:   o.status||'pending'
+      };
+    });
+    // Only replace with sheet data that is NOT older than 8 hours
+    var cutoff = Date.now() - (8*60*60*1000);
+    kitchenOrders = sheetOrders.filter(function(o){ return o.sentAt > cutoff; });
+    _saveKitchenOrders();
+  }
+  renderKitchen();
+}
+
+/* ── Update timer display every second while kitchen tab open ─ */
+var _kitchenClockTimer = null;
+function startKitchenClock(){ _kitchenClockTimer = setInterval(function(){ if(document.getElementById('kitchen-view').classList.contains('active')) renderKitchen(); }, 10000); }
+function stopKitchenClock(){ if(_kitchenClockTimer){ clearInterval(_kitchenClockTimer); _kitchenClockTimer=null; } }
+
+/* ═══════════════════════════════════════════════════════════ */
 
 </script>
 
