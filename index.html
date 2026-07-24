@@ -1452,7 +1452,11 @@ function _normalizeInvItem(it, idx){
 }
 function _normalizeAndSaveInventory(items){
   stockInventory = items.map(function(it,idx){ return _normalizeInvItem(it,idx); })
-                        .filter(function(i){ return i.itemCode||i.description; });
+                        .filter(function(i){
+                          // Keep item if ANY field has data — don't drop items just because
+                          // itemCode or description is empty
+                          return i.itemCode||i.description||i.category||i.price>0||i.uom||i.supplier;
+                        });
   _saveStockLocally();
 }
 
@@ -1699,13 +1703,14 @@ async function pushInventoryToSheets(){
 // ── Manual pull from Sheet — only runs when user taps Import button ──────────
 async function importFromSheets(){
   if(!SHEETS_URL){ showToast('No Sheet connected yet.','error'); return; }
-  if(!confirm('REPLACE your current Inventory with Google Sheets data?\n\nPOS Menu is not affected.\n\nContinue?')) return;
+  if(!confirm('Import inventory from Google Sheets?\n\nThis will REPLACE your current '+stockInventory.length+' local items with the Sheet data.\n\nPOS Menu items are not affected.\n\nContinue?')) return;
   showToast('⬇ Importing from Sheets…','info');
   const res = await sheetsCall('getInventory');
   if(res && res.items && res.items.length){
     _normalizeAndSaveInventory(res.items);
     renderInventory();
-    showToast('✅ Imported '+stockInventory.length+' item(s) from Sheets!','success');
+    showToast('✅ Imported '+stockInventory.length+' of '+res.items.length+' item(s) from Sheet!','success');
+    if(res.items.length > stockInventory.length){ showToast((res.items.length-stockInventory.length)+' item(s) were skipped (completely empty rows).','warning'); }
   } else if(res && res.items){
     showToast('Sheet is empty — nothing to import.','error');
   } else {
@@ -1779,7 +1784,7 @@ function filterMenu(q){renderMenu(q);}
 function renderMenu(search=''){
   let items=menuItems;
   if(currentCat!=='All') items=items.filter(i=>i.cat===currentCat);
-  if(search) items=items.filter(i=>i.name.toLowerCase().includes(search.toLowerCase()));
+  if(search) items=items.filter(i=>(i.name||'').toLowerCase().includes(search.toLowerCase()));
   const grid=document.getElementById('menu-grid');
   if(!items.length){grid.innerHTML=`<div class="loading-grid"><p>No items found.</p></div>`;return;}
   grid.innerHTML=items.map(it=>`
@@ -1916,7 +1921,7 @@ async function importMenuFromSheets(){
         cat:   g(['cat','category','CATEGORY','Category']),
         price: parseFloat(g(['price','PRICE','Price'])) || 0
       };
-    }).filter(function(i){ return i.name; });
+    }).filter(function(i){ return i.name||i.pid; });
     _saveMenuLocally();
     renderCatTabs(); renderMenu(); renderPosMenu();
     showToast('✅ Imported ' + menuItems.length + ' menu item(s) from Sheet!', 'success');
@@ -2333,7 +2338,7 @@ function renderInventory(){
   const el = document.getElementById('inv-table-body');
   if(!el) return;
   if(!items.length){
-    el.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-soft)">No items found.</td></tr>';
+    el.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-soft)">No items found. Tap ⬇ Import from Sheet to load your inventory.</td></tr>';
     return;
   }
   el.innerHTML = items.map(it=>{
@@ -2747,7 +2752,7 @@ async function _initialSync(){
       return { id:idx+1, pid:_g(it,['pid','PRODUCT ID']), name:_g(it,['name','MENU NAME','NAME']),
         cat:_g(it,['cat','category','CATEGORY']), price:parseFloat(_g(it,['price','PRICE']))||0,
         detail:_g(it,['detail','Detail/Variant']) };
-    }).filter(function(i){ return i.name; });
+    }).filter(function(i){ return i.name||i.pid; });
     if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
   }
 
