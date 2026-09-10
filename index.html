@@ -873,6 +873,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       </div>
       <input class="sheets-url-input" type="text" id="sheets-url-field" readonly aria-label="Hardcoded Google Apps Script URL">
       <div class="sheets-status-row" id="sheets-conn-status"></div>
+      <a href="#" id="sheets-diag-link" target="_blank" rel="noopener" style="display:none;font-size:11.5px;color:var(--blue-mid);text-decoration:underline;margin-top:6px;">Open endpoint directly in a new tab (diagnostic) ↗</a>
     </div>
     <div class="modal-actions">
       <button class="m-cancel" onclick="closeModal('sheets-setup-modal')">Cancel</button>
@@ -3454,6 +3455,8 @@ async function connectSheets() {
   var url = SHEETS_URL_PERMANENT;
   document.getElementById('sheets-url-field').value = url;
   var statusEl = document.getElementById('sheets-conn-status');
+  var diagLink = document.getElementById('sheets-diag-link');
+  if(diagLink) diagLink.style.display='none';
   statusEl.textContent = '⏳ Testing connection…';
   statusEl.style.color = '#C9A84C';
   try {
@@ -3483,10 +3486,12 @@ async function connectSheets() {
     } else {
       statusEl.textContent = '❌ ' + (_lastCallError || 'Apps Script ping failed.');
       statusEl.style.color = '#E05050';
+      if(diagLink){ diagLink.href = url + (url.indexOf('?')>-1?'&':'?') + 'action=ping'; diagLink.style.display='inline-block'; }
     }
   } catch(e) {
     statusEl.textContent = '❌ ' + (e.message || 'Connection failed.');
     statusEl.style.color = '#E05050';
+    if(diagLink){ diagLink.href = url + (url.indexOf('?')>-1?'&':'?') + 'action=ping'; diagLink.style.display='inline-block'; }
   }
 }
 
