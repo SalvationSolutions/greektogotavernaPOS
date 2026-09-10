@@ -2162,6 +2162,133 @@ img, svg, canvas{
 }
 </style>
 
+
+<style id="v102-critical-fixes">
+/* Critical tab visibility fix */
+.tab-view{display:none!important;}
+.tab-view.active{display:flex!important;}
+#pos-view{display:none!important;}
+#pos-view.active{display:grid!important;}
+
+/* Hide redundant POS category chip strip */
+.category-tabs{display:none!important;}
+
+/* Hide any leftover login decorative icon/art below form */
+.login-decor,
+.greek-decor,
+.house-decor,
+.triangle-decor,
+.login-art,
+.login-bottom-art,
+#login-screen svg.login-decor,
+#login-screen .login-footer-art{display:none!important;}
+
+/* Header Exit button */
+.exit-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-height:40px;
+  padding:8px 16px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:22px;
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  font-family:'Nunito',sans-serif;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+}
+.exit-btn:hover{background:#E05050;border-color:#E05050;}
+
+/* Sheets modal close button */
+.modal{position:relative;}
+.sheets-modal-close{
+  position:absolute;
+  top:12px;
+  right:14px;
+  width:34px;
+  height:34px;
+  border:none;
+  border-radius:50%;
+  background:#EEF5FD;
+  color:#0B2545;
+  font-size:24px;
+  line-height:1;
+  cursor:pointer;
+}
+.sheets-modal-close:hover{background:#D6E8FA;}
+
+/* Performance: disable costly animations/transforms */
+*{
+  scroll-behavior:auto!important;
+}
+.menu-item,
+.nav-btn,
+.pay-btn,
+.add-btn,
+.ref-add-btn,
+.login-btn,
+button{
+  transition:none!important;
+}
+.menu-item:hover,
+.pay-btn:hover,
+.ref-add-btn:hover,
+.nav-btn:hover{
+  transform:none!important;
+}
+.modal-overlay{backdrop-filter:none!important;}
+.toast{transition:none!important;}
+
+/* Keep inactive app tabs completely out of flow */
+#inventory-view:not(.active),
+#grab-view:not(.active),
+#reports-view:not(.active),
+#analytics-view:not(.active),
+#cashier-view:not(.active),
+#pos-menu-view:not(.active),
+#kitchen-view:not(.active){
+  display:none!important;
+}
+</style>
+
+<script id="v102-tab-fix">
+(function(){
+  function hardSwitchTab(tabId){
+    var views=document.querySelectorAll('.tab-view');
+    views.forEach(function(v){ v.classList.remove('active'); v.style.display='none'; });
+    var target=document.getElementById(tabId+'-view') || document.getElementById(tabId);
+    if(target){
+      target.classList.add('active');
+      if(target.id==='pos-view') target.style.display='grid';
+      else target.style.display='flex';
+    }
+    document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('[data-tab="'+tabId+'"], .nav-btn[onclick*="'+tabId+'"]').forEach(function(b){ b.classList.add('active'); });
+  }
+
+  var oldShowTab=window.showTab;
+  window.showTab=function(tabId){
+    try{
+      if(typeof oldShowTab==='function') oldShowTab(tabId);
+    }catch(e){}
+    requestAnimationFrame(function(){ hardSwitchTab(tabId); });
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var active=document.querySelector('.tab-view.active');
+    if(active){
+      document.querySelectorAll('.tab-view').forEach(function(v){
+        if(v!==active) v.style.display='none';
+      });
+      active.style.display = active.id==='pos-view' ? 'grid' : 'flex';
+    }
+  });
+})();
+</script>
+
 </head>
 <body>
 
@@ -2191,9 +2318,7 @@ img, svg, canvas{
       <button class="login-btn" onclick="doLogin()">🔒 Login</button>
     </div>
 
-    <div class="approved-login-decoration" aria-hidden="true">
-      
-      <div class="approved-landmark">⌂⌂⌂</div>
+    
     </div>
     <div class="login-footer">GreekToGo POS &middot; BS EST.2014</div>
   </div>
@@ -2210,7 +2335,7 @@ img, svg, canvas{
 </div>
 
 <!-- Sheets Setup Modal -->
-<div class="modal-overlay" id="sheets-setup-modal">
+<div class="modal-overlay" id="sheets-setup-modal"><button type="button" class="sheets-modal-close" onclick="this.closest(\'.modal-overlay\').classList.remove(\'show\')" aria-label="Close">×</button>
   <div class="modal" style="width:460px;max-width:95vw;">
     <h3>🔗 Google Sheets Connection</h3>
     <div class="sheets-setup-body">
@@ -2247,7 +2372,7 @@ img, svg, canvas{
   <div class="header-right">
     <button class="kitchen-bell" id="kitchen-bell" onclick="pingKitchenDisplay()" title="Ping kitchen display" aria-label="Ping kitchen display">🔔<span class="kitchen-bell-badge" id="kitchen-bell-badge">!</span></button>
     <button onclick="openPrinterSettings()" title="Printer Settings" style="background:none;border:none;cursor:pointer;font-size:18px;padding:2px 6px;color:#fff;opacity:.7">🖨️</button>
-    <div id="sync-error-badge" onclick="showSyncErrors()" style="display:none;cursor:pointer;background:#E74C3C;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:2px;">⚠️ <span id="sync-error-count">0</span> Error(s)</div>
+    <div id="sync-error-badge" onclick="showSyncErrors()" style="display:none;cursor:pointer;background:#E74C3C;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:2px;">⚠️ <span id="sync-error-count">0</span> Error(s)<button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button></div>
     <div id="sync-retry-status" style="display:none;color:#F5C16C;font-size:10px;font-weight:800;white-space:nowrap;"></div>
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
     <div class="cashier-badge" id="active-cashier">👤 No Cashier</div>
@@ -2272,7 +2397,6 @@ img, svg, canvas{
     </div>
     <div style="display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--blue-pale);">
       <button id="cat-prev" onclick="scrollCats(-1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❮</button>
-      <div class="category-tabs" id="cat-tabs" style="flex:1;min-width:0;"></div>
       <button id="cat-next" onclick="scrollCats(1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❯</button>
     </div>
     <div class="menu-grid" id="menu-grid">
