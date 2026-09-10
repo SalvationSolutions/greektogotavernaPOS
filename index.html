@@ -1028,11 +1028,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
       <h2 style="font-family:'Cinzel',serif;font-size:21px;color:var(--blue-deep);margin:0">📊 Sales Reports</h2>
-      <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Based on today's completed orders</div>
+      <div id="rpt-subtitle" style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Google Sheets sales log</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="add-btn" style="background:var(--blue-deep)" onclick="refreshSalesFromSheets(false).then(renderReports)">🔄 Refresh</button>
-      <button class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Send EOD to Sheet</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <label style="font-size:11px;font-weight:800;color:var(--blue-deep);">Sales Date
+        <input id="report-date" type="date" onchange="renderReports()" style="margin-left:6px;border:1.5px solid var(--blue-pale);border-radius:9px;padding:8px 10px;font:inherit;color:var(--blue-deep);background:#fff;">
+      </label>
+      <button class="add-btn" style="background:var(--blue-deep)" onclick="refreshSalesFromSheets(false).then(function(){renderReports();checkEODRequirement(true);})">🔄 Refresh</button>
+      <button class="add-btn" id="eod-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Send EOD to Sheet</button>
     </div>
   </div>
 
@@ -2074,16 +2077,39 @@ async function importFromSheets(){
 
 
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
+function _localDateTimeString(d){
+  d=d||new Date();
+  function z(n){return String(n).padStart(2,'0');}
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes())+':'+z(d.getSeconds());
+}
+function _saleItemsForSheet(items){
+  return JSON.stringify((Array.isArray(items)?items:[]).map(function(it){
+    return {qty:Number(it.qty)||0,name:String(it.name||''),price:Number(it.price)||0,cat:String(it.cat||'Other')};
+  }));
+}
 async function pushSaleToSheets(s){
   if(!SHEETS_URL) return false;
-  // Give every sale a cross-device unique key. Backends that support it can safely de-duplicate retries.
   if(!s.transactionId) s.transactionId = POS_DEVICE_ID+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
-  var payload={sale:s};
+  // IMPORTANT: keep this object in the exact Sales Log column order.
+  // Values are primitive strings/numbers only so Apps Script never writes [Ljava.lang.Object;@... into a cell.
+  var cleanSale={
+    orderNum:String(s.orderNum||''),
+    date:String(s.date||s.time||_localDateTimeString()),
+    customer:String(s.customer||'Walk-in'),
+    cashier:String(s.cashier||(googleUser&&googleUser.name)||'—'),
+    method:String(s.method||s.payment||'Other'),
+    items:_saleItemsForSheet(s.items),
+    subtotal:Number(s.subtotal)||0,
+    discount:Number(s.discount)||0,
+    discountLabel:String(s.discountLabel||s.discLabel||'None'),
+    vat:Number(s.vat)||0,
+    total:Number(s.total)||0
+  };
+  var payload={sale:cleanSale,transactionId:s.transactionId,deviceId:POS_DEVICE_ID};
   var res = await sheetsCall('logSale',payload);
   if(!res || !res.ok){
-    // sheetsCall queues network-null failures. Also queue explicit server failures so a sale is never silently lost.
     if(res!==null) _enqueue('logSale',payload);
-    _addSyncError('Sales Log','logSale','Order '+(s.orderNum||'?')+' failed to log in Sheet',payload);
+    _addSyncError('Sales Log','logSale','Order '+(cleanSale.orderNum||'?')+' failed to log in Sheet',payload);
     return false;
   }
   return true;
@@ -2601,7 +2627,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
   const{sub,da,vat,tot}=getTotals();
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
-  const dateStr=new Date().toLocaleString('en-PH');
+  const dateStr=_localDateTimeString(new Date());
   var salePayload={orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
     table:(document.getElementById('table-num')||{}).value||'Walk-in',
     customer:cust,notes:(document.getElementById('order-notes')||{}).value||'',
@@ -2609,7 +2635,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
     signedInUser:(googleUser&&googleUser.name)||'', deviceId:POS_DEVICE_ID,
     payment:method,method:method,
     items:order.map(o=>({qty:o.qty,name:o.name,price:parseFloat(o.price)||0,cat:o.cat||'Other'})),
-    subtotal:sub.toFixed(2),discount:da.toFixed(2),discLabel:da>0?discLabel():'None',vat:'0.00',total:tot.toFixed(2)};
+    subtotal:sub.toFixed(2),discount:da.toFixed(2),discountLabel:da>0?discLabel():'None',vat:'0.00',total:tot.toFixed(2)};
   var saleSynced = await pushSaleToSheets(salePayload);
   if(!saleSynced) showToast('⚠️ Sale saved to retry queue — Google Sheets will sync automatically.','warning');
   document.getElementById('r-date').textContent=dateStr;
@@ -3242,6 +3268,9 @@ async function _initialSync(){
 
   // Step 5: Shared sales history for cross-device reports and analytics
   await refreshSalesFromSheets(true);
+  var rd=document.getElementById('report-date'); if(rd&&!rd.value) rd.value=_dateKey(new Date());
+  renderReports();
+  setTimeout(function(){checkEODRequirement(true);},300);
 
   setDBStatus('connected','Google Sheets ✓');
   _startHeartbeat();
@@ -3887,34 +3916,64 @@ try{ localStorage.removeItem('gtg_sales_log'); }catch(e){}
 function _saveSalesLog(){}
 function _addToSalesLog(sale){ salesLog.push(sale); }
 
+function _saleField(s,names){
+  for(var i=0;i<names.length;i++){
+    var v=s[names[i]];
+    if(v!==undefined&&v!==null&&String(v)!=='') return v;
+  }
+  return '';
+}
+function _parseSaleItems(raw){
+  if(Array.isArray(raw)) return raw;
+  if(raw===undefined||raw===null) return [];
+  var str=String(raw).trim();
+  if(!str || /^\[Ljava\.lang\.Object;@/i.test(str)) return [];
+  try{
+    var parsed=JSON.parse(str);
+    if(Array.isArray(parsed)) return parsed;
+  }catch(e){}
+  // Fallback for readable strings such as "2x Gyro @ 250; 1x Soda @ 60".
+  return str.split(/\s*;\s*/).filter(Boolean).map(function(part){
+    var m=part.match(/^(\d+(?:\.\d+)?)x\s+(.+?)(?:\s+@\s*₱?([\d,.]+))?$/i);
+    return m?{qty:Number(m[1])||1,name:m[2],price:Number(String(m[3]||0).replace(/,/g,''))||0,cat:'Other'}:{qty:1,name:part,price:0,cat:'Other'};
+  });
+}
 function _normaliseSheetSale(s,index){
-  var rawTime=s.time||s.date||'';
-  var when=_analyticsDate(rawTime,null);
-  var items=s.items;
-  if(typeof items==='string'){try{items=JSON.parse(items);}catch(e){items=[];}}
-  if(!Array.isArray(items))items=[];
+  // Accept Apps Script keys, exact Sheet headers, and older POS field names.
+  var rawDate=_saleField(s,['date','Date','DATE','time','Time']);
+  var when=_analyticsDate(rawDate,null);
+  var items=_parseSaleItems(_saleField(s,['items','Items','ITEMS']));
+  var orderNum=String(_saleField(s,['orderNum','Order#','Order #','ORDER#','order','Order'])||'');
   return {
-    id:when?when.getTime():index,
-    orderNum:String(s.orderNum||''),
-    time:rawTime,
-    date:when?when.toLocaleDateString('en-PH'):String(s.date||''),
+    id:when?when.getTime()+index:index,
+    orderNum:orderNum.replace(/^#/,'') ,
+    time:rawDate,
+    dateKey:when?_dateKey(when):String(rawDate).slice(0,10),
+    date:when?when.toLocaleDateString('en-PH'):String(rawDate||''),
     hour:when?when.getHours():0,
-    table:s.table||'Walk-in',customer:s.customer||'Walk-in',notes:s.notes||'',
-    cashier:s.cashier||'—',method:s.payment||s.method||'Other',items:items,
-    subtotal:parseFloat(s.subtotal)||0,discount:parseFloat(s.discount)||0,
-    vat:parseFloat(s.vat)||0,total:parseFloat(s.total)||0
+    table:_saleField(s,['table','Table'])||'Walk-in',
+    customer:_saleField(s,['customer','Customer','CUSTOMER'])||'Walk-in',
+    notes:_saleField(s,['notes','Notes'])||'',
+    cashier:_saleField(s,['cashier','Cashier','CASHIER'])||'—',
+    method:_saleField(s,['method','Method','payment','Payment'])||'Other',
+    items:items,
+    subtotal:Number(_saleField(s,['subtotal','Subtotal','SUBTOTAL']))||0,
+    discount:Number(_saleField(s,['discount','Discount','DISCOUNT']))||0,
+    discountLabel:_saleField(s,['discountLabel','DiscountLabel','DISCOUNTLABEL','discLabel'])||'None',
+    vat:Number(_saleField(s,['vat','VAT','Vat']))||0,
+    total:Number(_saleField(s,['total','Total','TOTAL']))||0
   };
 }
 
 async function refreshSalesFromSheets(silent){
   if(!SHEETS_URL||!_authSession)return false;
-  var res=await sheetsCall('getSales',{limit:1000});
+  var res=await sheetsCall('getSales',{limit:5000});
   if(!res||!res.ok||!Array.isArray(res.items)){
     if(!silent)showToast('Sales could not be refreshed from Google Sheets.','error');
     return false;
   }
-  salesLog=res.items.map(_normaliseSheetSale);
-  if(!silent)showToast('✅ Sales refreshed from Google Sheets!','success');
+  salesLog=res.items.map(_normaliseSheetSale).filter(function(s){return s.orderNum||s.total||s.date;});
+  if(!silent)showToast('✅ '+salesLog.length+' sale(s) refreshed from Google Sheets!','success');
   return true;
 }
 
@@ -3928,36 +3987,13 @@ document.addEventListener('visibilitychange',function(){
 /* ── Upgrade finalizePayment to include table, notes, stock deduct ── */
 var _origFinalizePayment = finalizePayment;
 finalizePayment = async function(method, gcashNum, gcashRef){
+  if(await _blockSaleForMissingEOD()) return;
   var tableEl = document.getElementById('table-num');
   var notesEl = document.getElementById('order-notes');
-  var tableNum = tableEl ? tableEl.value : '';
-  var notes    = notesEl ? notesEl.value : '';
-
-  // Add to local sales log
-  var totals = getTotals();
-  var saleRecord = {
-    id:        Date.now(),
-    orderNum:  String(orderCount).padStart(4,'0'),
-    time:      new Date().toLocaleString('en-PH'),
-    date:      new Date().toLocaleDateString('en-PH'),
-    hour:      new Date().getHours(),
-    table:     tableNum||'Walk-in',
-    customer:  (document.getElementById('cust-name')||{}).value||'Walk-in',
-    notes:     notes,
-    cashier:   typeof activeCashier!=='undefined'?activeCashier:'—',
-    method:    method,
-    items:     order.map(function(o){ return {name:o.name, qty:o.qty, price:o.price, cat:o.cat||''}; }),
-    subtotal:  totals.sub,
-    discount:  totals.da,
-    vat:       0,
-    total:     totals.tot
-  };
-  _addToSalesLog(saleRecord);
-
-  // Call original (handles receipt modal, order count, etc.)
   await _origFinalizePayment.call(this, method, gcashNum, gcashRef);
-
-  // Clear table and notes only after the shared sale has captured them.
+  // Refresh from Sheets after a confirmed sale so every device/report reads the same source of truth.
+  await refreshSalesFromSheets(true);
+  renderReports();
   if(tableEl) tableEl.value='';
   if(notesEl) notesEl.value='';
 };
@@ -4065,84 +4101,51 @@ function _refreshSplit(){
 /* ══════════════════════════════════════════════════════════
    REPORTS
    ══════════════════════════════════════════════════════════ */
-function renderReports(){
-  var today = new Date().toLocaleDateString('en-PH');
-  var todaySales = salesLog.filter(function(s){ return s.date===today; });
-  var totalRev   = todaySales.reduce(function(s,o){ return s+o.total; },0);
-  var totalOrds  = todaySales.length;
-  var totalDisc  = todaySales.reduce(function(s,o){ return s+o.discount; },0);
-
-
-  // Cards
-  document.getElementById('rpt-cards').innerHTML = [
-    {lbl:'Orders Today',   val:totalOrds,             cls:''},
-    {lbl:'Total Revenue',  val:'₱'+totalRev.toFixed(2), cls:''},
-    {lbl:'Total Discount', val:'₱'+totalDisc.toFixed(2),cls:'stat-warn'},
-    
-  ].map(function(c){
-    return '<div class="stat-card '+c.cls+'"><div class="stat-lbl">'+c.lbl+'</div><div class="stat-val">'+c.val+'</div></div>';
-  }).join("");
-
-  // By category
-  var catMap = {};
-  todaySales.forEach(function(s){
-    s.items.forEach(function(it){
-      var cat = it.cat||'Other';
-      if(!catMap[cat]) catMap[cat]={qty:0,rev:0};
-      catMap[cat].qty += it.qty;
-      catMap[cat].rev += parseFloat(it.price)*it.qty;
-    });
-  });
-  var cats = Object.keys(catMap).sort(function(a,b){ return catMap[b].rev-catMap[a].rev; });
-  var maxRev = cats.length ? catMap[cats[0]].rev : 1;
-  document.getElementById('rpt-by-cat').innerHTML = cats.length
-    ? cats.map(function(c){
-        var pct = Math.round((catMap[c].rev/maxRev)*100);
-        return '<div style="margin-bottom:10px">'
-          +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
-          +'<span style="font-weight:700">'+c+'</span>'
-          +'<span style="color:var(--gray-soft)">'+catMap[c].qty+' sold · ₱'+catMap[c].rev.toFixed(2)+'</span></div>'
-          +'<div style="background:var(--blue-ghost);border-radius:6px;height:8px">'
-          +'<div style="background:var(--blue-accent);border-radius:6px;height:8px;width:'+pct+'%"></div></div></div>';
-      }).join("")
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales today yet.</div>';
-
-  // Top items
-  var itemMap = {};
-  todaySales.forEach(function(s){
-    s.items.forEach(function(it){
-      if(!itemMap[it.name]) itemMap[it.name]={qty:0,rev:0};
-      itemMap[it.name].qty += it.qty;
-      itemMap[it.name].rev += parseFloat(it.price)*it.qty;
-    });
-  });
-  var items = Object.keys(itemMap).sort(function(a,b){ return itemMap[b].qty-itemMap[a].qty; }).slice(0,10);
-  document.getElementById('rpt-top-items').innerHTML = items.length
-    ? '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      +'<tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'
-      +items.map(function(n,i){
-        return '<tr style="border-top:1px solid var(--blue-ghost)">'
-          +'<td style="padding:6px 0">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'')+''+n+'</td>'
-          +'<td align="center" style="font-weight:700">'+itemMap[n].qty+'</td>'
-          +'<td align="right" style="color:var(--success)">₱'+itemMap[n].rev.toFixed(2)+'</td></tr>';
-      }).join("")+'</table>'
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales data yet.</div>';
-
-  // Orders table
-  document.getElementById('rpt-orders').innerHTML = todaySales.length
-    ? '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:500px">'
-      +'<tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order</th>'
-      +'<th align="left">Time</th><th align="left">Table</th><th align="left">Cashier</th>'
-      +'<th align="right">Total</th><th align="left">Payment</th></tr>'
-      +todaySales.slice().reverse().map(function(s){
-        return '<tr style="border-bottom:1px solid var(--blue-ghost)">'
-          +'<td style="padding:6px 8px">#'+s.orderNum+'</td>'
-          +'<td>'+s.time+'</td><td>'+(s.table||'—')+'</td><td>'+s.cashier+'</td>'
-          +'<td align="right" style="font-weight:700">₱'+s.total.toFixed(2)+'</td>'
-          +'<td><span style="background:var(--blue-ghost);border-radius:8px;padding:2px 7px;font-size:10px">'+s.method+'</span></td></tr>';
-      }).join("")+'</table>'
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders today.</div>';
+function _dateKey(d){
+  if(!(d instanceof Date)||isNaN(d)) return '';
+  function z(n){return String(n).padStart(2,'0');}
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
 }
+function _reportDateKey(){
+  var el=document.getElementById('report-date');
+  if(el && !el.value) el.value=_dateKey(new Date());
+  return (el&&el.value)||_dateKey(new Date());
+}
+function _money(n){return '₱'+(Number(n)||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _itemsSummary(items){
+  if(!Array.isArray(items)||!items.length) return '—';
+  return items.map(function(it){return (Number(it.qty)||1)+'x '+String(it.name||'Item');}).join(', ');
+}
+function renderReports(){
+  var selected=_reportDateKey();
+  var selectedSales=salesLog.filter(function(s){return s.dateKey===selected;});
+  var totalRev=selectedSales.reduce(function(a,o){return a+(Number(o.total)||0);},0);
+  var totalSub=selectedSales.reduce(function(a,o){return a+(Number(o.subtotal)||0);},0);
+  var totalDisc=selectedSales.reduce(function(a,o){return a+(Number(o.discount)||0);},0);
+  var totalVAT=selectedSales.reduce(function(a,o){return a+(Number(o.vat)||0);},0);
+  var subtitle=document.getElementById('rpt-subtitle');
+  if(subtitle) subtitle.textContent='Showing completed sales for '+selected+' · Google Sheets source';
+
+  document.getElementById('rpt-cards').innerHTML=[
+    {lbl:'Orders',val:selectedSales.length},{lbl:'Subtotal',val:_money(totalSub)},
+    {lbl:'Discount',val:_money(totalDisc)},{lbl:'VAT',val:_money(totalVAT)},
+    {lbl:'Total Revenue',val:_money(totalRev)}
+  ].map(function(c){return '<div class="stat-card"><div class="stat-lbl">'+c.lbl+'</div><div class="stat-val">'+c.val+'</div></div>';}).join('');
+
+  var catMap={};
+  selectedSales.forEach(function(s){(s.items||[]).forEach(function(it){var cat=it.cat||'Other';if(!catMap[cat])catMap[cat]={qty:0,rev:0};catMap[cat].qty+=Number(it.qty)||0;catMap[cat].rev+=(Number(it.price)||0)*(Number(it.qty)||0);});});
+  var cats=Object.keys(catMap).sort(function(a,b){return catMap[b].rev-catMap[a].rev;});
+  var maxRev=cats.length?catMap[cats[0]].rev:1;
+  document.getElementById('rpt-by-cat').innerHTML=cats.length?cats.map(function(c){var pct=Math.round((catMap[c].rev/maxRev)*100);return '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:700">'+_esc(c)+'</span><span style="color:var(--gray-soft)">'+catMap[c].qty+' sold · '+_money(catMap[c].rev)+'</span></div><div style="background:var(--blue-ghost);border-radius:6px;height:8px"><div style="background:var(--blue-accent);border-radius:6px;height:8px;width:'+pct+'%"></div></div></div>';}).join(''):'<div style="color:var(--gray-soft);text-align:center;padding:16px">No item/category data for this date.</div>';
+
+  var itemMap={};selectedSales.forEach(function(s){(s.items||[]).forEach(function(it){var name=it.name||'Item';if(!itemMap[name])itemMap[name]={qty:0,rev:0};itemMap[name].qty+=Number(it.qty)||0;itemMap[name].rev+=(Number(it.price)||0)*(Number(it.qty)||0);});});
+  var top=Object.keys(itemMap).sort(function(a,b){return itemMap[b].qty-itemMap[a].qty;}).slice(0,10);
+  document.getElementById('rpt-top-items').innerHTML=top.length?'<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'+top.map(function(n){return '<tr style="border-top:1px solid var(--blue-ghost)"><td style="padding:6px 0">'+_esc(n)+'</td><td align="center"><b>'+itemMap[n].qty+'</b></td><td align="right">'+_money(itemMap[n].rev)+'</td></tr>';}).join('')+'</table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No item sales data for this date.</div>';
+
+  document.getElementById('rpt-orders').innerHTML=selectedSales.length?'<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:1200px"><thead><tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px">Order#</th><th>Date</th><th>Customer</th><th>Cashier</th><th>Method</th><th>Items</th><th align="right">Subtotal</th><th align="right">Discount</th><th>DiscountLabel</th><th align="right">VAT</th><th align="right">Total</th></tr></thead><tbody>'+selectedSales.slice().reverse().map(function(s){return '<tr style="border-bottom:1px solid var(--blue-ghost)"><td style="padding:7px 8px">#'+_esc(s.orderNum)+'</td><td>'+_esc(s.time||s.date)+'</td><td>'+_esc(s.customer)+'</td><td>'+_esc(s.cashier)+'</td><td>'+_esc(s.method)+'</td><td style="max-width:320px;white-space:normal">'+_esc(_itemsSummary(s.items))+'</td><td align="right">'+_money(s.subtotal)+'</td><td align="right">'+_money(s.discount)+'</td><td>'+_esc(s.discountLabel)+'</td><td align="right">'+_money(s.vat)+'</td><td align="right"><b>'+_money(s.total)+'</b></td></tr>';}).join('')+'<tr style="background:var(--blue-ghost);font-weight:900"><td colspan="6" style="padding:8px;text-align:right">TOTALS</td><td align="right">'+_money(totalSub)+'</td><td align="right">'+_money(totalDisc)+'</td><td></td><td align="right">'+_money(totalVAT)+'</td><td align="right">'+_money(totalRev)+'</td></tr></tbody></table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders for '+selected+'.</div>';
+}
+
 
 /* ══════════════════════════════════════════════════════════
    ANALYTICS — multi-period dashboard using completed POS data
@@ -4309,25 +4312,64 @@ function renderAnalytics(){
 }
 
 /* ── EOD REPORT TO SHEETS ─────────────────────────────────── */
-async function sendEODReport(){
-  var today = new Date().toLocaleDateString('en-PH');
-  var todaySales = salesLog.filter(function(s){ return s.date===today; });
-  if(!todaySales.length){ showToast('No sales today to report.','error'); return; }
-  var totalRev = todaySales.reduce(function(s,o){ return s+o.total; },0);
-  var eod = {
-    date:        today,
-    generatedAt: new Date().toLocaleString('en-PH'),
-    totalOrders: todaySales.length,
-    totalRevenue:totalRev.toFixed(2),
-    totalDiscount:todaySales.reduce(function(s,o){ return s+o.discount; },0).toFixed(2),
-    totalVAT:    '0.00',
-    cashier:     typeof activeCashier!=='undefined'?activeCashier:'—'
-  };
-  showToast('Sending EOD report…','info');
-  var ok = await sheetsCall('logEOD',{report: eod, orders: todaySales});
-  if(ok) showToast('✅ EOD Report saved to Google Sheets!','success');
-  else   showToast('❌ Could not send report. Check connection.','error');
+var _eodState={checked:false,blocked:false,date:'',reason:''};
+async function _hasEODForDate(dateKey){
+  var res=await sheetsCall('getEOD',{date:dateKey});
+  if(res && res.ok){
+    if(res.completed===true||res.exists===true||res.eod===true||res.report) return true;
+    if(Array.isArray(res.items)) return res.items.some(function(x){return String(x.date||x.Date||'').slice(0,10)===dateKey;});
+    return false;
+  }
+  // getEOD is required for reliable cross-device enforcement. Unknown/unsupported action is not treated as completed.
+  return null;
 }
+async function checkEODRequirement(silent){
+  if(!_authSession){_eodState={checked:false,blocked:false,date:'',reason:''};return false;}
+  await refreshSalesFromSheets(true);
+  var today=_dateKey(new Date());
+  var priorDates={};
+  salesLog.forEach(function(s){if(s.dateKey && s.dateKey<today) priorDates[s.dateKey]=true;});
+  var dates=Object.keys(priorDates).sort();
+  if(!dates.length){_eodState={checked:true,blocked:false,date:'',reason:''};return false;}
+  var latest=dates[dates.length-1];
+  var done=await _hasEODForDate(latest);
+  if(done===true){_eodState={checked:true,blocked:false,date:'',reason:''};return false;}
+  _eodState={checked:true,blocked:true,date:latest,reason:done===null?'EOD status cannot be verified from Google Sheets. The Apps Script must support getEOD.':'EOD has not been completed for '+latest+'.'};
+  if(!silent) showToast('⛔ '+_eodState.reason,'error');
+  return true;
+}
+async function _blockSaleForMissingEOD(){
+  var blocked=await checkEODRequirement(true);
+  if(blocked){
+    alert('NEW SALES LOCKED\n\n'+_eodState.reason+'\n\nOpen Reports, select '+_eodState.date+', and complete EOD before entering a new sale.');
+    showTab('reports');
+    var d=document.getElementById('report-date');if(d&&_eodState.date)d.value=_eodState.date;
+    renderReports();
+    return true;
+  }
+  return false;
+}
+async function sendEODReport(){
+  var selected=_reportDateKey();
+  await refreshSalesFromSheets(true);
+  var selectedSales=salesLog.filter(function(s){return s.dateKey===selected;});
+  if(!selectedSales.length){showToast('No sales for '+selected+' to report.','error');return;}
+  var eod={
+    date:selected,generatedAt:_localDateTimeString(new Date()),totalOrders:selectedSales.length,
+    totalRevenue:selectedSales.reduce(function(a,o){return a+(Number(o.total)||0);},0).toFixed(2),
+    totalDiscount:selectedSales.reduce(function(a,o){return a+(Number(o.discount)||0);},0).toFixed(2),
+    totalVAT:selectedSales.reduce(function(a,o){return a+(Number(o.vat)||0);},0).toFixed(2),
+    cashier:typeof activeCashier!=='undefined'&&activeCashier?activeCashier:((googleUser&&googleUser.name)||'—')
+  };
+  showToast('Sending EOD for '+selected+'…','info');
+  var res=await sheetsCall('logEOD',{report:eod,orders:selectedSales});
+  if(res&&res.ok){
+    showToast('✅ EOD '+selected+' saved to Google Sheets!','success');
+    _eodState={checked:true,blocked:false,date:'',reason:''};
+    await checkEODRequirement(true);
+  } else showToast('❌ EOD was not confirmed by Google Sheets.','error');
+}
+
 
 /* showTab is fully defined above — no override needed */
 
