@@ -1028,11 +1028,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
       <h2 style="font-family:'Cinzel',serif;font-size:21px;color:var(--blue-deep);margin:0">📊 Sales Reports</h2>
-      <div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Based on today's completed orders</div>
+      <div id="rpt-subtitle" style="font-size:11px;color:var(--gray-soft);margin-top:2px;">Completed orders from Google Sheets</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+      <label style="font-size:10px;font-weight:800;color:var(--gray-soft);text-transform:uppercase">Sales Date<br><input id="rpt-date" type="date" onchange="renderReports()" style="margin-top:4px;border:1.5px solid var(--blue-pale);border-radius:9px;padding:8px 10px;font:inherit;color:var(--blue-deep);background:#fff"></label>
       <button class="add-btn" style="background:var(--blue-deep)" onclick="refreshSalesFromSheets(false).then(renderReports)">🔄 Refresh</button>
-      <button class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Send EOD to Sheet</button>
+      <button class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Complete EOD for Selected Date</button>
     </div>
   </div>
 
@@ -1053,7 +1054,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
   <!-- Orders Timeline -->
   <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);padding:18px;">
-    <div style="font-weight:800;font-size:14px;color:var(--blue-deep);margin-bottom:12px;">📋 Today's Orders</div>
+    <div style="font-weight:800;font-size:14px;color:var(--blue-deep);margin-bottom:12px;">📋 Orders for Selected Date</div>
     <div id="rpt-orders" style="overflow-x:auto;"></div>
   </div>
 </div>
@@ -1596,7 +1597,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbzCNqyDVBXO5kvLycALHj3QOIQKl4h0euK4w5I23JIs1CvelnV7aGoKpkPNndAVj495GA/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbwuaLcl3BJK6uFr_t7XDGQnndZljo-JkZhu2__QYbM16BJdGo80beSFcnp7O1gNb2LDQw/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -2067,11 +2068,13 @@ async function importFromSheets(){
 
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
 async function pushSaleToSheets(s){
-  if(!SHEETS_URL) return;
+  if(!SHEETS_URL) return false;
   var res = await sheetsCall('logSale',{sale:s});
   if(!res || !res.ok){
     _addSyncError('Sales Log','logSale','Order #'+(s.orderNum||'?')+' failed to log in Sheet',{sale:s});
+    return false;
   }
+  return true;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
 
@@ -2562,12 +2565,14 @@ function clearOrder(){
 }
 
 /* ═══════════════════ PAYMENT ═══════════════════ */
-function processPayment(method){
+async function processPayment(method){
   if(!order.length){showToast('No items in order!','error');return;}
+  if(!(await _eodReadyForNewSale(true)))return;
   finalizePayment(method,'','');
 }
-function openGCash(){
+async function openGCash(){
   if(!order.length){showToast('No items in order!','error');return;}
+  if(!(await _eodReadyForNewSale(true)))return;
   document.getElementById('gcash-disp').textContent=`₱${getTotals().tot.toFixed(2)}`;
   document.getElementById('gcash-num').value=''; document.getElementById('gcash-ref').value='';
   openModal('gcash-modal');
@@ -2587,7 +2592,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
   const dateStr=new Date().toLocaleString('en-PH');
-  pushSaleToSheets({orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
+  await pushSaleToSheets({orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
     table:(document.getElementById('table-num')||{}).value||'Walk-in',
     customer:cust,notes:(document.getElementById('order-notes')||{}).value||'',
     cashier:activeCashier||'—',payment:method,method:method,
@@ -2614,6 +2619,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
 function newOrder(){
   clearOrder();
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
+var _rptDateInit=document.getElementById('rpt-date'); if(_rptDateInit&&!_rptDateInit.value)_rptDateInit.value=_todayKey();
   // Keep the hardcoded Google Sheets connection active between orders.
   if(_sheetsOnline){
     setDBStatus('connected','Google Sheets ✓');
@@ -3863,34 +3869,68 @@ try{ localStorage.removeItem('gtg_sales_log'); }catch(e){}
 function _saveSalesLog(){}
 function _addToSalesLog(sale){ salesLog.push(sale); }
 
+function _saleDateKey(v){
+  if(v instanceof Date && !isNaN(v.getTime())) return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  var str=String(v||'').trim(),m;
+  if((m=str.match(/^(\d{4})-(\d{2})-(\d{2})/))) return m[1]+'-'+m[2]+'-'+m[3];
+  if((m=str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3]+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0');
+  var d=new Date(str); if(!isNaN(d.getTime())) return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return '';
+}
+function _todayKey(){ return _saleDateKey(new Date()); }
+function _prettyDateKey(key){ if(!key)return ''; var p=key.split('-'); return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'}); }
 function _normaliseSheetSale(s,index){
-  var rawTime=s.time||s.date||'';
+  var rawTime=s.date||s.Date||s.time||'';
+  var dateKey=_saleDateKey(rawTime);
   var when=_analyticsDate(rawTime,null);
-  var items=s.items;
+  var items=s.items!==undefined?s.items:s.Items;
   if(typeof items==='string'){try{items=JSON.parse(items);}catch(e){items=[];}}
   if(!Array.isArray(items))items=[];
   return {
     id:when?when.getTime():index,
-    orderNum:String(s.orderNum||''),
-    time:rawTime,
-    date:when?when.toLocaleDateString('en-PH'):String(s.date||''),
-    hour:when?when.getHours():0,
-    table:s.table||'Walk-in',customer:s.customer||'Walk-in',notes:s.notes||'',
-    cashier:s.cashier||'—',method:s.payment||s.method||'Other',items:items,
-    subtotal:parseFloat(s.subtotal)||0,discount:parseFloat(s.discount)||0,
-    vat:parseFloat(s.vat)||0,total:parseFloat(s.total)||0
+    orderNum:String(s.orderNum||s['Order#']||s.Order||''),
+    time:rawTime,dateKey:dateKey,date:dateKey,hour:when?when.getHours():0,
+    table:s.table||'Walk-in',customer:s.customer||s.Customer||'Walk-in',notes:s.notes||'',
+    cashier:s.cashier||s.Cashier||'—',method:s.payment||s.method||s.Method||'Other',items:items,
+    subtotal:parseFloat(s.subtotal!==undefined?s.subtotal:s.Subtotal)||0,
+    discount:parseFloat(s.discount!==undefined?s.discount:s.Discount)||0,
+    discLabel:s.discLabel||s.discountLabel||s.DiscountLabel||'None',
+    vat:parseFloat(s.vat!==undefined?s.vat:s.VAT)||0,
+    total:parseFloat(s.total!==undefined?s.total:s.Total)||0
   };
 }
 
 async function refreshSalesFromSheets(silent){
   if(!SHEETS_URL||!_authSession)return false;
-  var res=await sheetsCall('getSales',{limit:1000});
+  var res=await sheetsCall('getSales',{limit:5000});
   if(!res||!res.ok||!Array.isArray(res.items)){
     if(!silent)showToast('Sales could not be refreshed from Google Sheets.','error');
     return false;
   }
-  salesLog=res.items.map(_normaliseSheetSale);
-  if(!silent)showToast('✅ Sales refreshed from Google Sheets!','success');
+  salesLog=res.items.map(_normaliseSheetSale).filter(function(s){return !!s.dateKey;});
+  if(!silent)showToast('✅ '+salesLog.length+' sale(s) loaded from Google Sheets.','success');
+  return true;
+}
+
+async function _eodReadyForNewSale(showMessage){
+  await refreshSalesFromSheets(true);
+  var today=_todayKey();
+  var priorDates=salesLog.map(function(s){return s.dateKey;}).filter(function(d){return d&&d<today;}).sort();
+  if(!priorDates.length)return true;
+  var latest=priorDates[priorDates.length-1];
+  var res=await sheetsCall('getEOD',{date:latest});
+  if(!res||!res.ok){
+    if(showMessage)showToast('Cannot verify EOD status. Update Apps Script to v8.2 and redeploy.','error');
+    return false;
+  }
+  if(!res.completed){
+    if(showMessage){
+      showToast('⛔ EOD required for '+_prettyDateKey(latest)+' before new sales.','error');
+      var dp=document.getElementById('rpt-date');if(dp)dp.value=latest;
+      showTab('reports');renderReports();
+    }
+    return false;
+  }
   return true;
 }
 
@@ -4042,82 +4082,31 @@ function _refreshSplit(){
    REPORTS
    ══════════════════════════════════════════════════════════ */
 function renderReports(){
-  var today = new Date().toLocaleDateString('en-PH');
-  var todaySales = salesLog.filter(function(s){ return s.date===today; });
-  var totalRev   = todaySales.reduce(function(s,o){ return s+o.total; },0);
-  var totalOrds  = todaySales.length;
-  var totalDisc  = todaySales.reduce(function(s,o){ return s+o.discount; },0);
+  var picker=document.getElementById('rpt-date');
+  if(picker&&!picker.value)picker.value=_todayKey();
+  var selected=picker?picker.value:_todayKey();
+  var daySales=salesLog.filter(function(s){return s.dateKey===selected;});
+  var totalSub=daySales.reduce(function(a,o){return a+o.subtotal;},0);
+  var totalDisc=daySales.reduce(function(a,o){return a+o.discount;},0);
+  var totalVAT=daySales.reduce(function(a,o){return a+o.vat;},0);
+  var totalRev=daySales.reduce(function(a,o){return a+o.total;},0);
+  var sub=document.getElementById('rpt-subtitle');if(sub)sub.textContent=_prettyDateKey(selected)+' · '+daySales.length+' completed order'+(daySales.length===1?'':'s');
+  document.getElementById('rpt-cards').innerHTML=[
+    {lbl:'Orders',val:daySales.length},{lbl:'Subtotal',val:'₱'+totalSub.toFixed(2)},
+    {lbl:'Discount',val:'₱'+totalDisc.toFixed(2)},{lbl:'VAT',val:'₱'+totalVAT.toFixed(2)},
+    {lbl:'Total Revenue',val:'₱'+totalRev.toFixed(2)}
+  ].map(function(c){return '<div class="stat-card"><div class="stat-lbl">'+c.lbl+'</div><div class="stat-val">'+c.val+'</div></div>';}).join('');
 
+  var catMap={};daySales.forEach(function(s){(s.items||[]).forEach(function(it){var c=it.cat||'Other',q=Number(it.qty)||0,p=Number(it.price)||0;if(!catMap[c])catMap[c]={qty:0,rev:0};catMap[c].qty+=q;catMap[c].rev+=p*q;});});
+  var cats=Object.keys(catMap).sort(function(a,b){return catMap[b].rev-catMap[a].rev;});
+  var maxRev=cats.length?catMap[cats[0]].rev:1;
+  document.getElementById('rpt-by-cat').innerHTML=cats.length?cats.map(function(c){var pct=Math.round((catMap[c].rev/maxRev)*100);return '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:700">'+c+'</span><span style="color:var(--gray-soft)">'+catMap[c].qty+' sold · ₱'+catMap[c].rev.toFixed(2)+'</span></div><div style="background:var(--blue-ghost);border-radius:6px;height:8px"><div style="background:var(--blue-accent);border-radius:6px;height:8px;width:'+pct+'%"></div></div></div>';}).join(''):'<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales for this date.</div>';
 
-  // Cards
-  document.getElementById('rpt-cards').innerHTML = [
-    {lbl:'Orders Today',   val:totalOrds,             cls:''},
-    {lbl:'Total Revenue',  val:'₱'+totalRev.toFixed(2), cls:''},
-    {lbl:'Total Discount', val:'₱'+totalDisc.toFixed(2),cls:'stat-warn'},
-    
-  ].map(function(c){
-    return '<div class="stat-card '+c.cls+'"><div class="stat-lbl">'+c.lbl+'</div><div class="stat-val">'+c.val+'</div></div>';
-  }).join("");
+  var itemMap={};daySales.forEach(function(s){(s.items||[]).forEach(function(it){var n=it.name||'Unnamed',q=Number(it.qty)||0,p=Number(it.price)||0;if(!itemMap[n])itemMap[n]={qty:0,rev:0};itemMap[n].qty+=q;itemMap[n].rev+=p*q;});});
+  var names=Object.keys(itemMap).sort(function(a,b){return itemMap[b].qty-itemMap[a].qty;}).slice(0,10);
+  document.getElementById('rpt-top-items').innerHTML=names.length?'<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'+names.map(function(n){return '<tr style="border-top:1px solid var(--blue-ghost)"><td style="padding:6px 0">'+n+'</td><td align="center">'+itemMap[n].qty+'</td><td align="right">₱'+itemMap[n].rev.toFixed(2)+'</td></tr>';}).join('')+'</table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No item sales for this date.</div>';
 
-  // By category
-  var catMap = {};
-  todaySales.forEach(function(s){
-    s.items.forEach(function(it){
-      var cat = it.cat||'Other';
-      if(!catMap[cat]) catMap[cat]={qty:0,rev:0};
-      catMap[cat].qty += it.qty;
-      catMap[cat].rev += parseFloat(it.price)*it.qty;
-    });
-  });
-  var cats = Object.keys(catMap).sort(function(a,b){ return catMap[b].rev-catMap[a].rev; });
-  var maxRev = cats.length ? catMap[cats[0]].rev : 1;
-  document.getElementById('rpt-by-cat').innerHTML = cats.length
-    ? cats.map(function(c){
-        var pct = Math.round((catMap[c].rev/maxRev)*100);
-        return '<div style="margin-bottom:10px">'
-          +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
-          +'<span style="font-weight:700">'+c+'</span>'
-          +'<span style="color:var(--gray-soft)">'+catMap[c].qty+' sold · ₱'+catMap[c].rev.toFixed(2)+'</span></div>'
-          +'<div style="background:var(--blue-ghost);border-radius:6px;height:8px">'
-          +'<div style="background:var(--blue-accent);border-radius:6px;height:8px;width:'+pct+'%"></div></div></div>';
-      }).join("")
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales today yet.</div>';
-
-  // Top items
-  var itemMap = {};
-  todaySales.forEach(function(s){
-    s.items.forEach(function(it){
-      if(!itemMap[it.name]) itemMap[it.name]={qty:0,rev:0};
-      itemMap[it.name].qty += it.qty;
-      itemMap[it.name].rev += parseFloat(it.price)*it.qty;
-    });
-  });
-  var items = Object.keys(itemMap).sort(function(a,b){ return itemMap[b].qty-itemMap[a].qty; }).slice(0,10);
-  document.getElementById('rpt-top-items').innerHTML = items.length
-    ? '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      +'<tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'
-      +items.map(function(n,i){
-        return '<tr style="border-top:1px solid var(--blue-ghost)">'
-          +'<td style="padding:6px 0">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'')+''+n+'</td>'
-          +'<td align="center" style="font-weight:700">'+itemMap[n].qty+'</td>'
-          +'<td align="right" style="color:var(--success)">₱'+itemMap[n].rev.toFixed(2)+'</td></tr>';
-      }).join("")+'</table>'
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No sales data yet.</div>';
-
-  // Orders table
-  document.getElementById('rpt-orders').innerHTML = todaySales.length
-    ? '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:500px">'
-      +'<tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order</th>'
-      +'<th align="left">Time</th><th align="left">Table</th><th align="left">Cashier</th>'
-      +'<th align="right">Total</th><th align="left">Payment</th></tr>'
-      +todaySales.slice().reverse().map(function(s){
-        return '<tr style="border-bottom:1px solid var(--blue-ghost)">'
-          +'<td style="padding:6px 8px">#'+s.orderNum+'</td>'
-          +'<td>'+s.time+'</td><td>'+(s.table||'—')+'</td><td>'+s.cashier+'</td>'
-          +'<td align="right" style="font-weight:700">₱'+s.total.toFixed(2)+'</td>'
-          +'<td><span style="background:var(--blue-ghost);border-radius:8px;padding:2px 7px;font-size:10px">'+s.method+'</span></td></tr>';
-      }).join("")+'</table>'
-    : '<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders today.</div>';
+  document.getElementById('rpt-orders').innerHTML=daySales.length?'<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px"><tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order#</th><th align="left">Date</th><th align="left">Customer</th><th align="left">Cashier</th><th align="left">Method</th><th align="left">Items</th><th align="right">Subtotal</th><th align="right">Discount</th><th align="left">DiscountLabel</th><th align="right">VAT</th><th align="right">Total</th></tr>'+daySales.slice().reverse().map(function(s){var itemTxt=(s.items||[]).map(function(i){return (Number(i.qty)||0)+'x '+(i.name||'');}).join(', ');return '<tr style="border-bottom:1px solid var(--blue-ghost)"><td style="padding:6px 8px">'+s.orderNum+'</td><td>'+_prettyDateKey(s.dateKey)+'</td><td>'+s.customer+'</td><td>'+s.cashier+'</td><td>'+s.method+'</td><td>'+itemTxt+'</td><td align="right">₱'+s.subtotal.toFixed(2)+'</td><td align="right">₱'+s.discount.toFixed(2)+'</td><td>'+s.discLabel+'</td><td align="right">₱'+s.vat.toFixed(2)+'</td><td align="right" style="font-weight:800">₱'+s.total.toFixed(2)+'</td></tr>';}).join('')+'<tr style="font-weight:900;background:var(--blue-ghost)"><td colspan="6" style="padding:8px">TOTAL</td><td align="right">₱'+totalSub.toFixed(2)+'</td><td align="right">₱'+totalDisc.toFixed(2)+'</td><td></td><td align="right">₱'+totalVAT.toFixed(2)+'</td><td align="right">₱'+totalRev.toFixed(2)+'</td></tr></table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders for '+_prettyDateKey(selected)+'.</div>';
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -4286,23 +4275,22 @@ function renderAnalytics(){
 
 /* ── EOD REPORT TO SHEETS ─────────────────────────────────── */
 async function sendEODReport(){
-  var today = new Date().toLocaleDateString('en-PH');
-  var todaySales = salesLog.filter(function(s){ return s.date===today; });
-  if(!todaySales.length){ showToast('No sales today to report.','error'); return; }
-  var totalRev = todaySales.reduce(function(s,o){ return s+o.total; },0);
-  var eod = {
-    date:        today,
-    generatedAt: new Date().toLocaleString('en-PH'),
-    totalOrders: todaySales.length,
-    totalRevenue:totalRev.toFixed(2),
-    totalDiscount:todaySales.reduce(function(s,o){ return s+o.discount; },0).toFixed(2),
-    totalVAT:    '0.00',
-    cashier:     typeof activeCashier!=='undefined'?activeCashier:'—'
-  };
+  await refreshSalesFromSheets(true);
+  var picker=document.getElementById('rpt-date');
+  var selected=(picker&&picker.value)?picker.value:_todayKey();
+  var daySales=salesLog.filter(function(s){return s.dateKey===selected;});
+  if(!daySales.length){showToast('No sales for '+_prettyDateKey(selected)+' to close.','error');return;}
+  var check=await sheetsCall('getEOD',{date:selected});
+  if(check&&check.ok&&check.completed){showToast('✅ EOD already completed for '+_prettyDateKey(selected)+'.','success');return;}
+  var eod={date:selected,generatedAt:new Date().toISOString(),totalOrders:daySales.length,
+    totalRevenue:daySales.reduce(function(a,o){return a+o.total;},0),
+    totalDiscount:daySales.reduce(function(a,o){return a+o.discount;},0),
+    totalVAT:daySales.reduce(function(a,o){return a+o.vat;},0),
+    cashier:typeof activeCashier!=='undefined'?activeCashier:'—'};
   showToast('Sending EOD report…','info');
-  var ok = await sheetsCall('logEOD',{report: eod, orders: todaySales});
-  if(ok) showToast('✅ EOD Report saved to Google Sheets!','success');
-  else   showToast('❌ Could not send report. Check connection.','error');
+  var res=await sheetsCall('logEOD',{report:eod,orders:daySales});
+  if(res&&res.ok){showToast('✅ EOD completed for '+_prettyDateKey(selected)+'.','success');await refreshSalesFromSheets(true);renderReports();}
+  else showToast('❌ EOD failed. Update/redeploy Apps Script v8.2.','error');
 }
 
 /* showTab is fully defined above — no override needed */
