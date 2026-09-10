@@ -2289,6 +2289,53 @@ button{
 })();
 </script>
 
+
+<style id="v103-stability-performance">
+/* Keep the close button on the modal itself and always visible */
+#sheets-setup-modal .modal{position:relative!important;padding-top:26px!important;}
+#sheets-setup-modal .sheets-modal-close{
+  position:absolute!important;
+  top:10px!important;
+  right:10px!important;
+  width:34px!important;
+  height:34px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  z-index:5!important;
+  border:1px solid #D6E8FA!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  color:#0B2545!important;
+  font-size:24px!important;
+  font-weight:700!important;
+  cursor:pointer!important;
+}
+
+/* No POS Menu navigation and no redundant category-chip row */
+.header-nav .nav-btn[onclick*="'pos-menu'"],
+.header-nav .nav-btn[onclick*='"pos-menu"'],
+.category-tabs,
+#cat-prev,
+#cat-next{display:none!important;}
+
+/* Faster UI: avoid costly transform/blur effects */
+.modal-overlay{backdrop-filter:none!important;}
+.menu-item,.nav-btn,.pay-btn,.ref-add-btn,.add-btn,.dt-btn,.qty-btn,.ia{
+  transition:none!important;
+}
+.menu-item:hover,.nav-btn:hover,.pay-btn:hover,.ref-add-btn:hover,.add-btn:hover{
+  transform:none!important;
+}
+.spinner{animation-duration:1.1s!important;}
+
+/* Ensure inactive views never overlap the selected tab */
+.tab-view{display:none!important;}
+.tab-view.active{display:flex!important;}
+#pos-view.active{display:grid!important;}
+#pos-view:not(.active){display:none!important;}
+</style>
+
 </head>
 <body>
 
@@ -2335,8 +2382,9 @@ button{
 </div>
 
 <!-- Sheets Setup Modal -->
-<div class="modal-overlay" id="sheets-setup-modal"><button type="button" class="sheets-modal-close" onclick="this.closest(\'.modal-overlay\').classList.remove(\'show\')" aria-label="Close">×</button>
+<div class="modal-overlay" id="sheets-setup-modal">
   <div class="modal" style="width:460px;max-width:95vw;">
+    <button type="button" class="sheets-modal-close" onclick="closeModal('sheets-setup-modal')" aria-label="Close Google Sheets Connection">×</button>
     <h3>🔗 Google Sheets Connection</h3>
     <div class="sheets-setup-body">
       <div style="background:var(--blue-ghost);border:1.5px solid var(--blue-pale);border-radius:12px;padding:13px 14px;margin-bottom:14px;font-size:12px;line-height:1.55;color:var(--blue-mid);">
@@ -2361,7 +2409,6 @@ button{
   </div>
   <nav class="header-nav">
     <button class="nav-btn active"      onclick="showTab('pos',this)">🧾 POS</button>
-    <button class="nav-btn"             onclick="showTab('pos-menu',this)">🍽️ POS Menu</button>
     <button class="nav-btn"             onclick="showTab('inventory',this)">📦 Inventory</button>
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
@@ -2372,11 +2419,12 @@ button{
   <div class="header-right">
     <button class="kitchen-bell" id="kitchen-bell" onclick="pingKitchenDisplay()" title="Ping kitchen display" aria-label="Ping kitchen display">🔔<span class="kitchen-bell-badge" id="kitchen-bell-badge">!</span></button>
     <button onclick="openPrinterSettings()" title="Printer Settings" style="background:none;border:none;cursor:pointer;font-size:18px;padding:2px 6px;color:#fff;opacity:.7">🖨️</button>
-    <div id="sync-error-badge" onclick="showSyncErrors()" style="display:none;cursor:pointer;background:#E74C3C;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:2px;">⚠️ <span id="sync-error-count">0</span> Error(s)<button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button></div>
+    <div id="sync-error-badge" onclick="showSyncErrors()" style="display:none;cursor:pointer;background:#E74C3C;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;margin-right:2px;">⚠️ <span id="sync-error-count">0</span> Error(s)</div>
     <div id="sync-retry-status" style="display:none;color:#F5C16C;font-size:10px;font-weight:800;white-space:nowrap;"></div>
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
     <div class="cashier-badge" id="active-cashier">👤 No Cashier</div>
     <div class="clock" id="clock">--:--:--</div>
+    <button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button>
     <div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
       <div class="g-user-initials" id="g-user-initials">?</div>
       <span class="g-user-name" id="g-user-display">User</span>
@@ -3267,25 +3315,169 @@ window.addEventListener('resize',function(){
   if(window.innerWidth>900) toggleMobileOrder(false);
 });
 
+
+/* ═══════════════════ FAST CORE DATA LOAD v10.3 ═══════════════════
+   Menu, Inventory and Cashiers load independently and in parallel.
+   This prevents a slow SalesLog request from blocking the POS screen.
+═══════════════════════════════════════════════════════════════════ */
+var _coreLoadPromise = null;
+var _menuLoadPromise = null;
+var _inventoryLoadPromise = null;
+var _cashierLoadPromise = null;
+
+function _mapPosMenuResponse(items){
+  return (items||[]).map(function(it,idx){
+    function gm(keys){
+      for(var k=0;k<keys.length;k++){
+        var v=it[keys[k]];
+        if(v!==undefined && v!==null && String(v).trim()!=='' && String(v)!=='undefined'){
+          return String(v).trim();
+        }
+      }
+      return '';
+    }
+    return {
+      id:idx+1,
+      pid:gm(['pid','PRODUCT ID','product_id']),
+      name:gm(['name','MENU NAME','menu_name','NAME','Item Name']),
+      cat:gm(['cat','category','CATEGORY','Category']),
+      price:parseFloat(gm(['price','PRICE','Price']))||0,
+      detail:gm(['detail','Detail/Variant','DETAIL','variant'])
+    };
+  }).filter(function(i){ return (i.name||'').trim() || (i.pid||'').trim(); });
+}
+
+async function loadPosMenuFromSheetsFast(force){
+  if(_menuLoadPromise && !force) return _menuLoadPromise;
+  _menuLoadPromise=(async function(){
+    var grid=document.getElementById('menu-grid');
+    if(grid && (!menuItems || !menuItems.length)){
+      grid.innerHTML='<div class="loading-grid"><div class="spinner"></div><p>Loading menu…</p></div>';
+    }
+    var res=await sheetsCall('getPosMenu');
+    if(res && Array.isArray(res.items)){
+      var loaded=_mapPosMenuResponse(res.items);
+      menuItems=loaded;
+      renderCatTabs();
+      renderMenu();
+      if(typeof renderPosMenu==='function') renderPosMenu();
+      return loaded.length>0;
+    }
+    if(grid && (!menuItems || !menuItems.length)){
+      grid.innerHTML='<div class="loading-grid"><p style="font-weight:700;color:#E05050">Menu could not be loaded.</p><p style="font-size:11px;margin-top:6px">Check Google Sheets connection and try again.</p></div>';
+    }
+    return false;
+  })();
+  try{return await _menuLoadPromise;}
+  finally{_menuLoadPromise=null;}
+}
+
+async function loadInventoryFromSheetsFast(force){
+  if(_inventoryLoadPromise && !force) return _inventoryLoadPromise;
+  _inventoryLoadPromise=(async function(){
+    var res=await sheetsCall('getInventory');
+    if(res && Array.isArray(res.items)){
+      _normalizeAndSaveInventory(res.items);
+      renderInventory();
+      return true;
+    }
+    renderInventory();
+    return false;
+  })();
+  try{return await _inventoryLoadPromise;}
+  finally{_inventoryLoadPromise=null;}
+}
+
+async function loadCashiersFromSheetsFast(force){
+  if(_cashierLoadPromise && !force) return _cashierLoadPromise;
+  _cashierLoadPromise=(async function(){
+    var res=await sheetsCall('getCashiers');
+    if(res && Array.isArray(res.items)){
+      cashiers=res.items.map(function(it){
+        return {
+          id:parseInt(it.id)||1,
+          name:it.name||'',
+          role:it.role||'Cashier',
+          color:it.color||'av-t',
+          active:it.active===true || it.active==='true'
+        };
+      });
+      renderCashierRoster();
+      renderShiftLog();
+      if(typeof renderLoginStaffGrid==='function') renderLoginStaffGrid();
+      return true;
+    }
+    renderCashierRoster();
+    return false;
+  })();
+  try{return await _cashierLoadPromise;}
+  finally{_cashierLoadPromise=null;}
+}
+
+async function loadCoreDataFast(force){
+  if(_coreLoadPromise && !force) return _coreLoadPromise;
+  _coreLoadPromise=Promise.allSettled([
+    loadPosMenuFromSheetsFast(!!force),
+    loadInventoryFromSheetsFast(!!force),
+    loadCashiersFromSheetsFast(!!force)
+  ]);
+  try{return await _coreLoadPromise;}
+  finally{_coreLoadPromise=null;}
+}
+
 function showTab(tab, btn) {
-  document.querySelectorAll('.tab-view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  const view=document.getElementById(tab+'-view');
+  document.querySelectorAll('.tab-view').forEach(function(v){
+    v.classList.remove('active');
+    v.style.display='none';
+  });
+  document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+
+  var view=document.getElementById(tab+'-view');
   if(!view) return;
+
   view.classList.add('active');
+  view.style.display=(tab==='pos')?'grid':'flex';
+
   if(btn){
     btn.classList.add('active');
-    if(btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+    if(btn.scrollIntoView) btn.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'});
   }
-  if(tab==='pos')       { if(window.innerWidth<=900) toggleMobileOrder(false); renderCatTabs(); renderMenu(); }
-  if(tab==='inventory')   renderInventory();
-  if(tab==='pos-menu')    renderPosMenu();
-  if(tab==='grab')      { renderDeliveryStats('grab'); renderDeliveryTable('grab'); setNow('grab-dt'); }
-  if(tab==='cashier')   { renderCashierRoster(); renderShiftLog(); }
-  if(tab==='reports')     refreshSalesFromSheets(true).then(renderReports);
-  if(tab==='analytics')   refreshSalesFromSheets(true).then(renderAnalytics);
-  if(tab==='kitchen')   { refreshKitchen(); startKitchenAutoRefresh(); startKitchenClock(); }
-  else                  { stopKitchenAutoRefresh(); stopKitchenClock(); }
+
+  if(tab==='pos'){
+    if(window.innerWidth<=900) toggleMobileOrder(false);
+    renderCatTabs();
+    if(menuItems && menuItems.length) renderMenu();
+    else loadPosMenuFromSheetsFast(false);
+  }
+
+  if(tab==='inventory'){
+    renderInventory();
+    if(!stockInventory || !stockInventory.length) loadInventoryFromSheetsFast(false);
+  }
+
+  if(tab==='grab'){
+    renderDeliveryStats('grab');
+    renderDeliveryTable('grab');
+    setNow('grab-dt');
+  }
+
+  if(tab==='cashier'){
+    renderCashierRoster();
+    renderShiftLog();
+    if(!cashiers || !cashiers.length) loadCashiersFromSheetsFast(false);
+  }
+
+  if(tab==='reports') refreshSalesFromSheets(true).then(renderReports);
+  if(tab==='analytics') refreshSalesFromSheets(true).then(renderAnalytics);
+
+  if(tab==='kitchen'){
+    refreshKitchen();
+    startKitchenAutoRefresh();
+    startKitchenClock();
+  }else{
+    stopKitchenAutoRefresh();
+    stopKitchenClock();
+  }
 }
 
 /* ═══════════════════ SHEETS CONNECTION ENGINE ═══════════════════
@@ -4830,7 +5022,8 @@ function onSignedIn() {
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
   if(SHEETS_URL){
-    setTimeout(function(){ _initialSync(); }, 700);
+    loadCoreDataFast(false);           // menu/inventory/cashiers immediately and in parallel
+    setTimeout(function(){ _initialSync(); }, 50); // sales/history in background
   } else {
     setDBStatus('disconnected','No Sheet — Offline');
   }
@@ -4840,75 +5033,45 @@ function onSignedIn() {
 /* ── Single batched sync after login — runs ONCE per session ─────────────── */
 var _syncDone = false;
 async function _initialSync(){
-  if(_syncDone) return; _syncDone = true;
+  if(_syncDone) return;
+  _syncDone=true;
 
+  setDBStatus('loading','Connecting…');
 
+  // Core operational data should never wait for SalesLog.
+  // POS Menu, Inventory and Cashiers load in parallel immediately.
+  var corePromise=loadCoreDataFast(false);
 
-  setDBStatus('loading','Checking SalesLog…');
-  // Verify the authenticated database connection instead of relying on public ping.
-  var health = await _call(SHEETS_URL,'salesStatus',{});
+  // Verify connection separately.
+  var healthPromise=_call(SHEETS_URL,'salesStatus',{});
+
+  var health=await healthPromise;
   if(!health || !health.ok){
+    // Keep any successfully loaded menu/inventory/cashier data usable.
     _syncDone=false;
     _sheetsOnline=false;
-    setDBStatus('disconnected','SalesLog connection failed');
-    showToast('⚠️ SalesLog connection failed: '+((health&&(health.message||health.error))||_lastCallError||'Unknown error'),'warning');
+    setDBStatus('disconnected','Google Sheets connection issue');
+    await corePromise;
     return;
   }
 
-  // Connected — mark online and fetch all data
-  _sheetsOnline = true;
-  setDBStatus('loading','Syncing…');
-  _syncErrors = []; _saveSyncErrors(); _updateSyncBadge(); // Clear old errors on successful reconnect
-  showToast('✅ Connected to Google Sheets. Loading data…','success');
-
-  function _g(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
-
-  // Step 2: Inventory
-  var invRes = await _call(SHEETS_URL,'getInventory',{});
-  if(invRes && invRes.items && invRes.items.length){
-    _normalizeAndSaveInventory(invRes.items);
-    renderInventory();
-    showToast('✅ Inventory loaded: '+stockInventory.length+' items','success');
-  }
-
-  // Step 3: POS Menu
-  var menuRes = await _call(SHEETS_URL,'getPosMenu',{});
-  if(menuRes && menuRes.items && menuRes.items.length){
-    var loaded = menuRes.items.map(function(it,idx){
-      function gm(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v)!=='undefined') return String(v).trim(); } return ''; }
-      return { id:idx+1,
-        pid:    gm(['pid','PRODUCT ID','product_id']),
-        name:   gm(['name','MENU NAME','menu_name','NAME','Item Name']),
-        cat:    gm(['cat','category','CATEGORY','Category']),
-        price:  parseFloat(gm(['price','PRICE','Price']))||0,
-        detail: gm(['detail','Detail/Variant','DETAIL','variant'])
-      };
-    }).filter(function(i){ return (i.name||'').trim()||(i.pid||'').trim(); });
-    if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
-  }
-
-  // Step 4: Cashiers
-  var cashRes = await _call(SHEETS_URL,'getCashiers',{});
-  if(cashRes && cashRes.items && cashRes.items.length){
-    cashiers = cashRes.items.map(function(it){
-      return { id:parseInt(it.id)||1, name:it.name||'', role:it.role||'Cashier',
-        color:it.color||'av-t', active:it.active===true||it.active==='true' };
-    });
-    renderCashierRoster();
-  }
-
-  // Step 5: Shared sales history for cross-device reports and analytics
-  var salesOK = await refreshSalesFromSheets(true);
-  if(!salesOK){
-    _syncDone=false;
-    setDBStatus('disconnected','SalesLog sync failed');
-    showToast('⚠️ Connected, but SalesLog could not be loaded. '+(_lastCallError||''),'warning');
-    return;
-  }
-
+  _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
+  _syncErrors=[];
+  _saveSyncErrors();
+  _updateSyncBadge();
+
+  await corePromise;
+
+  // Reports/analytics are non-critical for taking orders, so load last.
+  refreshSalesFromSheets(true).then(function(ok){
+    if(ok){
+      if(typeof renderReports==='function') renderReports();
+      if(typeof renderAnalytics==='function') renderAnalytics();
+    }
+  }).catch(function(){});
+
   _startHeartbeat();
-  showToast('✅ Google Sheets connected — SalesLog synced!','success');
 }
 
 function continueOffline() {
