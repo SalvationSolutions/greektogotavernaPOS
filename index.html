@@ -3407,6 +3407,39 @@ function doLogout() {
   _syncDone = false;  // allow re-sync on next login
   if(_authSession) _call(SHEETS_URL,'logout',{});
   _clearSecureSession();
+  // Fully sign out cashier/staff state as well.
+  activeCashier = '';
+  selectedCashierId = null;
+  cPinEntry = '';
+  _loginPinEntry = '';
+  _loginPinTarget = null;
+
+  // Clear any legacy/stale browser login state.
+  try{
+    localStorage.removeItem('gtg_user');
+    localStorage.removeItem('gtg_auto_login');
+    localStorage.removeItem('gtg_google_user');
+    localStorage.removeItem('activeCashier');
+    sessionStorage.removeItem('activeCashier');
+    sessionStorage.removeItem('gtg_user');
+  }catch(e){}
+
+  // Reset cashier display and PIN UI if present.
+  var ac = document.getElementById('active-cashier');
+  if(ac) ac.innerHTML = '👤 No Cashier';
+  var pinDisplay = document.getElementById('c-pin-display');
+  if(pinDisplay) pinDisplay.textContent = '';
+  var loginPass = document.getElementById('login-pass');
+  if(loginPass) loginPass.value = '';
+  var loginName = document.getElementById('login-name');
+  if(loginName) loginName.value = '';
+
+  // Mark all locally-rendered cashier cards signed out for this browser session.
+  if(Array.isArray(cashiers)){
+    cashiers.forEach(function(c){ c.active = false; });
+    if(typeof renderCashierRoster==='function') renderCashierRoster();
+  }
+
   // Remove obsolete insecure sessions from older versions
   localStorage.removeItem('gtg_user');
   localStorage.removeItem('gtg_auto_login');
@@ -3438,6 +3471,39 @@ function doGoogleSignOut() {
   }
   if(_authSession) _call(SHEETS_URL,'logout',{});
   _clearSecureSession();
+  // Fully sign out cashier/staff state as well.
+  activeCashier = '';
+  selectedCashierId = null;
+  cPinEntry = '';
+  _loginPinEntry = '';
+  _loginPinTarget = null;
+
+  // Clear any legacy/stale browser login state.
+  try{
+    localStorage.removeItem('gtg_user');
+    localStorage.removeItem('gtg_auto_login');
+    localStorage.removeItem('gtg_google_user');
+    localStorage.removeItem('activeCashier');
+    sessionStorage.removeItem('activeCashier');
+    sessionStorage.removeItem('gtg_user');
+  }catch(e){}
+
+  // Reset cashier display and PIN UI if present.
+  var ac = document.getElementById('active-cashier');
+  if(ac) ac.innerHTML = '👤 No Cashier';
+  var pinDisplay = document.getElementById('c-pin-display');
+  if(pinDisplay) pinDisplay.textContent = '';
+  var loginPass = document.getElementById('login-pass');
+  if(loginPass) loginPass.value = '';
+  var loginName = document.getElementById('login-name');
+  if(loginName) loginName.value = '';
+
+  // Mark all locally-rendered cashier cards signed out for this browser session.
+  if(Array.isArray(cashiers)){
+    cashiers.forEach(function(c){ c.active = false; });
+    if(typeof renderCashierRoster==='function') renderCashierRoster();
+  }
+
   googleUser = null;
   localStorage.removeItem('gtg_google_user');
   localStorage.removeItem('gtg_auto_login');
