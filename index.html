@@ -1717,6 +1717,14 @@ function _normalizeAndSaveInventory(items){
 
 let order = [];
 let orderCount = parseInt(localStorage.getItem('greektogo_order_count') || '1');
+// Stable per-browser device ID. Used only to make sale transaction IDs unique across tablets/phones.
+let POS_DEVICE_ID = (function(){
+  try{
+    var id=localStorage.getItem('gtg_device_id');
+    if(!id){ id='D'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase(); localStorage.setItem('gtg_device_id',id); }
+    return id;
+  }catch(e){ return 'D'+Math.random().toString(36).slice(2,8).toUpperCase(); }
+})();
 let editingId = null;
 let shiftLog = [];
 let activeCashier = null;
@@ -2067,11 +2075,18 @@ async function importFromSheets(){
 
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
 async function pushSaleToSheets(s){
-  if(!SHEETS_URL) return;
-  var res = await sheetsCall('logSale',{sale:s});
+  if(!SHEETS_URL) return false;
+  // Give every sale a cross-device unique key. Backends that support it can safely de-duplicate retries.
+  if(!s.transactionId) s.transactionId = POS_DEVICE_ID+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
+  var payload={sale:s};
+  var res = await sheetsCall('logSale',payload);
   if(!res || !res.ok){
-    _addSyncError('Sales Log','logSale','Order #'+(s.orderNum||'?')+' failed to log in Sheet',{sale:s});
+    // sheetsCall queues network-null failures. Also queue explicit server failures so a sale is never silently lost.
+    if(res!==null) _enqueue('logSale',payload);
+    _addSyncError('Sales Log','logSale','Order '+(s.orderNum||'?')+' failed to log in Sheet',payload);
+    return false;
   }
+  return true;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
 
@@ -2587,12 +2602,16 @@ async function finalizePayment(method,gcashNum,gcashRef){
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
   const dateStr=new Date().toLocaleString('en-PH');
-  pushSaleToSheets({orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
+  var salePayload={orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
     table:(document.getElementById('table-num')||{}).value||'Walk-in',
     customer:cust,notes:(document.getElementById('order-notes')||{}).value||'',
-    cashier:activeCashier||'—',payment:method,method:method,
+    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+    signedInUser:(googleUser&&googleUser.name)||'', deviceId:POS_DEVICE_ID,
+    payment:method,method:method,
     items:order.map(o=>({qty:o.qty,name:o.name,price:parseFloat(o.price)||0,cat:o.cat||'Other'})),
-    subtotal:sub.toFixed(2),discount:da.toFixed(2),discLabel:da>0?discLabel():'None',vat:'0.00',total:tot.toFixed(2)});
+    subtotal:sub.toFixed(2),discount:da.toFixed(2),discLabel:da>0?discLabel():'None',vat:'0.00',total:tot.toFixed(2)};
+  var saleSynced = await pushSaleToSheets(salePayload);
+  if(!saleSynced) showToast('⚠️ Sale saved to retry queue — Google Sheets will sync automatically.','warning');
   document.getElementById('r-date').textContent=dateStr;
   document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(parseFloat(o.price)*o.qty).toFixed(2)}</span></div>`).join("");
   document.getElementById('r-sub').textContent=`₱${sub.toFixed(2)}`;
@@ -2639,7 +2658,7 @@ function recalcGrabSummary(){
   document.getElementById('grab-s-rate').textContent=rate;
 }
 
-function logDeliveryOrder(platform){
+async function logDeliveryOrder(platform){
   const pre='grab';
   const oid=document.getElementById(`${pre}-oid`).value.trim();
   const cust=document.getElementById(`${pre}-cust`).value.trim();
@@ -2656,7 +2675,7 @@ function logDeliveryOrder(platform){
   const entry={id:Date.now(),oid,cust:cust||'Unknown',amt,items,dt,status,rate,comm,net,logged:new Date().toLocaleString('en-PH')};
 
   // ── Push to Google Sheets SalesLog ──────────────────
-  pushSaleToSheets({
+  await pushSaleToSheets({
     orderNum: oid,
     date: dateStr,
     customer: cust||'Unknown',
@@ -3138,6 +3157,12 @@ function showSheetsSetupOnLogin() {
 
 function onSignedIn() {
   document.getElementById('login-screen').style.display = 'none';
+  // The authenticated POS user is also the default cashier on every device.
+  if(googleUser && googleUser.name){
+    activeCashier=googleUser.name;
+    var ac=document.getElementById('active-cashier');
+    if(ac) ac.textContent='👤 '+googleUser.name.split(' ')[0];
+  }
   var chip = document.getElementById('g-user-chip');
   chip.style.display = 'flex';
   var initials = googleUser.name.split(' ').map(function(w){return w[0];}).join("").slice(0,2).toUpperCase();
@@ -3432,22 +3457,21 @@ async function loginPinSubmit() {
     setTimeout(()=>{ if(dots) dots.querySelectorAll('.pin-circle').forEach(d=>d.classList.remove('p-error')); }, 400);
     return;
   }
-  msgEl.textContent = '✅ Access granted!';
-  msgEl.className = 'c-pin-msg ok';
+  // Valid PIN: go straight into the POS with no extra verification/approval screen.
+  msgEl.textContent = '';
+  msgEl.className = 'c-pin-msg';
   _saveSecureSession(result);
   const c = result.user;
-  setTimeout(()=>{
-    const active = document.getElementById('active-cashier');
-    if (active) active.innerHTML = '👤 ' + c.name;
-    var _lb = document.getElementById('logout-btn');
-    if (_lb) _lb.style.display = 'inline-flex';
-    googleUser = {id:c.id,name:c.name,role:c.role,color:c.color||'av-t'};
-    const _entry = { name:c.name, type:'IN', shift: document.getElementById('c-shift-sel')?document.getElementById('c-shift-sel').value:'Shift', color:c.color||'av-b', time:new Date().toLocaleString('en-PH') };
-    if(typeof shiftLog!=='undefined'){ shiftLog.unshift(_entry); if(shiftLog.length>30) shiftLog.length=30; }
-    if(typeof renderShiftLog==='function') renderShiftLog();
-    if(typeof pushShiftToSheets==='function') pushShiftToSheets(_entry);
-    onSignedIn();
-  }, 400);
+  const active = document.getElementById('active-cashier');
+  if (active) active.innerHTML = '👤 ' + c.name;
+  var _lb = document.getElementById('logout-btn');
+  if (_lb) _lb.style.display = 'inline-flex';
+  googleUser = {id:c.id,name:c.name,role:c.role,color:c.color||'av-t'};
+  const _entry = { name:c.name, type:'IN', shift: document.getElementById('c-shift-sel')?document.getElementById('c-shift-sel').value:'Shift', color:c.color||'av-b', time:new Date().toLocaleString('en-PH') };
+  if(typeof shiftLog!=='undefined'){ shiftLog.unshift(_entry); if(shiftLog.length>30) shiftLog.length=30; }
+  if(typeof renderShiftLog==='function') renderShiftLog();
+  if(typeof pushShiftToSheets==='function') pushShiftToSheets(_entry);
+  onSignedIn();
 }
 
 function loginPinBack() {
@@ -3497,9 +3521,9 @@ async function doLogin(){
     return;
   }
   var btn=document.querySelector('.login-btn');
-  if(btn){btn.disabled=true;btn.textContent='Verifying…';}
+  if(btn){btn.disabled=true;}
   var result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
-  if(btn){btn.disabled=false;btn.textContent='🏛 Enter POS';}
+  if(btn){btn.disabled=false;}
   if(!result||!result.ok){
     if(passEl)passEl.value='';
     if(errEl) errEl.textContent = result&&result.error==='TOO_MANY_ATTEMPTS'
