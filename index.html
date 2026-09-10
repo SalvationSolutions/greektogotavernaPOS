@@ -3292,6 +3292,7 @@ function showToast(msg,type='success'){
 
 /* ═══════════════════ LOGIN SYSTEM ═══════════════════ */
 let googleUser = null;
+var _loginBusy=false;
 
 // doLogin defined below in the credentials block
 
@@ -3659,37 +3660,85 @@ document.getElementById('order-num').textContent=`Order #${String(orderCount).pa
 <script>
 /* ══ LOGIN — verified by Google Apps Script; no credentials in this file ══ */
 async function doLogin(){
+  if(_loginBusy) return;
+
   var userEl = document.getElementById('login-name');
   var passEl = document.getElementById('login-pass');
   var errEl  = document.getElementById('login-err');
   var username = (userEl ? userEl.value : '').trim();
   var pin = (passEl ? passEl.value : '').trim();
-  if(errEl) errEl.textContent = '';
+
+  if(errEl) errEl.textContent='';
 
   if(!username || !pin){
-    if(errEl) errEl.textContent = 'Please enter your name and PIN.';
+    if(errEl) errEl.textContent='Please enter your name and PIN.';
     return;
   }
+
+  _loginBusy=true;
   var btn=document.querySelector('.login-btn');
-  if(btn){btn.disabled=true;btn.textContent='Verifying…';}
-  var result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
-  if(btn){btn.disabled=false;btn.textContent='🏛 Enter POS';}
-  if(!result||!result.ok){
-    if(passEl)passEl.value='';
-    if(errEl) errEl.textContent = result&&result.error==='TOO_MANY_ATTEMPTS'
-      ? 'Too many attempts. Try again in 15 minutes.' : 'Invalid name or PIN.';
-    var box = document.querySelector('.login-box');
-    if(box){ box.style.animation='none'; void box.offsetWidth; box.style.animation='loginShake .35s ease'; }
-    return;
+  if(btn) btn.disabled=true;
+
+  try{
+    var result=null;
+
+    // First attempt.
+    result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
+
+    // One safe retry only for transport-level failure.
+    // Do not retry when the backend explicitly rejected the credentials.
+    if(!result){
+      await new Promise(function(resolve){ setTimeout(resolve,900); });
+      result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
+    }
+
+    if(!result){
+      if(errEl) errEl.textContent='Connection problem while signing in. Please try again.';
+      return;
+    }
+
+    if(result.ok!==true){
+      var code=String(result.error||'').toUpperCase();
+
+      if(code==='INVALID_CREDENTIALS' || code==='BAD_LOGIN' || code==='INVALID_LOGIN' || code==='INVALID_PIN'){
+        if(passEl) passEl.value='';
+        if(errEl) errEl.textContent='Invalid name or PIN.';
+      }else if(code==='TOO_MANY_ATTEMPTS'){
+        if(errEl) errEl.textContent='Too many attempts. Please try again later.';
+      }else if(code==='SERVER_ERROR'){
+        if(errEl) errEl.textContent='Server error while signing in. Please try again.';
+      }else{
+        if(errEl) errEl.textContent='Sign-in failed: '+(result.message||result.error||'Unknown error');
+      }
+      return;
+    }
+
+    if(!result.user || !result.user.name || !result.sessionToken){
+      if(errEl) errEl.textContent='Sign-in response was incomplete. Please try again.';
+      return;
+    }
+
+    // Success: save the valid session and enter POS immediately.
+    _saveSecureSession(result);
+    googleUser=result.user;
+    activeCashier=result.user.name;
+
+    var active=document.getElementById('active-cashier');
+    if(active) active.textContent='👤 '+result.user.name;
+
+    var lb=document.getElementById('logout-btn');
+    if(lb) lb.style.display='inline-flex';
+
+    if(passEl) passEl.value='';
+
+    onSignedIn();
+
+  }catch(e){
+    if(errEl) errEl.textContent='Connection problem while signing in. Please try again.';
+  }finally{
+    _loginBusy=false;
+    if(btn) btn.disabled=false;
   }
-  _saveSecureSession(result);
-  googleUser=result.user;
-  var active = document.getElementById('active-cashier');
-  if(active) active.textContent = '👤 '+result.user.name;
-  var lb = document.getElementById('logout-btn');
-  if(lb) lb.style.display = 'inline-flex';
-  if(passEl)passEl.value='';
-  onSignedIn();
 }
 
 /* ═══════════════════ BLUETOOTH PRINTER ═══════════════════ */
