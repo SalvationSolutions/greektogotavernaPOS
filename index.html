@@ -5061,5 +5061,643 @@ function printKitchenTicket(kitchenOrder){
 /* ═══════════════════════════════════════════════════════════ */
 
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     APPS SCRIPT BACKEND — bundled here for reference / redeploy only.
+     This block is inert (type="text/plain") and never runs in the browser.
+     To use it: open script.google.com on the bound Google Sheet, replace
+     Code.gs with everything inside this block, then Deploy > Manage
+     deployments > Edit > New version > Deploy.
+     File: G2G_BACKEND_v8_4_SALESLOG_CAPTURE.gs
+     ══════════════════════════════════════════════════════════════════ -->
+<script type="text/plain" id="g2g-backend-source">
+// GREEK TO GO TAVERNA POS — Secure Google Apps Script backend v8.4 SALESLOG-CAPTURE
+// Deploy as: Execute as Me · Who has access: Anyone
+// Security is enforced here for every protected action.
+
+// Hardened init: never let a spreadsheet-binding problem take down doGet/doPost
+// entirely (that's what makes ping itself hang/fail for every device).
+// If this script is bound to a Sheet (Extensions > Apps Script), getActiveSpreadsheet()
+// works. If it's a standalone script project instead, that returns null on web
+// requests — set SPREADSHEET_ID below (or in Script Properties) as a fallback.
+var SPREADSHEET_ID = ''; // optional fallback: paste your Sheet ID here if needed
+var SS = null;
+function getSS_(){
+  if (SS) return SS;
+  try { SS = SpreadsheetApp.getActiveSpreadsheet(); } catch(e) { SS = null; }
+  if (!SS) {
+    try {
+      var id = SPREADSHEET_ID || PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+      if (id) SS = SpreadsheetApp.openById(id);
+    } catch(e2) { SS = null; }
+  }
+  return SS;
+}
+try { SS = SpreadsheetApp.getActiveSpreadsheet(); } catch(e) { SS = null; } // best-effort at load; getSS_() retries per-request
+var SESSION_TTL_SECONDS = 21600; // 6 hours
+var LOGIN_LOCK_SECONDS = 900;    // 15 minutes
+var LOGIN_MAX_FAILURES = 5;
+var PIN_PREFIX = 'v1$';
+
+var CASHIER_FIELDS = [
+  {key:'id',cols:['id','ID','Id']},
+  {key:'name',cols:['name','NAME','Name','Cashier']},
+  {key:'role',cols:['role','ROLE','Role']},
+  {key:'pin',cols:['pin','PIN','Pin']},
+  {key:'color',cols:['color','COLOR','Color']},
+  {key:'active',cols:['active','ACTIVE','Active']}
+];
+var INV_FIELDS = [
+  {key:'itemCode',cols:['ITEM CODE','itemCode','item_code','Item Code','ItemCode','pid','PID','id','ID']},
+  {key:'description',cols:['ITEM DESCRIPTION','description','name','NAME','Item Name','Description']},
+  {key:'category',cols:['CATEGORY','category','cat','Category']},
+  {key:'price',cols:['PRICE','price','Price']},
+  {key:'begBal',cols:['BEG BAL STOCKS','BEG BAL','begBal','beg_bal']},
+  {key:'endingStock',cols:['ENDING STOCKS','ENDING','endingStock','stock','ending_stock','qty','quantity','Ending Stocks']},
+  {key:'uom',cols:['UOM','uom','Uom','unit','UOM/Unit']},
+  {key:'supplier',cols:['SUPPLIER','supplier','Supplier']}
+];
+var MENU_FIELDS = [
+  {key:'pid',cols:['PRODUCT ID','pid','product_id','ProductID']},
+  {key:'name',cols:['MENU NAME','name','menu_name','NAME','Item Name']},
+  {key:'price',cols:['PRICE','price','Price']},
+  {key:'cat',cols:['CATEGORY','cat','category','Category']},
+  {key:'detail',cols:['Detail/Variant','detail','DETAIL','variant']}
+];
+
+// Run once before deploying. Existing plain PINs in Cashiers are hashed.
+// If there is no Owner row, set INITIAL_OWNER_NAME and INITIAL_OWNER_PIN
+// under Apps Script Project Settings > Script properties, then run this.
+function setupSecurity() {
+  getPepper_();
+  var sheet = getOrMake('Cashiers',['id','name','role','pin','color','active']);
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0].map(function(h){return String(h).trim();});
+  var idCol = findCol(headers,['id']);
+  var nameCol = findCol(headers,['name','Cashier']);
+  var roleCol = findCol(headers,['role']);
+  var pinCol = findCol(headers,['pin']);
+  if (nameCol < 0 || roleCol < 0 || pinCol < 0) throw new Error('Cashiers sheet requires name, role and pin columns.');
+
+  var ownerFound = false;
+  var migrated = 0;
+  for (var r=1;r<data.length;r++) {
+    var role = normalizeRole_(data[r][roleCol]);
+    if (role === 'owner') ownerFound = true;
+    var raw = String(data[r][pinCol] || '');
+    if (raw && raw.indexOf(PIN_PREFIX) !== 0) {
+      validatePin_(raw);
+      sheet.getRange(r+1,pinCol+1).setValue(hashPin_(raw));
+      migrated++;
+    }
+  }
+
+  if (!ownerFound) {
+    var props = PropertiesService.getScriptProperties();
+    var ownerName = String(props.getProperty('INITIAL_OWNER_NAME') || '').trim();
+    var ownerPin = String(props.getProperty('INITIAL_OWNER_PIN') || '').trim();
+    if (!ownerName || !ownerPin) {
+      throw new Error('No Owner found. Set INITIAL_OWNER_NAME and INITIAL_OWNER_PIN in Script properties, then run setupSecurity again.');
+    }
+    validatePin_(ownerPin);
+    var nextId = Math.max(0,data.length-1)+1;
+    var row = headers.map(function(h){
+      if (aliasesContain(['id'],h)) return nextId;
+      if (aliasesContain(['name','Cashier'],h)) return safeCell_(ownerName);
+      if (aliasesContain(['role'],h)) return 'Owner';
+      if (aliasesContain(['pin'],h)) return hashPin_(ownerPin);
+      if (aliasesContain(['color'],h)) return 'av-b';
+      if (aliasesContain(['active'],h)) return false;
+      return '';
+    });
+    sheet.appendRow(row);
+    props.deleteProperty('INITIAL_OWNER_NAME');
+    props.deleteProperty('INITIAL_OWNER_PIN');
+    ownerFound = true;
+  }
+  SpreadsheetApp.flush();
+  Logger.log('Security ready. Migrated PINs: '+migrated+'. Owner present: '+ownerFound);
+}
+
+function testConnection() {
+  var ss = getSS_();
+  if (!ss) { Logger.log('NOT CONNECTED — could not bind to a spreadsheet. Set SPREADSHEET_ID near the top of the file.'); return; }
+  Logger.log('Connected to '+ss.getName()+'. Tabs: '+ss.getSheets().map(function(s){return s.getName();}).join(', '));
+}
+function testRun(){testConnection();}
+
+// GET/JSONP bridge. Ping is public. Protected actions still require a valid session token.
+// Login remains POST-only so the PIN is never placed in a URL.
+// This bridge is a browser-compatible fallback for GitHub Pages when Apps Script POST redirects are blocked.
+function doGet(e) {
+  // Wrapped top-to-bottom: whatever happens, always return a valid JSON/JSONP
+  // response. An uncaught exception here is what makes Apps Script return its
+  // own HTML error page instead of JSON — that's what looks like a "timeout"
+  // to the POS (a <script src> tag loading HTML never fires the JSONP callback).
+  var p = (e && e.parameter) ? e.parameter : {};
+  try {
+    var action = String(p.action || 'ping');
+    if (action === 'ping') return respond({ok:true,v:'8.4-SALESLOG-CAPTURE'},p.callback);
+    if (action === 'login') return respond({ok:false,error:'POST_REQUIRED'},p.callback);
+
+    var body = {};
+    try {
+      body = p.payload ? JSON.parse(p.payload) : {};
+    } catch (err) {
+      return respond({ok:false,error:'INVALID_PAYLOAD'},p.callback);
+    }
+    body.action = action;
+    return respond(route(action,body),p.callback);
+  } catch (fatal) {
+    return respond({ok:false,error:'FATAL',message:String(fatal && fatal.message ? fatal.message : fatal)}, p.callback);
+  }
+}
+
+function doPost(e) {
+  try {
+    var body = {};
+    try {body = JSON.parse(e && e.postData ? e.postData.contents : '{}');}
+    catch (err) {return respond({ok:false,error:'INVALID_JSON'},null);}
+    return respond(route(String(body.action || 'ping'),body),null);
+  } catch (fatal) {
+    return respond({ok:false,error:'FATAL',message:String(fatal && fatal.message ? fatal.message : fatal)}, null);
+  }
+}
+
+function route(action,b) {
+  try {
+    SS = getSS_();
+    if (action === 'ping') return {ok:true,v:'8.4-SALESLOG-CAPTURE'};
+    if (!SS) return {ok:false,error:'NO_SPREADSHEET',message:'Script could not bind to a spreadsheet. If this is a standalone script project, set SPREADSHEET_ID near the top of the file (or as a Script Property) to your Sheet ID.'};
+    if (action === 'login') return login_(b);
+
+    var user = authenticate_(b.sessionToken);
+    if (!user) return {ok:false,error:'AUTH_REQUIRED',authRequired:true};
+    if (!canRun_(user.role,action)) return {ok:false,error:'FORBIDDEN',forbidden:true};
+
+    switch(action) {
+      case 'whoAmI':             return {ok:true,user:publicUser_(user)};
+      case 'logout':             return logout_(b.sessionToken);
+      case 'getCashiers':        return getCashiers();
+      case 'saveCashiers':       return saveCashiers(b.items || b.cashiers);
+      case 'cashierAction':      return cashierAction_(b,user);
+      case 'getInventory':       return getInventory();
+      case 'saveInventory':      return saveInventory(b.items);
+      case 'updateStock':        return updateStock(b.updates);
+      case 'getPosMenu':         return getPosMenu();
+      case 'savePosMenu':        return savePosMenu(b.items);
+      case 'getSales':           return getSales_(b.limit,b.date);
+      case 'salesStatus':        return salesStatus_();
+      case 'logSale':            return logSale_(b.sale);
+      case 'logShift':           return appendToSheet('ShiftLog',b.entry,['name','type','shift','time']);
+      case 'addKitchenOrder':    return addKitchenOrder(b.order);
+      case 'getKitchenOrders':   return getKitchenOrders();
+      case 'updateKitchenOrder': return updateKitchenOrder(b.id,b.status);
+      case 'logEOD':             return logEOD(b.report,b.orders);
+       case 'getEOD':             return getEOD_(b.date);
+      case 'cleanInventorySheet':return cleanInventorySheet();
+      default: return {ok:false,error:'UNKNOWN_ACTION'};
+    }
+  } catch(err) {
+    audit_('ERROR',action,'',String(err));
+    return {ok:false,error:'SERVER_ERROR',message:String(err && err.message ? err.message : err)};
+  }
+}
+
+function canRun_(role,action) {
+  var r = normalizeRole_(role);
+  var ownerOnly = ['saveCashiers'];
+  var manager = ['saveInventory','savePosMenu','cleanInventorySheet','logEOD'];
+  if (ownerOnly.indexOf(action) >= 0) return r === 'owner';
+  if (manager.indexOf(action) >= 0) return r === 'owner' || r === 'manager';
+  return true;
+}
+
+// ── SHARED SALES LOG ────────────────────────────────────────────────────────
+// Google Sheets is the source of truth so reports match on every device.
+var SALES_HEADERS = ['Order#','Date','Customer','Cashier','Method','Items','Subtotal','Discount','DiscountLabel','VAT','Total'];
+
+function saleItemsText_(items){
+  if (typeof items === 'string') return safeCell_(items);
+  if (!Array.isArray(items)) return '';
+  return safeCell_(JSON.stringify(items.map(function(i){
+    return {qty:Number(i.qty)||0,name:String(i.name||''),price:Number(i.price)||0,cat:String(i.cat||'Other')};
+  })));
+}
+
+function logSale_(sale){
+  if(!sale)return {ok:false,error:'NO_SALE'};
+  return withLock_(function(){
+    var sheet=SS.getSheetByName('SalesLog');
+    if(!sheet) sheet=SS.insertSheet('SalesLog');
+
+    // Always keep A:K as the exact SalesLog schema used by the POS.
+    sheet.getRange(1,1,1,SALES_HEADERS.length).setValues([SALES_HEADERS]);
+
+    var dateValue=String(sale.date||sale.time||'').trim();
+    if(!dateValue){
+      dateValue=Utilities.formatDate(new Date(),Session.getScriptTimeZone()||'Asia/Manila','yyyy-MM-dd HH:mm:ss');
+    }
+
+    var row=[
+      safeCell_(sale.orderNum||sale['Order#']||''),
+      safeCell_(dateValue),
+      safeCell_(sale.customer||'Walk-in'),
+      safeCell_(sale.cashier||''),
+      safeCell_(sale.method||sale.payment||''),
+      saleItemsText_(sale.items),
+      Number(sale.subtotal)||0,
+      Number(sale.discount)||0,
+      safeCell_(sale.discountLabel||sale.discLabel||sale.DiscountLabel||'None'),
+      Number(sale.vat)||0,
+      Number(sale.total)||0
+    ];
+
+    var nextRow=Math.max(sheet.getLastRow()+1,2);
+    sheet.getRange(nextRow,1,1,SALES_HEADERS.length).setValues([row]);
+    SpreadsheetApp.flush();
+
+    return {
+      ok:true,
+      saved:true,
+      row:nextRow,
+      orderNum:String(row[0]||''),
+      date:String(row[1]||'')
+    };
+  });
+}
+
+function getSales_(limit,dateFilter){
+  var sheet=SS.getSheetByName('SalesLog');
+  if(!sheet)return {ok:true,items:[]};
+  var rows=sheet.getDataRange().getValues();
+  if(rows.length<=1)return {ok:true,items:[]};
+  var headers=rows[0].map(function(h){return String(h).trim();});
+  function c(aliases){return findCol(headers,aliases);}
+  var cols={
+    order:c(['Order#','orderNum','Order','Order #']), date:c(['Date','time','date']),
+    customer:c(['Customer','customer']), cashier:c(['Cashier','cashier']),
+    method:c(['Method','payment','method']), items:c(['Items','items']),
+    subtotal:c(['Subtotal','subtotal']), discount:c(['Discount','discount']),
+    label:c(['DiscountLabel','discLabel','discountLabel']), vat:c(['VAT','vat']), total:c(['Total','total'])
+  };
+  var max=Math.min(Math.max(Number(limit)||1000,1),5000);
+  var start=Math.max(1,rows.length-max);
+  var tz=Session.getScriptTimeZone()||'Asia/Manila';
+  var wanted=String(dateFilter||'').trim();
+  var items=rows.slice(start).map(function(row){
+    var rawItems=cols.items>=0?row[cols.items]:'';
+    var parsed=[];
+    if(Array.isArray(rawItems)) parsed=rawItems;
+    else if(typeof rawItems==='string' && rawItems.trim()){
+      try{parsed=JSON.parse(rawItems);}catch(e){parsed=[];}
+    }
+    var dv=cols.date>=0?row[cols.date]:'';
+    var iso='';
+    if(dv instanceof Date && !isNaN(dv.getTime())) iso=Utilities.formatDate(dv,tz,'yyyy-MM-dd HH:mm:ss');
+    else iso=String(dv||'');
+    return {
+      orderNum:cols.order>=0?String(row[cols.order]||''):'',
+      date:iso,time:iso,customer:cols.customer>=0?String(row[cols.customer]||'Walk-in'):'Walk-in',
+      cashier:cols.cashier>=0?String(row[cols.cashier]||''):'',method:cols.method>=0?String(row[cols.method]||''):'',
+      payment:cols.method>=0?String(row[cols.method]||''):'',items:parsed,
+      subtotal:cols.subtotal>=0?Number(row[cols.subtotal])||0:0,
+      discount:cols.discount>=0?Number(row[cols.discount])||0:0,
+      discLabel:cols.label>=0?String(row[cols.label]||'None'):'None',
+      discountLabel:cols.label>=0?String(row[cols.label]||'None'):'None',
+      vat:cols.vat>=0?Number(row[cols.vat])||0:0,total:cols.total>=0?Number(row[cols.total])||0:0
+    };
+  }).filter(function(o){
+    if(!wanted)return true;
+    var d=parseDateKey_(o.date);
+    return d===wanted;
+  });
+  return {ok:true,items:items};
+}
+
+function parseDateKey_(v){
+  if(v instanceof Date && !isNaN(v.getTime())) return Utilities.formatDate(v,Session.getScriptTimeZone()||'Asia/Manila','yyyy-MM-dd');
+  var s=String(v||'').trim();
+  var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m)return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m)return m[3]+'-'+('0'+m[1]).slice(-2)+'-'+('0'+m[2]).slice(-2);
+  var d=new Date(s); if(!isNaN(d.getTime()))return Utilities.formatDate(d,Session.getScriptTimeZone()||'Asia/Manila','yyyy-MM-dd');
+  return '';
+}
+
+
+function salesStatus_(){
+  var sheet=SS.getSheetByName('SalesLog');
+  if(!sheet) return {ok:true,sheetExists:false,rowCount:0,headers:[]};
+  var lastRow=sheet.getLastRow();
+  var lastCol=Math.max(sheet.getLastColumn(),SALES_HEADERS.length);
+  var headers=lastRow>0 ? sheet.getRange(1,1,1,lastCol).getDisplayValues()[0] : [];
+  return {
+    ok:true,
+    sheetExists:true,
+    rowCount:Math.max(lastRow-1,0),
+    headers:headers.slice(0,SALES_HEADERS.length),
+    spreadsheetName:SS.getName()
+  };
+}
+
+// ── AUTHENTICATION ──────────────────────────────────────────────────────────
+function login_(b) {
+  var username = String(b.username || b.name || '').trim();
+  var pin = String(b.pin || b.password || '').trim();
+  if (!username || !pin) return {ok:false,error:'INVALID_CREDENTIALS'};
+  if (isLoginLocked_(username)) return {ok:false,error:'TOO_MANY_ATTEMPTS',retryAfter:LOGIN_LOCK_SECONDS};
+
+  var found = findCashier_(username,null);
+  if (!found || !verifyPin_(pin,found.record.pin)) {
+    recordLoginFailure_(username);
+    audit_('LOGIN_FAILED','login',username,'');
+    return {ok:false,error:'INVALID_CREDENTIALS'};
+  }
+
+  clearLoginFailures_(username);
+  if (String(found.record.pin).indexOf(PIN_PREFIX) !== 0) {
+    found.sheet.getRange(found.row,found.pinCol+1).setValue(hashPin_(pin));
+  }
+  var user = {id:found.record.id,name:found.record.name,role:found.record.role,color:found.record.color};
+  var token = createSession_(user);
+  audit_('LOGIN_OK','login',user.name,user.role);
+  return {ok:true,sessionToken:token,expiresIn:SESSION_TTL_SECONDS,user:publicUser_(user)};
+}
+
+function authenticate_(token) {
+  token = String(token || '');
+  if (!token) return null;
+  var cache = CacheService.getScriptCache();
+  var key = 'session:'+digest_(token);
+  var raw = cache.get(key);
+  if (!raw) return null;
+  try {
+    var user = JSON.parse(raw);
+    cache.put(key,raw,SESSION_TTL_SECONDS);
+    return user;
+  } catch(e) {return null;}
+}
+
+function createSession_(user) {
+  var token = digest_(Utilities.getUuid()+':'+Date.now()+':'+Math.random()+':'+getPepper_());
+  CacheService.getScriptCache().put('session:'+digest_(token),JSON.stringify(user),SESSION_TTL_SECONDS);
+  return token;
+}
+
+function logout_(token) {
+  if (token) CacheService.getScriptCache().remove('session:'+digest_(String(token)));
+  return {ok:true};
+}
+
+function publicUser_(u) {return {id:u.id,name:u.name,role:u.role,color:u.color||'av-t'};}
+
+function getPepper_() {
+  var props = PropertiesService.getScriptProperties();
+  var pepper = props.getProperty('PIN_PEPPER');
+  if (!pepper) {
+    pepper = digest_(Utilities.getUuid()+Date.now()+Math.random());
+    props.setProperty('PIN_PEPPER',pepper);
+  }
+  return pepper;
+}
+
+function hashPin_(pin) {
+  var salt = Utilities.getUuid().replace(/-/g,'');
+  return PIN_PREFIX+salt+'$'+digest_(salt+':'+pin+':'+getPepper_());
+}
+
+function verifyPin_(pin,stored) {
+  stored = String(stored || '');
+  if (stored.indexOf(PIN_PREFIX) !== 0) return constantTimeEqual_(String(pin),stored);
+  var parts = stored.split('$');
+  if (parts.length !== 3) return false;
+  return constantTimeEqual_(parts[2],digest_(parts[1]+':'+pin+':'+getPepper_()));
+}
+
+function digest_(value) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(value),Utilities.Charset.UTF_8);
+  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/,'');
+}
+
+function constantTimeEqual_(a,b) {
+  a=String(a);b=String(b);var diff=a.length^b.length;var len=Math.max(a.length,b.length);
+  for(var i=0;i<len;i++) diff|=(a.charCodeAt(i%Math.max(1,a.length))||0)^(b.charCodeAt(i%Math.max(1,b.length))||0);
+  return diff===0;
+}
+
+function validatePin_(pin) {
+  if (!/^\d{4,12}$/.test(String(pin))) throw new Error('PIN must contain 4 to 12 digits.');
+}
+
+function loginKey_(username){return 'loginfail:'+digest_(String(username).toLowerCase()).slice(0,32);}
+function isLoginLocked_(username){return Number(CacheService.getScriptCache().get(loginKey_(username))||0)>=LOGIN_MAX_FAILURES;}
+function recordLoginFailure_(username){
+  var c=CacheService.getScriptCache(),k=loginKey_(username),n=Number(c.get(k)||0)+1;
+  c.put(k,String(n),LOGIN_LOCK_SECONDS);
+}
+function clearLoginFailures_(username){CacheService.getScriptCache().remove(loginKey_(username));}
+
+// ── CASHIERS ────────────────────────────────────────────────────────────────
+function readCashierRecords_() {
+  var sheet=getOrMake('Cashiers',['id','name','role','pin','color','active']);
+  var rows=sheet.getDataRange().getValues();
+  var headers=rows[0].map(function(h){return String(h).trim();});
+  var pinCol=findCol(headers,['pin']);
+  var records=rows.slice(1).map(function(row,i){
+    var o={}; CASHIER_FIELDS.forEach(function(f){var c=findCol(headers,f.cols);o[f.key]=c>=0?row[c]:'';});
+    if(!o.id)o.id=i+1;o.active=o.active===true||String(o.active).toUpperCase()==='TRUE';return o;
+  }).filter(function(o){return val(o.name);});
+  return {sheet:sheet,headers:headers,pinCol:pinCol,records:records};
+}
+
+function findCashier_(name,id) {
+  var data=readCashierRecords_();
+  for(var i=0;i<data.records.length;i++) {
+    var r=data.records[i];
+    if ((id!==null&&id!==undefined&&String(r.id)===String(id)) ||
+        (name&&String(r.name).toLowerCase()===String(name).toLowerCase())) {
+      return {record:r,sheet:data.sheet,row:i+2,pinCol:data.pinCol};
+    }
+  }
+  return null;
+}
+
+function cashierProfile_(r){return {id:r.id,name:r.name,role:r.role||'Cashier',color:r.color||'av-t',active:r.active===true};}
+function getCashiers(){var d=readCashierRecords_();return {ok:true,items:d.records.map(cashierProfile_),cashiers:d.records.map(cashierProfile_)};}
+
+function saveCashiers(items) {
+  if(!items||!items.length)return {ok:false,error:'NO_CASHIERS'};
+  return withLock_(function(){
+    var current=readCashierRecords_(),byId={};
+    current.records.forEach(function(r){byId[String(r.id)]=r;});
+    var seenNames={};
+    var prepared=items.map(function(it,idx){
+      var id=it.id||idx+1,name=String(it.name||'').trim(),role=String(it.role||'Cashier').trim();
+      if(!name)throw new Error('Cashier name is required.');
+      var nk=name.toLowerCase();if(seenNames[nk])throw new Error('Duplicate cashier name.');seenNames[nk]=true;
+      var old=byId[String(id)];var stored=old?String(old.pin||''):'';
+      if(it.pin!==undefined&&String(it.pin)!==''){validatePin_(String(it.pin));stored=hashPin_(String(it.pin));}
+      if(!stored)throw new Error('A PIN is required for '+name+'.');
+      return {id:id,name:name,role:role,pin:stored,color:it.color||'av-t',active:it.active===true};
+    });
+    var sheet=current.sheet,headers=current.headers,last=sheet.getLastRow();
+    if(last>1)sheet.getRange(2,1,last-1,headers.length).clearContent();
+    var rows=prepared.map(function(it){return headers.map(function(h){
+      var f=CASHIER_FIELDS.filter(function(x){return aliasesContain(x.cols,h);})[0];
+      return f?safeCell_(it[f.key]):'';
+    });});
+    sheet.getRange(2,1,rows.length,headers.length).setValues(rows);SpreadsheetApp.flush();
+    return {ok:true,saved:rows.length,items:prepared.map(cashierProfile_)};
+  });
+}
+
+function cashierAction_(b,user) {
+  var found=findCashier_(null,b.cashierId),pin=String(b.pin||''),type=String(b.type||'').toUpperCase();
+  if(!found||!verifyPin_(pin,found.record.pin))return {ok:false,error:'INVALID_CREDENTIALS'};
+  if(type!=='IN'&&type!=='OUT')return {ok:false,error:'INVALID_ACTION'};
+  var activeCol=findCol(readCashierRecords_().headers,['active']);
+  if(activeCol>=0)found.sheet.getRange(found.row,activeCol+1).setValue(type==='IN');
+  appendToSheet('ShiftLog',{name:found.record.name,type:type,shift:b.shift||'',time:new Date().toISOString()},['name','type','shift','time']);
+  return {ok:true,item:cashierProfile_(Object.assign({},found.record,{active:type==='IN'}))};
+}
+
+// ── INVENTORY ───────────────────────────────────────────────────────────────
+function getInventory(){
+  var sheet=getOrMake('Inventory',['ITEM CODE','ITEM DESCRIPTION','CATEGORY','PRICE','BEG BAL STOCKS','ENDING STOCKS','UOM','SUPPLIER']);
+  var rows=sheet.getDataRange().getValues();if(rows.length<=1)return {ok:true,items:[]};
+  var h=rows[0].map(function(x){return String(x).trim();});
+  var items=rows.slice(1).map(function(row,i){var o={id:i+1};INV_FIELDS.forEach(function(f){var c=findCol(h,f.cols);o[f.key]=c>=0?row[c]:'';});return o;})
+    .filter(function(r){return val(r.itemCode)||val(r.description)||val(r.category);});
+  return {ok:true,items:items};
+}
+
+function saveInventory(items){
+  if(!items||!items.length)return {ok:false,error:'NO_ITEMS'};
+  return replaceMappedSheet_('Inventory',['ITEM CODE','ITEM DESCRIPTION','CATEGORY','PRICE','BEG BAL STOCKS','ENDING STOCKS','UOM','SUPPLIER'],INV_FIELDS,items);
+}
+
+function updateStock(updates){
+  if(!updates||!updates.length)return {ok:false,error:'NO_UPDATES',matched:0,unmatched:0};
+  return withLock_(function(){
+    var sheet=SS.getSheetByName('Inventory');if(!sheet)return {ok:false,error:'NO_INVENTORY',matched:0,unmatched:updates.length};
+    var data=sheet.getDataRange().getValues(),h=data[0].map(function(x){return String(x).trim();});
+    var codeCol=findCol(h,['ITEM CODE','itemCode','pid','id']),stockCol=findCol(h,['ENDING STOCKS','endingStock','stock','qty','quantity']);
+    if(codeCol<0||stockCol<0)return {ok:false,error:'COLUMNS_NOT_FOUND'};
+    var matched=0,unmatched=[];updates.forEach(function(u){
+      var code=String(u.itemCode!=null?u.itemCode:(u.id!=null?u.id:(u.pid||''))).trim(),found=false;
+      for(var r=1;r<data.length;r++)if(String(data[r][codeCol]).trim()===code){
+        var stock=u.endingStock!=null?u.endingStock:(u.stock!=null?u.stock:u.quantity);
+        sheet.getRange(r+1,stockCol+1).setValue(Number(stock)||0);matched++;found=true;break;
+      }
+      if(!found)unmatched.push(code);
+    });SpreadsheetApp.flush();return {ok:unmatched.length===0,matched:matched,unmatched:unmatched};
+  });
+}
+
+function cleanInventorySheet(){
+  return withLock_(function(){
+    var sheet=SS.getSheetByName('Inventory');if(!sheet)return {ok:false,error:'NO_INVENTORY'};
+    var data=sheet.getDataRange().getValues();if(data.length<=1)return {ok:true,removed:0,kept:0};
+    var h=data[0].map(function(x){return String(x).trim();}),cc=findCol(h,['ITEM CODE','itemCode']),dc=findCol(h,['ITEM DESCRIPTION','description','name']),kc=findCol(h,['CATEGORY','category','cat']);
+    var good=[],seen={},removed=0;data.slice(1).forEach(function(row){
+      var code=cc>=0?String(row[cc]).trim():'',desc=dc>=0?String(row[dc]).trim():'',cat=kc>=0?String(row[kc]).trim():'';
+      if((!code&&!desc&&!cat)||(code&&seen[code])){removed++;return;}if(code)seen[code]=true;good.push(row);
+    });
+    if(sheet.getLastRow()>1)sheet.getRange(2,1,sheet.getLastRow()-1,h.length).clearContent();
+    if(good.length)sheet.getRange(2,1,good.length,h.length).setValues(good);SpreadsheetApp.flush();return {ok:true,removed:removed,kept:good.length};
+  });
+}
+
+// ── POS MENU ────────────────────────────────────────────────────────────────
+function getPosMenu(){
+  var sheet=SS.getSheetByName('POS MENU CREATION');if(!sheet)return {ok:true,items:[]};
+  var rows=sheet.getDataRange().getValues();if(rows.length<=1)return {ok:true,items:[]};
+  var h=rows[0].map(function(x){return String(x).trim();});
+  var items=rows.slice(1).map(function(row,i){var o={id:i+1};MENU_FIELDS.forEach(function(f){var c=findCol(h,f.cols);o[f.key]=c>=0?row[c]:'';});return o;})
+    .filter(function(r){return val(r.name)||val(r.pid);});return {ok:true,items:items};
+}
+function savePosMenu(items){
+  if(!items||!items.length)return {ok:false,error:'NO_ITEMS'};
+  return replaceMappedSheet_('POS MENU CREATION',['PRODUCT ID','MENU NAME','PRICE','CATEGORY','Detail/Variant'],MENU_FIELDS,items);
+}
+
+// ── KITCHEN ─────────────────────────────────────────────────────────────────
+function addKitchenOrder(order){
+  if(!order)return {ok:false,error:'NO_ORDER'};
+  return withLock_(function(){var sheet=getOrMake('KitchenOrders',['id','orderNum','table','customer','notes','cashier','items','sentAt','status','doneAt']);
+    cleanOldKitchen(sheet);sheet.appendRow([order.id||Date.now(),safeCell_(order.orderNum||''),safeCell_(order.table||''),safeCell_(order.customer||''),safeCell_(order.notes||''),safeCell_(order.cashier||''),safeCell_(JSON.stringify(order.items||[])),order.sentAt||Date.now(),'pending','']);SpreadsheetApp.flush();return {ok:true};});
+}
+function getKitchenOrders(){
+  var sheet=SS.getSheetByName('KitchenOrders');if(!sheet)return {ok:true,orders:[]};var rows=sheet.getDataRange().getValues();if(rows.length<=1)return {ok:true,orders:[]};
+  var cutoff=Date.now()-8*60*60*1000,orders=rows.slice(1).filter(function(r){return parseInt(r[7]||0)>cutoff;}).map(function(r){return {id:r[0],orderNum:r[1],table:r[2],customer:r[3],notes:r[4],cashier:r[5],items:r[6],sentAt:r[7],status:r[8],doneAt:r[9]};});
+  return {ok:true,orders:orders};
+}
+function updateKitchenOrder(id,status){
+  if(!id)return {ok:false,error:'NO_ID'};return withLock_(function(){var sheet=SS.getSheetByName('KitchenOrders');if(!sheet)return {ok:false,error:'NO_KITCHEN'};var data=sheet.getDataRange().getValues();
+    for(var r=1;r<data.length;r++)if(String(data[r][0])===String(id)){sheet.getRange(r+1,9).setValue(status||'done');sheet.getRange(r+1,10).setValue(Date.now());SpreadsheetApp.flush();return {ok:true};}
+    return {ok:false,error:'NOT_FOUND'};});
+}
+function cleanOldKitchen(sheet){var data=sheet.getDataRange().getValues(),cutoff=Date.now()-24*60*60*1000;for(var r=data.length-1;r>=1;r--)if(parseInt(data[r][7]||0)<cutoff)sheet.deleteRow(r+1);}
+
+// ── END OF DAY ──────────────────────────────────────────────────────────────
+function getEOD_(date){
+  var key=parseDateKey_(date);
+  if(!key)return {ok:false,error:'DATE_REQUIRED'};
+  var sheet=SS.getSheetByName('EODReport');
+  if(!sheet||sheet.getLastRow()<=1)return {ok:true,date:key,completed:false};
+  var data=sheet.getDataRange().getValues(),h=data[0].map(function(x){return String(x).trim();});
+  var dc=findCol(h,['date','Date']);
+  if(dc<0)return {ok:true,date:key,completed:false};
+  for(var r=data.length-1;r>=1;r--){
+    if(parseDateKey_(data[r][dc])===key)return {ok:true,date:key,completed:true,row:r+1};
+  }
+  return {ok:true,date:key,completed:false};
+}
+
+function logEOD(report,orders){
+  if(!report)return {ok:false,error:'NO_REPORT'};
+  var key=parseDateKey_(report.date);
+  if(!key)return {ok:false,error:'DATE_REQUIRED'};
+  var existing=getEOD_(key);
+  if(existing.completed)return {ok:true,alreadyCompleted:true,date:key};
+  var normalized={
+    date:key, generatedAt:report.generatedAt||new Date(), totalOrders:Number(report.totalOrders)||0,
+    totalRevenue:Number(report.totalRevenue)||0, totalDiscount:Number(report.totalDiscount)||0,
+    totalVAT:Number(report.totalVAT)||0, cashier:safeCell_(report.cashier||'')
+  };
+  appendToSheet('EODReport',normalized,['date','generatedAt','totalOrders','totalRevenue','totalDiscount','totalVAT','cashier']);
+  return withLock_(function(){
+    var name='EOD_'+key.replace(/[^A-Za-z0-9_-]/g,'').slice(0,80),sheet=SS.getSheetByName(name)||SS.insertSheet(name);sheet.clearContents();
+    var rows=[['Date',key],['Orders',normalized.totalOrders],['Revenue',normalized.totalRevenue],['Discount',normalized.totalDiscount],['VAT',normalized.totalVAT],[''],['#','Date','Customer','Cashier','Method','Items','Subtotal','Discount','VAT','Total']];
+    (orders||[]).slice(0,2000).forEach(function(o){rows.push([safeCell_(o.orderNum||''),safeCell_(o.date||o.time||''),safeCell_(o.customer||''),safeCell_(o.cashier||''),safeCell_(o.method||o.payment||''),safeCell_((o.items||[]).map(function(i){return (Number(i.qty)||0)+'x '+String(i.name||'');}).join(', ')),Number(o.subtotal)||0,Number(o.discount)||0,Number(o.vat)||0,Number(o.total)||0]);});
+    sheet.getRange(1,1,rows.length,10).setValues(rows);SpreadsheetApp.flush();return {ok:true,date:key};
+  });
+}
+
+// ── GENERIC HELPERS ─────────────────────────────────────────────────────────
+function replaceMappedSheet_(name,headers,fields,items){
+  return withLock_(function(){var sheet=getOrMake(name,headers),actual=sheet.getRange(1,1,1,Math.max(sheet.getLastColumn(),headers.length)).getValues()[0].map(function(h){return String(h).trim();});
+    var rows=items.slice(0,5000).map(function(it){return actual.map(function(h){var f=fields.filter(function(x){return aliasesContain(x.cols,h);})[0];if(!f)return '';var v=it[f.key];if(v===undefined)for(var i=0;i<f.cols.length;i++)if(it[f.cols[i]]!==undefined){v=it[f.cols[i]];break;}return safeCell_(v===undefined?'':v);});});
+    if(sheet.getLastRow()>1)sheet.getRange(2,1,sheet.getLastRow()-1,actual.length).clearContent();if(rows.length)sheet.getRange(2,1,rows.length,actual.length).setValues(rows);SpreadsheetApp.flush();return {ok:true,saved:rows.length};});
+}
+function appendToSheet(name,obj,headers){
+  if(!obj)return {ok:false,error:'NO_DATA'};return withLock_(function(){var sheet=getOrMake(name,headers);sheet.appendRow(headers.map(function(h){return safeCell_(obj[h]!==undefined?obj[h]:'');}));SpreadsheetApp.flush();return {ok:true};});
+}
+function getOrMake(name,headers){var sheet=SS.getSheetByName(name);if(!sheet){sheet=SS.insertSheet(name);sheet.appendRow(headers);}return sheet;}
+function normalizeHeader(v){return String(v==null?'':v).trim().toLowerCase().replace(/[\s_\-/]+/g,'');}
+function aliasesContain(aliases,header){var h=normalizeHeader(header);return aliases.some(function(a){return normalizeHeader(a)===h;});}
+function findCol(headers,aliases){for(var i=0;i<headers.length;i++)if(aliasesContain(aliases,headers[i]))return i;return -1;}
+function val(v){return v!==undefined&&v!==null&&String(v).trim()!==''&&String(v)!=='undefined';}
+function normalizeRole_(v){return String(v||'cashier').trim().toLowerCase();}
+function safeCell_(v){if(typeof v==='string'&&/^[=+\-@]/.test(v))return "'"+v;return v;}
+function withLock_(fn){var lock=LockService.getScriptLock();lock.waitLock(20000);try{return fn();}finally{lock.releaseLock();}}
+function audit_(event,action,actor,detail){try{var sheet=getOrMake('SecurityAudit',['time','event','action','actor','detail']);sheet.appendRow([new Date().toISOString(),event,action,safeCell_(actor||''),safeCell_(detail||'')]);}catch(e){}}
+function respond(obj,callback){
+  var json=JSON.stringify(obj);callback=String(callback||'');
+  if(callback&&/^[A-Za-z_$][0-9A-Za-z_$]*$/.test(callback))return ContentService.createTextOutput(callback+'('+json+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+</script>
 </body>
 </html>
