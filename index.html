@@ -2170,13 +2170,24 @@ async function importFromSheets(){
 
 
 async function pushStockUpdate(updates){ if(SHEETS_URL) await sheetsCall('updateStock',{updates}); }
+function _salesTimestamp(){
+  var d=new Date(),z=function(n){return String(n).padStart(2,'0');};
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes())+':'+z(d.getSeconds());
+}
+
 async function pushSaleToSheets(s){
-  if(!SHEETS_URL) return false;
-  var res = await sheetsCall('logSale',{sale:s});
-  if(!res || !res.ok){
-    _addSyncError('Sales Log','logSale','Order #'+(s.orderNum||'?')+' failed to log in Sheet',{sale:s});
+  if(!SHEETS_URL){
+    showToast('⛔ SALE NOT SAVED — Google Sheets URL is missing.','error');
     return false;
   }
+  var res=await sheetsCall('logSale',{sale:s});
+  if(!res || !res.ok || res.saved===false){
+    var why=(res&&((res.message||res.error)))||_lastCallError||'Unknown SalesLog error';
+    _addSyncError('Sales Log','logSale','Order #'+(s.orderNum||'?')+' failed to log in Sheet',{sale:s});
+    showToast('⛔ SALE NOT SAVED TO SALESLOG — '+why,'error');
+    return false;
+  }
+  showToast('✅ Sale saved to SalesLog'+(res.row?' (row '+res.row+')':''),'success');
   return true;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
@@ -2687,24 +2698,47 @@ function confirmGCash(){
   closeModal('gcash-modal'); finalizePayment('GCash',num,ref||'N/A');
 }
 async function finalizePayment(method,gcashNum,gcashRef){
-  // Decrements the Menu's own stock only — completely separate from the
-  // Inventory tab's stock numbers, and never touches Google Sheets.
-  order.forEach(o=>{ const it=menuItems.find(i=>i.id===o.id); if(it){ it.stock-=o.qty; } });
-  _saveMenuLocally();
   const{sub,da,vat,tot}=getTotals();
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
-  const dateStr=new Date().toLocaleString('en-PH');
-  await pushSaleToSheets({orderNum:`#${ordNum}`,time:dateStr,date:dateStr,
-    table:(document.getElementById('table-num')||{}).value||'Walk-in',
-    customer:cust,notes:(document.getElementById('order-notes')||{}).value||'',
-    cashier:activeCashier||'—',payment:method,method:method,
-    items:order.map(o=>({qty:o.qty,name:o.name,price:parseFloat(o.price)||0,cat:o.cat||'Other'})),
-    subtotal:sub.toFixed(2),discount:da.toFixed(2),discLabel:da>0?discLabel():'None',vat:'0.00',total:tot.toFixed(2)});
+  const dateStr=_salesTimestamp();
+
+  var salePayload={
+    orderNum:'#'+ordNum,
+    date:dateStr,
+    time:dateStr,
+    customer:cust,
+    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+    method:method,
+    payment:method,
+    items:order.map(function(o){
+      return {qty:Number(o.qty)||0,name:String(o.name||''),price:Number(o.price)||0,cat:String(o.cat||'Other')};
+    }),
+    subtotal:Number(sub.toFixed(2)),
+    discount:Number(da.toFixed(2)),
+    discountLabel:da>0?discLabel():'None',
+    discLabel:da>0?discLabel():'None',
+    vat:Number((vat||0).toFixed(2)),
+    total:Number(tot.toFixed(2))
+  };
+
+  // CRITICAL: do not finish the transaction unless Google Sheets confirms the row.
+  var saved=await pushSaleToSheets(salePayload);
+  if(!saved){
+    showToast('Transaction is still open. Fix SalesLog connection and try payment again.','error');
+    return false;
+  }
+
+  // Only deduct menu stock after SalesLog confirms the sale.
+  order.forEach(function(o){
+    const it=menuItems.find(function(i){return i.id===o.id;});
+    if(it) it.stock-=o.qty;
+  });
+  _saveMenuLocally();
+
   document.getElementById('r-date').textContent=dateStr;
   document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(parseFloat(o.price)*o.qty).toFixed(2)}</span></div>`).join("");
   document.getElementById('r-sub').textContent=`₱${sub.toFixed(2)}`;
-
   document.getElementById('r-total').textContent=`₱${tot.toFixed(2)}`;
   const rdr=document.getElementById('r-disc-row');
   if(da>0){rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;}
@@ -2714,10 +2748,11 @@ async function finalizePayment(method,gcashNum,gcashRef){
   const gref=document.getElementById('r-gcash-ref');
   if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Name: ${gcashRef}`;}
   else gref.style.display='none';
-  document.getElementById('r-cashier').textContent=activeCashier||'—';
-  document.getElementById('r-ordnum').textContent=`#${ordNum}`;
+  document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
+  document.getElementById('r-ordnum').textContent='#'+ordNum;
   orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
   openModal('receipt-modal'); renderMenu();
+  return true;
 }
 function newOrder(){
   clearOrder();
@@ -3429,9 +3464,22 @@ async function connectSheets() {
       statusEl.style.color = '#27AE60';
       _onReconnected();
       _syncDone = false;
+      if(_authSession){
+        var ss=await sheetsCall('salesStatus',{});
+        if(!ss||!ss.ok){
+          statusEl.textContent='⚠️ Endpoint works, but SalesLog access failed: '+((ss&&(ss.message||ss.error))||_lastCallError||'Unknown error');
+          statusEl.style.color='#E2820B';
+          return;
+        }
+        statusEl.textContent='✅ SalesLog connected — '+Number(ss.rowCount||0)+' saved sale(s)';
+        statusEl.style.color='#27AE60';
+      }else{
+        statusEl.textContent='✅ Endpoint connected. Sign in to verify SalesLog.';
+        statusEl.style.color='#27AE60';
+      }
       closeModal('sheets-setup-modal');
-      await _initialSync();
-      showToast('Google Sheets connected!','success');
+      if(_authSession) await _initialSync();
+      showToast('Google Sheets endpoint connected.','success');
     } else {
       statusEl.textContent = '❌ ' + (_lastCallError || 'Apps Script ping failed.');
       statusEl.style.color = '#E05050';
@@ -4062,19 +4110,16 @@ document.addEventListener('visibilitychange',function(){
 /* ── Upgrade finalizePayment to include table, notes, stock deduct ── */
 var _origFinalizePayment = finalizePayment;
 finalizePayment = async function(method, gcashNum, gcashRef){
-  // Final transaction gate: every payment method must pass the EOD check here.
   if(!(await _eodReadyForNewSale(true))) return false;
 
-  var tableEl = document.getElementById('table-num');
-  var notesEl = document.getElementById('order-notes');
+  var tableEl=document.getElementById('table-num');
+  var notesEl=document.getElementById('order-notes');
 
-  // The original function is the only function that writes the sale.
-  // Do not create a second local SalesLog record here.
-  await _origFinalizePayment.call(this, method, gcashNum, gcashRef);
+  var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
+  if(!ok) return false;
 
-  // Pull the authoritative SalesLog back from Google Sheets after the write.
   await refreshSalesFromSheets(true);
-  if(document.getElementById('reports-view') && document.getElementById('reports-view').classList.contains('active')) renderReports();
+  renderReports();
 
   if(tableEl) tableEl.value='';
   if(notesEl) notesEl.value='';
