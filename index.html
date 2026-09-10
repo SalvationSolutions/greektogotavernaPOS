@@ -1810,532 +1810,6 @@ img, svg, canvas{
 }
 </style>
 
-
-<style id="reference-design-v101">
-:root{
-  --ref-navy:#07366F;
-  --ref-blue:#087AF5;
-  --ref-blue2:#0C65C7;
-  --ref-bg:#EAF4FF;
-  --ref-line:#C9DEF3;
-  --ref-text:#082D5C;
-}
-
-/* Header closely follows supplied reference */
-.header{
-  height:76px!important;
-  padding:0 20px!important;
-  background:linear-gradient(90deg,#083B78 0%,#003B75 100%)!important;
-  display:grid!important;
-  grid-template-columns:190px minmax(520px,1fr) auto!important;
-  align-items:center!important;
-  gap:14px!important;
-  box-shadow:none!important;
-}
-.logo{gap:8px!important;min-width:0;}
-.custom-logo-img{
-  width:142px!important;
-  height:64px!important;
-  padding:0!important;
-  border-radius:4px!important;
-  background:transparent!important;
-  object-fit:contain!important;
-}
-.logo-text{display:none!important;}
-.header-nav{
-  justify-content:center!important;
-  gap:10px!important;
-  overflow-x:auto!important;
-}
-.nav-btn{
-  min-width:108px!important;
-  min-height:58px!important;
-  padding:8px 12px!important;
-  border-radius:8px!important;
-  font-size:12px!important;
-  background:transparent!important;
-  color:#fff!important;
-  opacity:.95;
-}
-.nav-btn.active,.nav-btn:hover{
-  background:linear-gradient(180deg,#0B82FF,#0A67D4)!important;
-  color:#fff!important;
-  box-shadow:0 5px 12px rgba(0,0,0,.12)!important;
-}
-.header-right{gap:8px!important;}
-.db-status{
-  border:none!important;
-  background:transparent!important;
-  color:#fff!important;
-  font-size:10px!important;
-  padding:2px 4px!important;
-}
-.clock{font-size:11px!important;}
-.logout-btn{
-  display:inline-flex!important;
-  align-items:center;
-  min-height:40px;
-  padding:8px 18px!important;
-  border:1px solid rgba(255,255,255,.25)!important;
-  color:#fff!important;
-  border-radius:24px!important;
-  background:rgba(0,0,0,.08)!important;
-}
-
-/* Main POS split: category rail + menu + order */
-#pos-view{
-  height:calc(100dvh - 76px)!important;
-  background:var(--ref-bg)!important;
-  display:grid!important;
-  grid-template-columns:205px minmax(0,1fr) 450px!important;
-  gap:0!important;
-  overflow:hidden!important;
-}
-.pos-category-sidebar{
-  display:block;
-  background:#F7FBFF;
-  border-right:1px solid var(--ref-line);
-  padding:14px 10px;
-  overflow-y:auto;
-}
-.pcs-item{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-height:48px;
-  padding:9px 12px;
-  margin-bottom:3px;
-  border-radius:8px;
-  color:#194B82;
-  font-size:12px;
-  cursor:pointer;
-  transition:.15s ease;
-}
-.pcs-item span{font-size:16px;width:22px;text-align:center}
-.pcs-item b{font-weight:700}
-.pcs-item:hover,.pcs-item.active{
-  background:linear-gradient(90deg,#DCEEFF,#CDE4FB);
-  color:#0866C5;
-}
-.menu-panel{
-  border-right:1px solid var(--ref-line)!important;
-  background:#fff!important;
-  overflow:hidden!important;
-}
-.menu-search-bar{
-  padding:10px 14px 7px!important;
-  background:#fff!important;
-}
-.search-input{
-  height:44px!important;
-  background:#fff!important;
-  border:1px solid var(--ref-line)!important;
-  border-radius:8px!important;
-  font-size:13px!important;
-}
-.category-tabs{
-  padding:7px 14px!important;
-  gap:8px!important;
-}
-.cat-tab{
-  height:36px!important;
-  padding:6px 14px!important;
-  border:1px solid var(--ref-line)!important;
-  background:#fff!important;
-  color:#2B5C91!important;
-  border-radius:18px!important;
-  font-size:10px!important;
-}
-.cat-tab.active{
-  background:#087AF5!important;
-  color:#fff!important;
-  border-color:#087AF5!important;
-}
-.menu-grid{
-  grid-template-columns:repeat(3,minmax(220px,1fr))!important;
-  gap:8px!important;
-  padding:8px 12px 14px!important;
-  overflow-y:scroll!important;
-  background:#F8FBFF!important;
-}
-.ref-menu-card{
-  min-height:100px!important;
-  padding:8px!important;
-  display:grid!important;
-  grid-template-columns:82px minmax(0,1fr) 72px!important;
-  align-items:center!important;
-  gap:8px!important;
-  text-align:left!important;
-  border:1px solid #D7E6F5!important;
-  border-radius:8px!important;
-  box-shadow:0 1px 3px rgba(8,45,92,.05)!important;
-  background:#fff!important;
-}
-.ref-menu-card:hover{
-  transform:none!important;
-  border-color:#9FC8F1!important;
-  box-shadow:0 3px 8px rgba(8,45,92,.08)!important;
-}
-.ref-menu-thumb{
-  width:82px;height:82px;
-  border-radius:8px;
-  background:linear-gradient(135deg,#FFF4DD,#E9F3FF);
-  display:flex;align-items:center;justify-content:center;
-  font-size:34px;
-}
-.ref-menu-info{min-width:0;cursor:pointer}
-.ref-menu-info .item-name{
-  color:var(--ref-text)!important;
-  font-size:11px!important;
-  font-weight:900!important;
-  line-height:1.25!important;
-  margin-bottom:3px!important;
-}
-.ref-menu-cat{
-  font-size:9px;
-  text-transform:uppercase;
-  color:#5A8FC5;
-  margin-bottom:4px;
-}
-.ref-menu-info .item-price{
-  font-size:14px!important;
-  color:#062E61!important;
-  font-weight:900!important;
-}
-.ref-add-btn{
-  height:38px;
-  border:none;
-  border-radius:7px;
-  background:linear-gradient(180deg,#0B82FF,#0768D8);
-  color:#fff;
-  font-weight:800;
-  cursor:pointer;
-}
-
-/* Current order */
-.order-panel{
-  width:auto!important;
-  max-width:none!important;
-  height:100%!important;
-  border-left:none!important;
-  background:#fff!important;
-  box-shadow:none!important;
-}
-.order-header{
-  min-height:64px!important;
-  background:#08386F!important;
-  padding:9px 14px!important;
-}
-.order-title{font-size:17px!important;text-transform:uppercase}
-.order-items-wrap{
-  min-height:180px!important;
-  background:#fff!important;
-}
-.order-items{
-  padding:8px 10px!important;
-  scrollbar-width:thin!important;
-  scrollbar-color:#9AAFC5 #EDF4FB!important;
-}
-.order-line{
-  padding:8px 0!important;
-  border-bottom:1px solid #DCE8F4!important;
-}
-.ol-name{font-size:11px!important}
-.ol-sub{font-size:10px!important}
-.order-footer{
-  background:#F4F8FD!important;
-  padding:9px 12px 12px!important;
-  max-height:56%!important;
-}
-.sum-row.total-row{
-  font-size:18px!important;
-  margin-bottom:6px!important;
-}
-.disc-section{padding:7px 8px!important;margin-bottom:7px!important}
-.dt-btn{min-height:34px!important;font-size:10px!important}
-.disc-heading{display:none!important}
-.kitchen-send-btn,.send-kitchen-btn{min-height:44px!important}
-
-/* Requested consistent scrollbar styling */
-.menu-grid::-webkit-scrollbar,
-.pos-category-sidebar::-webkit-scrollbar,
-.order-items::-webkit-scrollbar,
-.order-footer::-webkit-scrollbar,
-#inventory-view::-webkit-scrollbar,
-#grab-view::-webkit-scrollbar,
-#reports-view::-webkit-scrollbar,
-#analytics-view::-webkit-scrollbar,
-.inv-table::-webkit-scrollbar,
-.dlv-orders-card::-webkit-scrollbar{
-  width:9px;height:9px;
-}
-.menu-grid::-webkit-scrollbar-track,
-.pos-category-sidebar::-webkit-scrollbar-track,
-.order-items::-webkit-scrollbar-track,
-.order-footer::-webkit-scrollbar-track,
-#inventory-view::-webkit-scrollbar-track,
-#grab-view::-webkit-scrollbar-track,
-#reports-view::-webkit-scrollbar-track,
-#analytics-view::-webkit-scrollbar-track,
-.inv-table::-webkit-scrollbar-track,
-.dlv-orders-card::-webkit-scrollbar-track{
-  background:#EDF4FB;
-}
-.menu-grid::-webkit-scrollbar-thumb,
-.pos-category-sidebar::-webkit-scrollbar-thumb,
-.order-items::-webkit-scrollbar-thumb,
-.order-footer::-webkit-scrollbar-thumb,
-#inventory-view::-webkit-scrollbar-thumb,
-#grab-view::-webkit-scrollbar-thumb,
-#reports-view::-webkit-scrollbar-thumb,
-#analytics-view::-webkit-scrollbar-thumb,
-.inv-table::-webkit-scrollbar-thumb,
-.dlv-orders-card::-webkit-scrollbar-thumb{
-  background:#9BB1C7;border-radius:9px;
-}
-
-/* Other tabs share the same design language */
-#inventory-view,#grab-view,#reports-view,#analytics-view,#pos-menu-view{
-  background:#EAF4FF!important;
-}
-.inv-header h2,.analytics-head h2,#reports-view h2{
-  color:#08386F!important;
-}
-.inv-table,.dlv-orders-card,.stat-card,.dlv-stat,.analytics-card{
-  border-radius:8px!important;
-  box-shadow:0 1px 4px rgba(8,45,92,.08)!important;
-}
-
-/* Responsive: preserve reference layout on wide screens, stack intelligently */
-@media(max-width:1250px){
-  #pos-view{grid-template-columns:170px minmax(0,1fr) 390px!important}
-  .menu-grid{grid-template-columns:repeat(2,minmax(210px,1fr))!important}
-  .header{grid-template-columns:155px minmax(440px,1fr) auto!important}
-  .custom-logo-img{width:125px!important}
-  .nav-btn{min-width:90px!important}
-}
-@media(max-width:900px){
-  .header{
-    height:auto!important;
-    min-height:66px!important;
-    grid-template-columns:140px 1fr!important;
-  }
-  .header-nav{
-    grid-column:1/-1;
-    order:3;
-    justify-content:flex-start!important;
-  }
-  #pos-view{
-    height:auto!important;
-    min-height:calc(100dvh - 110px)!important;
-    display:flex!important;
-    flex-direction:column!important;
-    overflow:visible!important;
-  }
-  .pos-category-sidebar{display:none!important}
-  .menu-panel{width:100%!important;min-height:48dvh}
-  .menu-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr))!important;
-    max-height:48dvh;
-  }
-  .order-panel{
-    width:100%!important;
-    min-height:52dvh!important;
-  }
-  .order-footer{max-height:none!important}
-}
-@media(max-width:600px){
-  .header{grid-template-columns:100px 1fr!important;padding:6px 8px!important}
-  .custom-logo-img{width:92px!important;height:50px!important}
-  .header-right .clock,.header-right .db-status{display:none!important}
-  .nav-btn{min-width:82px!important;min-height:44px!important;font-size:10px!important}
-  .menu-grid{
-    grid-template-columns:1fr!important;
-    max-height:52dvh;
-  }
-  .ref-menu-card{
-    grid-template-columns:64px minmax(0,1fr) 68px!important;
-    min-height:82px!important;
-  }
-  .ref-menu-thumb{width:64px;height:64px;font-size:28px}
-  .order-items-wrap{min-height:220px!important}
-}
-</style>
-
-
-<style id="v102-critical-fixes">
-/* Critical tab visibility fix */
-.tab-view{display:none!important;}
-.tab-view.active{display:flex!important;}
-#pos-view{display:none!important;}
-#pos-view.active{display:grid!important;}
-
-/* Hide redundant POS category chip strip */
-.category-tabs{display:none!important;}
-
-/* Hide any leftover login decorative icon/art below form */
-.login-decor,
-.greek-decor,
-.house-decor,
-.triangle-decor,
-.login-art,
-.login-bottom-art,
-#login-screen svg.login-decor,
-#login-screen .login-footer-art{display:none!important;}
-
-/* Header Exit button */
-.exit-btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  min-height:40px;
-  padding:8px 16px;
-  border:1px solid rgba(255,255,255,.25);
-  border-radius:22px;
-  background:rgba(255,255,255,.08);
-  color:#fff;
-  font-family:'Nunito',sans-serif;
-  font-size:11px;
-  font-weight:800;
-  cursor:pointer;
-}
-.exit-btn:hover{background:#E05050;border-color:#E05050;}
-
-/* Sheets modal close button */
-.modal{position:relative;}
-.sheets-modal-close{
-  position:absolute;
-  top:12px;
-  right:14px;
-  width:34px;
-  height:34px;
-  border:none;
-  border-radius:50%;
-  background:#EEF5FD;
-  color:#0B2545;
-  font-size:24px;
-  line-height:1;
-  cursor:pointer;
-}
-.sheets-modal-close:hover{background:#D6E8FA;}
-
-/* Performance: disable costly animations/transforms */
-*{
-  scroll-behavior:auto!important;
-}
-.menu-item,
-.nav-btn,
-.pay-btn,
-.add-btn,
-.ref-add-btn,
-.login-btn,
-button{
-  transition:none!important;
-}
-.menu-item:hover,
-.pay-btn:hover,
-.ref-add-btn:hover,
-.nav-btn:hover{
-  transform:none!important;
-}
-.modal-overlay{backdrop-filter:none!important;}
-.toast{transition:none!important;}
-
-/* Keep inactive app tabs completely out of flow */
-#inventory-view:not(.active),
-#grab-view:not(.active),
-#reports-view:not(.active),
-#analytics-view:not(.active),
-#cashier-view:not(.active),
-#pos-menu-view:not(.active),
-#kitchen-view:not(.active){
-  display:none!important;
-}
-</style>
-
-<script id="v102-tab-fix">
-(function(){
-  function hardSwitchTab(tabId){
-    var views=document.querySelectorAll('.tab-view');
-    views.forEach(function(v){ v.classList.remove('active'); v.style.display='none'; });
-    var target=document.getElementById(tabId+'-view') || document.getElementById(tabId);
-    if(target){
-      target.classList.add('active');
-      if(target.id==='pos-view') target.style.display='grid';
-      else target.style.display='flex';
-    }
-    document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
-    document.querySelectorAll('[data-tab="'+tabId+'"], .nav-btn[onclick*="'+tabId+'"]').forEach(function(b){ b.classList.add('active'); });
-  }
-
-  var oldShowTab=window.showTab;
-  window.showTab=function(tabId){
-    try{
-      if(typeof oldShowTab==='function') oldShowTab(tabId);
-    }catch(e){}
-    requestAnimationFrame(function(){ hardSwitchTab(tabId); });
-  };
-
-  document.addEventListener('DOMContentLoaded', function(){
-    var active=document.querySelector('.tab-view.active');
-    if(active){
-      document.querySelectorAll('.tab-view').forEach(function(v){
-        if(v!==active) v.style.display='none';
-      });
-      active.style.display = active.id==='pos-view' ? 'grid' : 'flex';
-    }
-  });
-})();
-</script>
-
-
-<style id="v103-stability-performance">
-/* Keep the close button on the modal itself and always visible */
-#sheets-setup-modal .modal{position:relative!important;padding-top:26px!important;}
-#sheets-setup-modal .sheets-modal-close{
-  position:absolute!important;
-  top:10px!important;
-  right:10px!important;
-  width:34px!important;
-  height:34px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  z-index:5!important;
-  border:1px solid #D6E8FA!important;
-  border-radius:50%!important;
-  background:#fff!important;
-  color:#0B2545!important;
-  font-size:24px!important;
-  font-weight:700!important;
-  cursor:pointer!important;
-}
-
-/* No POS Menu navigation and no redundant category-chip row */
-.header-nav .nav-btn[onclick*="'pos-menu'"],
-.header-nav .nav-btn[onclick*='"pos-menu"'],
-.category-tabs,
-#cat-prev,
-#cat-next{display:none!important;}
-
-/* Faster UI: avoid costly transform/blur effects */
-.modal-overlay{backdrop-filter:none!important;}
-.menu-item,.nav-btn,.pay-btn,.ref-add-btn,.add-btn,.dt-btn,.qty-btn,.ia{
-  transition:none!important;
-}
-.menu-item:hover,.nav-btn:hover,.pay-btn:hover,.ref-add-btn:hover,.add-btn:hover{
-  transform:none!important;
-}
-.spinner{animation-duration:1.1s!important;}
-
-/* Ensure inactive views never overlap the selected tab */
-.tab-view{display:none!important;}
-.tab-view.active{display:flex!important;}
-#pos-view.active{display:grid!important;}
-#pos-view:not(.active){display:none!important;}
-</style>
-
 </head>
 <body>
 
@@ -2365,7 +1839,9 @@ button{
       <button class="login-btn" onclick="doLogin()">🔒 Login</button>
     </div>
 
-    
+    <div class="approved-login-decoration" aria-hidden="true">
+      
+      <div class="approved-landmark">⌂⌂⌂</div>
     </div>
     <div class="login-footer">GreekToGo POS &middot; BS EST.2014</div>
   </div>
@@ -2384,7 +1860,6 @@ button{
 <!-- Sheets Setup Modal -->
 <div class="modal-overlay" id="sheets-setup-modal">
   <div class="modal" style="width:460px;max-width:95vw;">
-    <button type="button" class="sheets-modal-close" onclick="closeModal('sheets-setup-modal')" aria-label="Close Google Sheets Connection">×</button>
     <h3>🔗 Google Sheets Connection</h3>
     <div class="sheets-setup-body">
       <div style="background:var(--blue-ghost);border:1.5px solid var(--blue-pale);border-radius:12px;padding:13px 14px;margin-bottom:14px;font-size:12px;line-height:1.55;color:var(--blue-mid);">
@@ -2409,6 +1884,7 @@ button{
   </div>
   <nav class="header-nav">
     <button class="nav-btn active"      onclick="showTab('pos',this)">🧾 POS</button>
+    <button class="nav-btn"             onclick="showTab('pos-menu',this)">🍽️ POS Menu</button>
     <button class="nav-btn"             onclick="showTab('inventory',this)">📦 Inventory</button>
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
@@ -2424,7 +1900,6 @@ button{
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
     <div class="cashier-badge" id="active-cashier">👤 No Cashier</div>
     <div class="clock" id="clock">--:--:--</div>
-    <button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button>
     <div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
       <div class="g-user-initials" id="g-user-initials">?</div>
       <span class="g-user-name" id="g-user-display">User</span>
@@ -2435,16 +1910,13 @@ button{
 
 <!-- ══════════ POS VIEW ══════════ -->
 <div id="pos-view" class="tab-view active">
-  <aside class="pos-category-sidebar" id="pos-category-sidebar" aria-label="Menu categories">
-    <div class="pcs-item active" data-cat="All" onclick="setCategory('All')"><span>🍴</span><b>All Items</b></div>
-    <div id="pos-category-sidebar-items"></div>
-  </aside>
   <div class="menu-panel">
     <div class="menu-search-bar">
       <input class="search-input" type="text" placeholder="🔍  Search menu items…" oninput="filterMenu(this.value)">
     </div>
     <div style="display:flex;align-items:center;background:#fff;border-bottom:1px solid var(--blue-pale);">
       <button id="cat-prev" onclick="scrollCats(-1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❮</button>
+      <div class="category-tabs" id="cat-tabs" style="flex:1;min-width:0;"></div>
       <button id="cat-next" onclick="scrollCats(1)" style="flex-shrink:0;width:32px;height:100%;border:none;background:#fff;font-size:16px;cursor:pointer;color:var(--blue-accent);padding:0;display:none;">❯</button>
     </div>
     <div class="menu-grid" id="menu-grid">
@@ -3315,169 +2787,25 @@ window.addEventListener('resize',function(){
   if(window.innerWidth>900) toggleMobileOrder(false);
 });
 
-
-/* ═══════════════════ FAST CORE DATA LOAD v10.3 ═══════════════════
-   Menu, Inventory and Cashiers load independently and in parallel.
-   This prevents a slow SalesLog request from blocking the POS screen.
-═══════════════════════════════════════════════════════════════════ */
-var _coreLoadPromise = null;
-var _menuLoadPromise = null;
-var _inventoryLoadPromise = null;
-var _cashierLoadPromise = null;
-
-function _mapPosMenuResponse(items){
-  return (items||[]).map(function(it,idx){
-    function gm(keys){
-      for(var k=0;k<keys.length;k++){
-        var v=it[keys[k]];
-        if(v!==undefined && v!==null && String(v).trim()!=='' && String(v)!=='undefined'){
-          return String(v).trim();
-        }
-      }
-      return '';
-    }
-    return {
-      id:idx+1,
-      pid:gm(['pid','PRODUCT ID','product_id']),
-      name:gm(['name','MENU NAME','menu_name','NAME','Item Name']),
-      cat:gm(['cat','category','CATEGORY','Category']),
-      price:parseFloat(gm(['price','PRICE','Price']))||0,
-      detail:gm(['detail','Detail/Variant','DETAIL','variant'])
-    };
-  }).filter(function(i){ return (i.name||'').trim() || (i.pid||'').trim(); });
-}
-
-async function loadPosMenuFromSheetsFast(force){
-  if(_menuLoadPromise && !force) return _menuLoadPromise;
-  _menuLoadPromise=(async function(){
-    var grid=document.getElementById('menu-grid');
-    if(grid && (!menuItems || !menuItems.length)){
-      grid.innerHTML='<div class="loading-grid"><div class="spinner"></div><p>Loading menu…</p></div>';
-    }
-    var res=await sheetsCall('getPosMenu');
-    if(res && Array.isArray(res.items)){
-      var loaded=_mapPosMenuResponse(res.items);
-      menuItems=loaded;
-      renderCatTabs();
-      renderMenu();
-      if(typeof renderPosMenu==='function') renderPosMenu();
-      return loaded.length>0;
-    }
-    if(grid && (!menuItems || !menuItems.length)){
-      grid.innerHTML='<div class="loading-grid"><p style="font-weight:700;color:#E05050">Menu could not be loaded.</p><p style="font-size:11px;margin-top:6px">Check Google Sheets connection and try again.</p></div>';
-    }
-    return false;
-  })();
-  try{return await _menuLoadPromise;}
-  finally{_menuLoadPromise=null;}
-}
-
-async function loadInventoryFromSheetsFast(force){
-  if(_inventoryLoadPromise && !force) return _inventoryLoadPromise;
-  _inventoryLoadPromise=(async function(){
-    var res=await sheetsCall('getInventory');
-    if(res && Array.isArray(res.items)){
-      _normalizeAndSaveInventory(res.items);
-      renderInventory();
-      return true;
-    }
-    renderInventory();
-    return false;
-  })();
-  try{return await _inventoryLoadPromise;}
-  finally{_inventoryLoadPromise=null;}
-}
-
-async function loadCashiersFromSheetsFast(force){
-  if(_cashierLoadPromise && !force) return _cashierLoadPromise;
-  _cashierLoadPromise=(async function(){
-    var res=await sheetsCall('getCashiers');
-    if(res && Array.isArray(res.items)){
-      cashiers=res.items.map(function(it){
-        return {
-          id:parseInt(it.id)||1,
-          name:it.name||'',
-          role:it.role||'Cashier',
-          color:it.color||'av-t',
-          active:it.active===true || it.active==='true'
-        };
-      });
-      renderCashierRoster();
-      renderShiftLog();
-      if(typeof renderLoginStaffGrid==='function') renderLoginStaffGrid();
-      return true;
-    }
-    renderCashierRoster();
-    return false;
-  })();
-  try{return await _cashierLoadPromise;}
-  finally{_cashierLoadPromise=null;}
-}
-
-async function loadCoreDataFast(force){
-  if(_coreLoadPromise && !force) return _coreLoadPromise;
-  _coreLoadPromise=Promise.allSettled([
-    loadPosMenuFromSheetsFast(!!force),
-    loadInventoryFromSheetsFast(!!force),
-    loadCashiersFromSheetsFast(!!force)
-  ]);
-  try{return await _coreLoadPromise;}
-  finally{_coreLoadPromise=null;}
-}
-
 function showTab(tab, btn) {
-  document.querySelectorAll('.tab-view').forEach(function(v){
-    v.classList.remove('active');
-    v.style.display='none';
-  });
-  document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
-
-  var view=document.getElementById(tab+'-view');
+  document.querySelectorAll('.tab-view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const view=document.getElementById(tab+'-view');
   if(!view) return;
-
   view.classList.add('active');
-  view.style.display=(tab==='pos')?'grid':'flex';
-
   if(btn){
     btn.classList.add('active');
-    if(btn.scrollIntoView) btn.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'});
+    if(btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
   }
-
-  if(tab==='pos'){
-    if(window.innerWidth<=900) toggleMobileOrder(false);
-    renderCatTabs();
-    if(menuItems && menuItems.length) renderMenu();
-    else loadPosMenuFromSheetsFast(false);
-  }
-
-  if(tab==='inventory'){
-    renderInventory();
-    if(!stockInventory || !stockInventory.length) loadInventoryFromSheetsFast(false);
-  }
-
-  if(tab==='grab'){
-    renderDeliveryStats('grab');
-    renderDeliveryTable('grab');
-    setNow('grab-dt');
-  }
-
-  if(tab==='cashier'){
-    renderCashierRoster();
-    renderShiftLog();
-    if(!cashiers || !cashiers.length) loadCashiersFromSheetsFast(false);
-  }
-
-  if(tab==='reports') refreshSalesFromSheets(true).then(renderReports);
-  if(tab==='analytics') refreshSalesFromSheets(true).then(renderAnalytics);
-
-  if(tab==='kitchen'){
-    refreshKitchen();
-    startKitchenAutoRefresh();
-    startKitchenClock();
-  }else{
-    stopKitchenAutoRefresh();
-    stopKitchenClock();
-  }
+  if(tab==='pos')       { if(window.innerWidth<=900) toggleMobileOrder(false); renderCatTabs(); renderMenu(); }
+  if(tab==='inventory')   renderInventory();
+  if(tab==='pos-menu')    renderPosMenu();
+  if(tab==='grab')      { renderDeliveryStats('grab'); renderDeliveryTable('grab'); setNow('grab-dt'); }
+  if(tab==='cashier')   { renderCashierRoster(); renderShiftLog(); }
+  if(tab==='reports')     refreshSalesFromSheets(true).then(renderReports);
+  if(tab==='analytics')   refreshSalesFromSheets(true).then(renderAnalytics);
+  if(tab==='kitchen')   { refreshKitchen(); startKitchenAutoRefresh(); startKitchenClock(); }
+  else                  { stopKitchenAutoRefresh(); stopKitchenClock(); }
 }
 
 /* ═══════════════════ SHEETS CONNECTION ENGINE ═══════════════════
@@ -3919,19 +3247,6 @@ function updateCatArrows(){
   if(btnR) btnR.style.display = hasOverflow ? 'flex' : 'none';
 }
 
-function categoryIcon(cat){
-  var c=String(cat||'').toLowerCase();
-  if(c.includes('pizza')||c.includes('pitsa')) return '◇';
-  if(c.includes('pilaf')||c.includes('rice')) return '🍚';
-  if(c.includes('spanak')) return '🌿';
-  if(c.includes('tyrop')) return '🥟';
-  if(c.includes('chicken')||c.includes('pork')||c.includes('souvlaki')||c.includes('kalamaki')) return '🍢';
-  if(c.includes('dessert')) return '🧁';
-  if(c.includes('beverage')||c.includes('drink')) return '🥤';
-  if(c.includes('salad')) return '🥗';
-  if(c.includes('tzatz')) return '🥣';
-  return '🍴';
-}
 function renderCatTabs(){
   // Filter out empty/undefined/null categories
   const cats=['All',...new Set(menuItems.map(i=>i.cat).filter(function(c){ return c && String(c).trim() !== '' && String(c) !== 'undefined'; }))];
@@ -3943,16 +3258,6 @@ function renderCatTabs(){
   setTimeout(updateCatArrows, 80);
   var strip2=document.getElementById('cat-tabs');
   if(strip2) strip2.onscroll = updateCatArrows;
-
-  var side = document.getElementById('pos-category-sidebar-items');
-  if(side){
-    side.innerHTML = cats.filter(function(c){return c!=='All';}).map(function(c){
-      var icon = categoryIcon(c);
-      return '<div class="pcs-item '+(c===currentCat?'active':'')+'" data-cat="'+c.replace(/"/g,'&quot;')+'" onclick="setCategory(\''+c.replace(/'/g,"\\'")+'\')"><span>'+icon+'</span><b>'+c+'</b></div>';
-    }).join('');
-    var all = document.querySelector('#pos-category-sidebar > .pcs-item[data-cat="All"]');
-    if(all) all.classList.toggle('active', currentCat==='All');
-  }
 }
 function setCategory(c){currentCat=c;renderCatTabs();renderMenu();}
 
@@ -3986,14 +3291,9 @@ function renderMenu(search=''){
     return;
   }
   grid.innerHTML=items.map(it=>`
-    <div class="menu-item ref-menu-card">
-      <div class="ref-menu-thumb">${categoryIcon(it.cat)}</div>
-      <div class="ref-menu-info" onclick="addToOrder(${it.id})">
-        <div class="item-name">${it.name}</div>
-        <div class="ref-menu-cat">${it.cat||''}</div>
-        <div class="item-price">₱${parseFloat(it.price).toFixed(2)}</div>
-      </div>
-      <button class="ref-add-btn" onclick="event.stopPropagation();addToOrder(${it.id})">＋ Add</button>
+    <div class="menu-item" onclick="addToOrder(${it.id})">
+      <div class="item-name">${it.name}</div>
+      <div class="item-price">₱${parseFloat(it.price).toFixed(2)}</div>
     </div>`).join("");
 }
 
@@ -5022,8 +4322,7 @@ function onSignedIn() {
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
   if(SHEETS_URL){
-    loadCoreDataFast(false);           // menu/inventory/cashiers immediately and in parallel
-    setTimeout(function(){ _initialSync(); }, 50); // sales/history in background
+    setTimeout(function(){ _initialSync(); }, 700);
   } else {
     setDBStatus('disconnected','No Sheet — Offline');
   }
@@ -5033,45 +4332,75 @@ function onSignedIn() {
 /* ── Single batched sync after login — runs ONCE per session ─────────────── */
 var _syncDone = false;
 async function _initialSync(){
-  if(_syncDone) return;
-  _syncDone=true;
+  if(_syncDone) return; _syncDone = true;
 
-  setDBStatus('loading','Connecting…');
 
-  // Core operational data should never wait for SalesLog.
-  // POS Menu, Inventory and Cashiers load in parallel immediately.
-  var corePromise=loadCoreDataFast(false);
 
-  // Verify connection separately.
-  var healthPromise=_call(SHEETS_URL,'salesStatus',{});
-
-  var health=await healthPromise;
+  setDBStatus('loading','Checking SalesLog…');
+  // Verify the authenticated database connection instead of relying on public ping.
+  var health = await _call(SHEETS_URL,'salesStatus',{});
   if(!health || !health.ok){
-    // Keep any successfully loaded menu/inventory/cashier data usable.
     _syncDone=false;
     _sheetsOnline=false;
-    setDBStatus('disconnected','Google Sheets connection issue');
-    await corePromise;
+    setDBStatus('disconnected','SalesLog connection failed');
+    showToast('⚠️ SalesLog connection failed: '+((health&&(health.message||health.error))||_lastCallError||'Unknown error'),'warning');
     return;
   }
 
-  _sheetsOnline=true;
+  // Connected — mark online and fetch all data
+  _sheetsOnline = true;
+  setDBStatus('loading','Syncing…');
+  _syncErrors = []; _saveSyncErrors(); _updateSyncBadge(); // Clear old errors on successful reconnect
+  showToast('✅ Connected to Google Sheets. Loading data…','success');
+
+  function _g(it,keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&v!==''&&String(v)!=='undefined') return v; } return ''; }
+
+  // Step 2: Inventory
+  var invRes = await _call(SHEETS_URL,'getInventory',{});
+  if(invRes && invRes.items && invRes.items.length){
+    _normalizeAndSaveInventory(invRes.items);
+    renderInventory();
+    showToast('✅ Inventory loaded: '+stockInventory.length+' items','success');
+  }
+
+  // Step 3: POS Menu
+  var menuRes = await _call(SHEETS_URL,'getPosMenu',{});
+  if(menuRes && menuRes.items && menuRes.items.length){
+    var loaded = menuRes.items.map(function(it,idx){
+      function gm(keys){ for(var k=0;k<keys.length;k++){ var v=it[keys[k]]; if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v)!=='undefined') return String(v).trim(); } return ''; }
+      return { id:idx+1,
+        pid:    gm(['pid','PRODUCT ID','product_id']),
+        name:   gm(['name','MENU NAME','menu_name','NAME','Item Name']),
+        cat:    gm(['cat','category','CATEGORY','Category']),
+        price:  parseFloat(gm(['price','PRICE','Price']))||0,
+        detail: gm(['detail','Detail/Variant','DETAIL','variant'])
+      };
+    }).filter(function(i){ return (i.name||'').trim()||(i.pid||'').trim(); });
+    if(loaded.length){ menuItems=loaded; _saveMenuLocally(); renderCatTabs(); renderMenu(); }
+  }
+
+  // Step 4: Cashiers
+  var cashRes = await _call(SHEETS_URL,'getCashiers',{});
+  if(cashRes && cashRes.items && cashRes.items.length){
+    cashiers = cashRes.items.map(function(it){
+      return { id:parseInt(it.id)||1, name:it.name||'', role:it.role||'Cashier',
+        color:it.color||'av-t', active:it.active===true||it.active==='true' };
+    });
+    renderCashierRoster();
+  }
+
+  // Step 5: Shared sales history for cross-device reports and analytics
+  var salesOK = await refreshSalesFromSheets(true);
+  if(!salesOK){
+    _syncDone=false;
+    setDBStatus('disconnected','SalesLog sync failed');
+    showToast('⚠️ Connected, but SalesLog could not be loaded. '+(_lastCallError||''),'warning');
+    return;
+  }
+
   setDBStatus('connected','Google Sheets ✓');
-  _syncErrors=[];
-  _saveSyncErrors();
-  _updateSyncBadge();
-
-  await corePromise;
-
-  // Reports/analytics are non-critical for taking orders, so load last.
-  refreshSalesFromSheets(true).then(function(ok){
-    if(ok){
-      if(typeof renderReports==='function') renderReports();
-      if(typeof renderAnalytics==='function') renderAnalytics();
-    }
-  }).catch(function(){});
-
   _startHeartbeat();
+  showToast('✅ Google Sheets connected — SalesLog synced!','success');
 }
 
 function continueOffline() {
