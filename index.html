@@ -1867,6 +1867,15 @@ function _jsonp(fullUrl){
   });
 }
 
+
+async function _jsonpAction(url,action,data){
+  var payload=Object.assign({},data||{});
+  if(_authSession && action!=='login' && action!=='ping') payload.sessionToken=_authSession;
+  var full=url+(url.indexOf('?')>-1?'&':'?')+'action='+encodeURIComponent(action)
+    +'&payload='+encodeURIComponent(JSON.stringify(payload));
+  return await _jsonp(full);
+}
+
 async function _fetchTransport(fullUrl){
   var ctrl=new AbortController();
   var timer=setTimeout(function(){ ctrl.abort(); },CALL_TIMEOUT_MS);
@@ -1916,10 +1925,34 @@ async function _call(url, action, data){
     }
   }
 
+  // Keep login POST-only so the PIN never appears in a URL.
+  if(action==='login'){
+    try{ return await _postTransport(url,action,data||{}); }
+    catch(loginErr){
+      _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
+      return null;
+    }
+  }
+
+  // Protected calls: normal POST first. If Apps Script's redirect/CORS path is
+  // blocked by the browser, retry through the authenticated JSONP bridge.
   try{
-    return await _postTransport(url,action,data||{});
+    var postResult=await _postTransport(url,action,data||{});
+    if(postResult!==null && postResult!==undefined) return postResult;
   }catch(postErr){
-    _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(postErr.message||postErr));
+    try{
+      var jsonpResult=await _jsonpAction(url,action,data||{});
+      if(jsonpResult!==null && jsonpResult!==undefined) return jsonpResult;
+      throw new Error('Empty JSONP response.');
+    }catch(jsonpErr2){
+      _setCallError(String(action||'request').toUpperCase()+' FAILED — POST: '+(postErr.message||postErr)+' | JSONP: '+(jsonpErr2.message||jsonpErr2));
+      return null;
+    }
+  }
+
+  try{ return await _jsonpAction(url,action,data||{}); }
+  catch(lastErr){
+    _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(lastErr.message||lastErr));
     return null;
   }
 }
@@ -1945,7 +1978,8 @@ async function sheetsCall(action, body){
     // Queue write ops for later; don't trigger reconnect loop during initial sync
     var writeOps=['saveInventory','updateStock','logSale','logShift','savePosMenu','saveCashiers','savePosMenu'];
     if(writeOps.indexOf(action)>-1) _enqueue(action, body||{});
-    if(_sheetsOnline){ _sheetsOnline=false; setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect(); }
+    if(_sheetsOnline){ _sheetsOnline=false; setDBStatus('disconnected','Connection lost'); _stopHeartbeat(); }
+    if(!_isReconnecting) _scheduleReconnect();
   }
   return result;
 }
@@ -3213,6 +3247,7 @@ function showSheetsSetupOnLogin() {
 
 function onSignedIn() {
   document.getElementById('login-screen').style.display = 'none';
+  if(googleUser && googleUser.name) activeCashier = googleUser.name;
   var chip = document.getElementById('g-user-chip');
   chip.style.display = 'flex';
   var initials = googleUser.name.split(' ').map(function(w){return w[0];}).join("").slice(0,2).toUpperCase();
@@ -3291,11 +3326,18 @@ async function _initialSync(){
   }
 
   // Step 5: Shared sales history for cross-device reports and analytics
-  await refreshSalesFromSheets(true);
+  var salesOK = await refreshSalesFromSheets(true);
+  if(!salesOK){
+    _syncDone=false;
+    setDBStatus('disconnected','SalesLog sync failed');
+    showToast('⚠️ Connected, but SalesLog could not be loaded. '+(_lastCallError||''),'warning');
+    _scheduleReconnect();
+    return;
+  }
 
   setDBStatus('connected','Google Sheets ✓');
   _startHeartbeat();
-  showToast('✅ Google Sheets connected!','success');
+  showToast('✅ Google Sheets connected — SalesLog synced!','success');
 }
 
 function continueOffline() {
@@ -3969,16 +4011,23 @@ function _normaliseSheetSale(s,index){
   };
 }
 
+var _salesRefreshBusy=false;
 async function refreshSalesFromSheets(silent){
   if(!SHEETS_URL||!_authSession)return false;
-  var res=await sheetsCall('getSales',{limit:5000});
-  if(!res||!res.ok||!Array.isArray(res.items)){
-    if(!silent)showToast('Sales could not be refreshed from Google Sheets.','error');
-    return false;
+  if(_salesRefreshBusy)return true;
+  _salesRefreshBusy=true;
+  try{
+    var res=await sheetsCall('getSales',{limit:5000});
+    if(!res||!res.ok||!Array.isArray(res.items)){
+      if(!silent)showToast('SalesLog refresh failed: '+(_lastCallError||((res&&res.error)||'Unknown error')),'error');
+      return false;
+    }
+    salesLog=res.items.map(_normaliseSheetSale).filter(function(s){return !!s.dateKey;});
+    if(!silent)showToast('✅ '+salesLog.length+' sale(s) loaded from Google Sheets.','success');
+    return true;
+  } finally {
+    _salesRefreshBusy=false;
   }
-  salesLog=res.items.map(_normaliseSheetSale).filter(function(s){return !!s.dateKey;});
-  if(!silent)showToast('✅ '+salesLog.length+' sale(s) loaded from Google Sheets.','success');
-  return true;
 }
 
 async function _eodReadyForNewSale(showMessage){
@@ -4004,47 +4053,32 @@ async function _eodReadyForNewSale(showMessage){
 }
 
 setInterval(function(){
-  if(_authSession&&document.visibilityState==='visible')refreshSalesFromSheets(true);
-},20000);
+  if(_authSession&&_sheetsOnline&&document.visibilityState==='visible')refreshSalesFromSheets(true);
+},60000);
 document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='visible'&&_authSession)refreshSalesFromSheets(true);
+  if(document.visibilityState==='visible'&&_authSession&&_sheetsOnline)refreshSalesFromSheets(true);
 });
 
 /* ── Upgrade finalizePayment to include table, notes, stock deduct ── */
 var _origFinalizePayment = finalizePayment;
 finalizePayment = async function(method, gcashNum, gcashRef){
+  // Final transaction gate: every payment method must pass the EOD check here.
+  if(!(await _eodReadyForNewSale(true))) return false;
+
   var tableEl = document.getElementById('table-num');
   var notesEl = document.getElementById('order-notes');
-  var tableNum = tableEl ? tableEl.value : '';
-  var notes    = notesEl ? notesEl.value : '';
 
-  // Add to local sales log
-  var totals = getTotals();
-  var saleRecord = {
-    id:        Date.now(),
-    orderNum:  String(orderCount).padStart(4,'0'),
-    time:      new Date().toLocaleString('en-PH'),
-    date:      new Date().toLocaleDateString('en-PH'),
-    hour:      new Date().getHours(),
-    table:     tableNum||'Walk-in',
-    customer:  (document.getElementById('cust-name')||{}).value||'Walk-in',
-    notes:     notes,
-    cashier:   typeof activeCashier!=='undefined'?activeCashier:'—',
-    method:    method,
-    items:     order.map(function(o){ return {name:o.name, qty:o.qty, price:o.price, cat:o.cat||''}; }),
-    subtotal:  totals.sub,
-    discount:  totals.da,
-    vat:       0,
-    total:     totals.tot
-  };
-  _addToSalesLog(saleRecord);
-
-  // Call original (handles receipt modal, order count, etc.)
+  // The original function is the only function that writes the sale.
+  // Do not create a second local SalesLog record here.
   await _origFinalizePayment.call(this, method, gcashNum, gcashRef);
 
-  // Clear table and notes only after the shared sale has captured them.
+  // Pull the authoritative SalesLog back from Google Sheets after the write.
+  await refreshSalesFromSheets(true);
+  if(document.getElementById('reports-view') && document.getElementById('reports-view').classList.contains('active')) renderReports();
+
   if(tableEl) tableEl.value='';
   if(notesEl) notesEl.value='';
+  return true;
 };
 
 /* ── Table # + Notes in receipt ──────────────────────────── */
