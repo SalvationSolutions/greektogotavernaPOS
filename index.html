@@ -1806,53 +1806,122 @@ function _enqueue(action,body){
   _qSave(q);
 }
 
-// ── JSONP transport (primary — works through Brave Shields and mobile browsers) ──
+// ── Google Apps Script transport ─────────────────────────────────────────────
+// GitHub Pages talks to Apps Script through two transports:
+//   • ping: JSONP first (reliable across redirects), fetch fallback
+//   • protected actions: POST JSON (credentials/session token never placed in URL)
+var _lastCallError = '';
+
+function _setCallError(msg){
+  _lastCallError = String(msg || 'Unknown connection error');
+  try{ console.warn('[G2G Sheets]', _lastCallError); }catch(e){}
+}
+
 function _jsonp(fullUrl){
   return new Promise(function(resolve,reject){
-    var cb='_gtgcb'+Date.now()+'_'+Math.floor(Math.random()*1e6);
+    var cb='_gtgcb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
     var script=document.createElement('script');
-    var done=false;
-    var timer=setTimeout(function(){ if(done) return; done=true; cleanup(); reject(new Error('timeout')); }, CALL_TIMEOUT_MS);
-    function cleanup(){ delete window[cb]; if(script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
-    window[cb]=function(data){ if(done) return; done=true; cleanup(); resolve(data); };
-    script.onerror=function(){ if(done) return; done=true; cleanup(); reject(new Error('script load failed')); };
-    script.src=fullUrl+(fullUrl.indexOf('?')>-1?'&':'?')+'callback='+cb;
+    var finished=false;
+    var timer=setTimeout(function(){
+      if(finished) return;
+      finished=true; cleanup();
+      reject(new Error('Google Apps Script JSONP timed out.'));
+    }, CALL_TIMEOUT_MS);
+
+    function cleanup(){
+      try{ delete window[cb]; }catch(e){ window[cb]=undefined; }
+      if(script && script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timer);
+    }
+
+    window[cb]=function(data){
+      if(finished) return;
+      finished=true; cleanup(); resolve(data);
+    };
+
+    script.onerror=function(){
+      if(finished) return;
+      finished=true; cleanup();
+      reject(new Error('Google Apps Script JSONP script failed to load.'));
+    };
+
+    script.onload=function(){
+      // A valid JSONP response invokes window[cb] before onload completes.
+      // If it did not, keep the timeout alive briefly because some browsers
+      // dispatch load before the callback finishes after the Apps Script redirect.
+      if(!finished){
+        setTimeout(function(){
+          if(!finished){
+            finished=true; cleanup();
+            reject(new Error('Apps Script loaded but did not return the JSONP callback. Redeploy the v8.2 backend.'));
+          }
+        },700);
+      }
+    };
+
+    var sep=fullUrl.indexOf('?')>-1?'&':'?';
+    script.src=fullUrl+sep+'callback='+encodeURIComponent(cb)+'&_gtgcbust='+Date.now();
+    script.async=true;
+    script.referrerPolicy='no-referrer';
     document.head.appendChild(script);
   });
 }
 
-// ── Fetch transport (fallback) ────────────────────────────────────────────────
-function _fetchTransport(fullUrl){
-  return new Promise(function(resolve,reject){
-    var ctrl=new AbortController();
-    var timer=setTimeout(function(){ ctrl.abort(); },CALL_TIMEOUT_MS);
-    fetch(fullUrl,{method:'GET',signal:ctrl.signal})
-      .then(function(r){ clearTimeout(timer); return r.text(); })
-      .then(function(t){ resolve(JSON.parse(t)); })
-      .catch(function(e){ clearTimeout(timer); reject(e); });
-  });
+async function _fetchTransport(fullUrl){
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ ctrl.abort(); },CALL_TIMEOUT_MS);
+  try{
+    var r=await fetch(fullUrl,{method:'GET',signal:ctrl.signal,redirect:'follow',cache:'no-store',credentials:'omit'});
+    var t=await r.text();
+    if(!r.ok) throw new Error('HTTP '+r.status+' '+r.statusText);
+    try{ return JSON.parse(t); }
+    catch(e){ throw new Error('Apps Script returned non-JSON: '+String(t||'').slice(0,120)); }
+  } finally { clearTimeout(timer); }
 }
 
-// Protected calls use POST so credentials and session tokens never appear in URLs.
-function _postTransport(url,action,data){
+async function _postTransport(url,action,data){
   var payload=Object.assign({action:action},data||{});
   if(_authSession && action!=='login' && action!=='ping') payload.sessionToken=_authSession;
   var ctrl=new AbortController();
   var timer=setTimeout(function(){ctrl.abort();},CALL_TIMEOUT_MS);
-  return fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify(payload),redirect:'follow',cache:'no-store',signal:ctrl.signal})
-    .then(function(r){clearTimeout(timer);return r.text();})
-    .then(function(t){return JSON.parse(t);})
-    .catch(function(e){clearTimeout(timer);throw e;});
+  try{
+    var r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload),redirect:'follow',cache:'no-store',credentials:'omit',signal:ctrl.signal});
+    var t=await r.text();
+    if(!r.ok) throw new Error('HTTP '+r.status+' '+r.statusText);
+    try{ return JSON.parse(t); }
+    catch(e){ throw new Error('Apps Script returned non-JSON: '+String(t||'').slice(0,120)); }
+  } finally { clearTimeout(timer); }
 }
 
-// ── Single call — JSONP first, fetch fallback ─────────────────────────────────
 async function _call(url, action, data){
+  _lastCallError='';
+  if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
+
   if(action==='ping'){
-    var fullUrl=url+'?action=ping';
-    try{return await _jsonp(fullUrl);}catch(e){try{return await _fetchTransport(fullUrl);}catch(e2){return null;}}
+    var fullUrl=url+(url.indexOf('?')>-1?'&':'?')+'action=ping';
+    try{
+      var jp=await _jsonp(fullUrl);
+      if(jp && jp.ok===true) return jp;
+      throw new Error('Ping returned an invalid JSONP response.');
+    }catch(jsonpErr){
+      try{
+        var fr=await _fetchTransport(fullUrl+'&_gtg='+Date.now());
+        if(fr && fr.ok===true) return fr;
+        throw new Error('Ping returned JSON but ok=true was missing.');
+      }catch(fetchErr){
+        _setCallError('PING FAILED — JSONP: '+(jsonpErr.message||jsonpErr)+' | Fetch: '+(fetchErr.message||fetchErr));
+        return null;
+      }
+    }
   }
-  try{return await _postTransport(url,action,data||{});}catch(e3){return null;}
+
+  try{
+    return await _postTransport(url,action,data||{});
+  }catch(postErr){
+    _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(postErr.message||postErr));
+    return null;
+  }
 }
 
 // ── Main sheetsCall ───────────────────────────────────────────────────────────
@@ -3313,8 +3382,8 @@ async function connectSheets() {
   try {
     var data = await _call(url, 'ping', {});
 
-    if (data !== null) {
-      statusEl.textContent = '✅ Connected successfully!';
+    if (data && data.ok === true) {
+      statusEl.textContent = '✅ Connected — backend ' + (data.v || 'online');
       statusEl.style.color = '#27AE60';
       _onReconnected();
       _syncDone = false;
@@ -3322,7 +3391,7 @@ async function connectSheets() {
       await _initialSync();
       showToast('Google Sheets connected!','success');
     } else {
-      statusEl.textContent = '❌ Unexpected response shape. Check your Apps Script code matches the latest version.';
+      statusEl.textContent = '❌ ' + (_lastCallError || 'Apps Script ping failed.');
       statusEl.style.color = '#E05050';
     }
   } catch(e) {
