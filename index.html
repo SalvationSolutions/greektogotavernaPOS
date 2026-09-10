@@ -1110,28 +1110,50 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 <!-- PRINTER SETTINGS MODAL -->
 <div class="modal-overlay" id="printer-settings-modal" onclick="if(event.target===this)closeModal('printer-settings-modal')">
-  <div class="modal" style="max-width:460px;width:95vw">
-    <h3>🖨️ Printer Settings</h3>
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:800;color:#0B2545;margin-bottom:6px;text-transform:uppercase">Receipt Printer (XP-N160II WiFi)</div>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
-        <input type="text" id="ps-receipt-ip" placeholder="e.g. 192.168.1.105" style="border:2px solid #e0e8f5;border-radius:8px;padding:10px 12px;font-size:13px;width:100%">
-        <button onclick="testPrinterConnection('receipt')" style="background:#3A6BC5;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Test</button>
+  <div class="modal" style="max-width:520px;width:95vw">
+    <h3>🖨️ Printer Settings — XP-58IID / RawBT</h3>
+
+    <div style="margin-bottom:16px;background:#f7faff;border:1px solid #dbe7f5;border-radius:12px;padding:13px">
+      <div style="font-size:12px;font-weight:800;color:#0B2545;margin-bottom:8px;text-transform:uppercase">Receipt Printer</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <button id="rp-rawbt-btn" onclick="setReceiptPrinterType('rawbt')" style="padding:10px;border-radius:8px;border:2px solid #e0e8f5;font-size:12px;font-weight:700;cursor:pointer;background:#fff">📱 RawBT / XP-58IID</button>
+        <button id="rp-browser-btn" onclick="setReceiptPrinterType('browser')" style="padding:10px;border-radius:8px;border:2px solid #e0e8f5;font-size:12px;font-weight:700;cursor:pointer;background:#fff">🖨 Browser Print</button>
       </div>
-      <div style="font-size:11px;color:#888;margin-top:4px">Enter IP from self-test print page. Leave blank to use browser print.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#506987">Paper Width
+          <select id="ps-rawbt-paper" style="margin-top:4px;width:100%;padding:9px;border:2px solid #e0e8f5;border-radius:8px">
+            <option value="58">58 mm</option>
+          </select>
+        </label>
+        <label style="font-size:11px;font-weight:700;color:#506987">Characters / Line
+          <select id="ps-rawbt-chars" style="margin-top:4px;width:100%;padding:9px;border:2px solid #e0e8f5;border-radius:8px">
+            <option value="32">32 (Font A)</option>
+            <option value="42">42 (Font B)</option>
+          </select>
+        </label>
+      </div>
+      <div style="font-size:11px;color:#667;margin-bottom:10px">XP-58IID preset: 58 mm thermal paper, ESC/POS, RawBT on Android.</div>
+      <button onclick="testRawBTPrinter()" style="background:#3A6BC5;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;width:100%">🧪 Test RawBT / XP-58IID</button>
+      <div style="display:flex;align-items:center;gap:9px;margin-top:10px">
+        <input type="checkbox" id="ps-auto-receipt" style="width:18px;height:18px">
+        <label for="ps-auto-receipt" style="font-size:12px;font-weight:700;color:#0B2545">Automatically open RawBT after a successful payment</label>
+      </div>
     </div>
+
     <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:800;color:#0B2545;margin-bottom:6px;text-transform:uppercase">Kitchen Printer (XP-58IID)</div>
+      <div style="font-size:12px;font-weight:800;color:#0B2545;margin-bottom:6px;text-transform:uppercase">Kitchen Printer</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <button id="kp-rawbt-btn" onclick="setKitchenType('rawbt')" style="padding:10px;border-radius:8px;border:2px solid #e0e8f5;font-size:12px;font-weight:700;cursor:pointer;background:#fff">📱 RawBT (Android)</button>
-        <button id="kp-wifi-btn"  onclick="setKitchenType('wifi')"  style="padding:10px;border-radius:8px;border:2px solid #e0e8f5;font-size:12px;font-weight:700;cursor:pointer;background:#fff">📶 WiFi (IP)</button>
+        <button id="kp-wifi-btn" onclick="setKitchenType('wifi')" style="padding:10px;border-radius:8px;border:2px solid #e0e8f5;font-size:12px;font-weight:700;cursor:pointer;background:#fff">📶 WiFi (IP)</button>
       </div>
       <input type="text" id="ps-kitchen-ip" placeholder="Kitchen printer IP (if WiFi)" style="border:2px solid #e0e8f5;border-radius:8px;padding:10px 12px;font-size:13px;width:100%;display:none">
     </div>
+
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;background:#f0f4fe;border-radius:10px;padding:12px">
       <input type="checkbox" id="ps-auto-kitchen" style="width:18px;height:18px;cursor:pointer">
       <label for="ps-auto-kitchen" style="font-size:13px;font-weight:700;cursor:pointer;color:#0B2545">Auto-print kitchen ticket when order is sent to kitchen</label>
     </div>
+
     <div class="modal-actions">
       <button class="m-save" onclick="savePrinterSettings()">💾 Save Settings</button>
       <button class="m-cancel" onclick="closeModal('printer-settings-modal')">Cancel</button>
@@ -1620,12 +1642,15 @@ var _printerConfig = (function(){
 })();
 function _savePrinterConfig(){ localStorage.setItem('gtg_printer_config', JSON.stringify(_printerConfig)); }
 
-// Receipt printer (XP-N160II WiFi) — IP on local network
+// Receipt printer: XP-58IID via RawBT on Android, or browser print.
+var RECEIPT_PRINTER_TYPE = _printerConfig.receiptType || 'rawbt';
 var RECEIPT_PRINTER_IP   = _printerConfig.receiptIP   || '';
-// Kitchen printer type: 'rawbt' (XP-58IID via RawBT on Android) or 'wifi' (WiFi printer)
-var KITCHEN_PRINTER_TYPE = _printerConfig.kitchenType  || 'rawbt';
-var KITCHEN_PRINTER_IP   = _printerConfig.kitchenIP    || '';
-// Auto-print kitchen ticket when order is sent
+var RAWBT_PAPER_MM       = Number(_printerConfig.rawbtPaperMM || 58);
+var RAWBT_CHARS_PER_LINE = Number(_printerConfig.rawbtChars || 32);
+var AUTO_RECEIPT_PRINT   = _printerConfig.autoReceipt === true;
+// Kitchen printer type: 'rawbt' (XP-58IID via RawBT on Android) or 'wifi'
+var KITCHEN_PRINTER_TYPE = _printerConfig.kitchenType || 'rawbt';
+var KITCHEN_PRINTER_IP   = _printerConfig.kitchenIP   || '';
 var AUTO_KITCHEN_PRINT   = _printerConfig.autoKitchen !== false;
 // Sync to localStorage so existing connect-modal logic still works
 try{ localStorage.setItem('greektogo_sheets_url', SHEETS_URL); }catch(e){}
@@ -1846,17 +1871,8 @@ function _jsonp(fullUrl){
     };
 
     script.onload=function(){
-      // A valid JSONP response invokes window[cb] before onload completes.
-      // If it did not, keep the timeout alive briefly because some browsers
-      // dispatch load before the callback finishes after the Apps Script redirect.
-      if(!finished){
-        setTimeout(function(){
-          if(!finished){
-            finished=true; cleanup();
-            reject(new Error('Apps Script loaded but did not return the JSONP callback. Redeploy the v8.2 backend.'));
-          }
-        },700);
-      }
+      // Apps Script can redirect before the JSONP callback executes.
+      // Do not fail on load; allow the callback or normal timeout to decide.
     };
 
     var sep=fullUrl.indexOf('?')>-1?'&':'?';
@@ -1907,52 +1923,56 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  if(action==='ping'){
-    var fullUrl=url+(url.indexOf('?')>-1?'&':'?')+'action=ping';
-    try{
-      var jp=await _jsonp(fullUrl);
-      if(jp && jp.ok===true) return jp;
-      throw new Error('Ping returned an invalid JSONP response.');
-    }catch(jsonpErr){
-      try{
-        var fr=await _fetchTransport(fullUrl+'&_gtg='+Date.now());
-        if(fr && fr.ok===true) return fr;
-        throw new Error('Ping returned JSON but ok=true was missing.');
-      }catch(fetchErr){
-        _setCallError('PING FAILED — JSONP: '+(jsonpErr.message||jsonpErr)+' | Fetch: '+(fetchErr.message||fetchErr));
-        return null;
-      }
-    }
-  }
-
-  // Keep login POST-only so the PIN never appears in a URL.
+  // Login stays POST-only so the PIN is never placed in the URL.
   if(action==='login'){
-    try{ return await _postTransport(url,action,data||{}); }
-    catch(loginErr){
+    try{
+      return await _postTransport(url,action,data||{});
+    }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
     }
   }
 
-  // Protected calls: normal POST first. If Apps Script's redirect/CORS path is
-  // blocked by the browser, retry through the authenticated JSONP bridge.
-  try{
-    var postResult=await _postTransport(url,action,data||{});
-    if(postResult!==null && postResult!==undefined) return postResult;
-  }catch(postErr){
+  // Apps Script web apps can redirect POST requests in a way browsers/CORS dislike.
+  // Use the authenticated JSONP bridge first for compact POS actions, especially
+  // SalesLog reads/writes, then fall back to POST.
+  var jsonpFirst=[
+    'ping','whoAmI','getCashiers','getInventory','getPosMenu',
+    'getSales','salesStatus','logSale','getEOD','logEOD',
+    'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder','logout'
+  ].indexOf(action)>=0;
+
+  if(jsonpFirst){
     try{
-      var jsonpResult=await _jsonpAction(url,action,data||{});
-      if(jsonpResult!==null && jsonpResult!==undefined) return jsonpResult;
+      var jr;
+      if(action==='ping'){
+        var fullUrl=url+(url.indexOf('?')>-1?'&':'?')+'action=ping';
+        jr=await _jsonp(fullUrl);
+      }else{
+        jr=await _jsonpAction(url,action,data||{});
+      }
+      if(jr!==null && jr!==undefined) return jr;
       throw new Error('Empty JSONP response.');
-    }catch(jsonpErr2){
-      _setCallError(String(action||'request').toUpperCase()+' FAILED — POST: '+(postErr.message||postErr)+' | JSONP: '+(jsonpErr2.message||jsonpErr2));
-      return null;
+    }catch(jsonpErr){
+      try{
+        var pr=await _postTransport(url,action,data||{});
+        if(pr!==null && pr!==undefined) return pr;
+        throw new Error('Empty POST response.');
+      }catch(postErr){
+        _setCallError(String(action||'request').toUpperCase()+
+          ' FAILED — JSONP: '+(jsonpErr.message||jsonpErr)+
+          ' | POST: '+(postErr.message||postErr));
+        return null;
+      }
     }
   }
 
-  try{ return await _jsonpAction(url,action,data||{}); }
-  catch(lastErr){
-    _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(lastErr.message||lastErr));
+  try{
+    var postResult=await _postTransport(url,action,data||{});
+    if(postResult!==null && postResult!==undefined) return postResult;
+    throw new Error('Empty POST response.');
+  }catch(postErr2){
+    _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(postErr2.message||postErr2));
     return null;
   }
 }
@@ -2063,7 +2083,7 @@ async function loadInventoryFromSheets(){
   } else if(res && res.items && res.items.length===0){
     renderInventory(); // Sheet is empty — show empty state, don't push
   } else {
-    if(SHEETS_URL){ setDBStatus('disconnected','Reconnecting…'); _scheduleReconnect(); }
+    if(SHEETS_URL){ setDBStatus('disconnected','Inventory sync failed'); }
     else { setDBStatus('disconnected','No Sheet — Offline'); }
   }
 }
@@ -2184,12 +2204,14 @@ async function pushSaleToSheets(s){
     return false;
   }
   var verify=await _call(SHEETS_URL,'salesStatus',{});
-  if(verify && verify.ok===true){
+  var reload=await _call(SHEETS_URL,'getSales',{limit:5000});
+  if(verify && verify.ok===true && reload && reload.ok===true && Array.isArray(reload.items)){
+    salesLog=reload.items.map(_normaliseSheetSale).filter(function(x){return !!x.dateKey;});
     _sheetsOnline=true;
     setDBStatus('connected','Google Sheets ✓');
-    showToast('✅ Sale saved to SalesLog'+(res.row?' (row '+res.row+')':'')+' — '+Number(verify.rowCount||0)+' total sale(s)','success');
+    showToast('✅ Sale captured in SalesLog'+(res.row?' (row '+res.row+')':'')+' — '+Number(verify.rowCount||salesLog.length)+' total sale(s)','success');
   }else{
-    showToast('✅ Sale write confirmed, but SalesLog verification could not be read.','warning');
+    showToast('⚠️ Sale write returned OK, but SalesLog read-back failed: '+(_lastCallError||'verification error'),'warning');
   }
   return true;
 }
@@ -2755,24 +2777,19 @@ async function finalizePayment(method,gcashNum,gcashRef){
   document.getElementById('r-ordnum').textContent='#'+ordNum;
   orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
   openModal('receipt-modal'); renderMenu();
+  if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
+    setTimeout(function(){ try{ printViaRawBT(); }catch(e){} },300);
+  }
   return true;
 }
 function newOrder(){
   clearOrder();
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
 var _rptDateInit=document.getElementById('rpt-date'); if(_rptDateInit&&!_rptDateInit.value)_rptDateInit.value=_todayKey();
-  // Keep the hardcoded Google Sheets connection active between orders.
-  if(_sheetsOnline){
-    setDBStatus('connected','Google Sheets ✓');
-  } else {
-    setDBStatus('loading','Connecting to Google Sheets…');
-    setTimeout(function(){
-      _call(SHEETS_URL,'ping',{}).then(function(r){
-        if(r!==null){ _onReconnected(); }
-        else { setDBStatus('disconnected','Offline — retrying'); _scheduleReconnect(); }
-      });
-    }, 1200);
-  }
+  // Keep the current authenticated connection state between orders.
+  // Do not start a new ping/reconnect cycle after each transaction.
+  if(_sheetsOnline) setDBStatus('connected','Google Sheets ✓');
+  else setDBStatus('disconnected','Tap Google Sheets to retry');
 }
 
 /* ═══════════════════ DELIVERY ORDERS ═══════════════════ */
@@ -3817,17 +3834,20 @@ function printViaRawBT(){
   var notesVal= (document.getElementById('order-notes')||{}).value||'';
   var cashier = typeof activeCashier!=='undefined' ? activeCashier : '';
   var lines   = [];
-  lines.push('================================');
-  lines.push('    GREEK TO GO TAVERNA');
-  lines.push('================================');
+  var rawWidth=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
+  var rawLine='='.repeat(rawWidth);
+  var rawDash='-'.repeat(rawWidth);
+  lines.push(rawLine);
+  lines.push('GREEK TO GO TAVERNA'.padStart(Math.floor((rawWidth+19)/2)).slice(0,rawWidth));
+  lines.push(rawLine);
   lines.push('Order #: ' + orderNum);
   lines.push(new Date().toLocaleString('en-PH'));
   if(tableVal)  lines.push('Table:    ' + tableVal);
   if(custVal)   lines.push('Customer: ' + custVal);
   if(cashier)   lines.push('Cashier:  ' + cashier);
-  lines.push('--------------------------------');
-  lines.push('Item                  Qty   Amt');
-  lines.push('--------------------------------');
+  lines.push(rawDash);
+  lines.push('Item / Qty / Amount');
+  lines.push(rawDash);
   order.forEach(function(o){
     var nm = (o.name||'').slice(0,20).padEnd(20);
     var qty= ('x'+o.qty).padStart(4);
@@ -4820,47 +4840,90 @@ if('serviceWorker' in navigator){
    ═══════════════════════════════════════════════════════════ */
 
 function openPrinterSettings(){
-  document.getElementById('ps-receipt-ip').value   = RECEIPT_PRINTER_IP;
-  document.getElementById('ps-kitchen-ip').value   = KITCHEN_PRINTER_IP;
-  document.getElementById('ps-auto-kitchen').checked = AUTO_KITCHEN_PRINT;
+  var ar=document.getElementById('ps-auto-receipt');
+  var ap=document.getElementById('ps-rawbt-paper');
+  var ac=document.getElementById('ps-rawbt-chars');
+  if(ar) ar.checked=AUTO_RECEIPT_PRINT;
+  if(ap) ap.value=String(RAWBT_PAPER_MM||58);
+  if(ac) ac.value=String(RAWBT_CHARS_PER_LINE||32);
+  document.getElementById('ps-auto-kitchen').checked=AUTO_KITCHEN_PRINT;
+  setReceiptPrinterType(RECEIPT_PRINTER_TYPE);
   setKitchenType(KITCHEN_PRINTER_TYPE);
   openModal('printer-settings-modal');
 }
 
+function setReceiptPrinterType(type){
+  RECEIPT_PRINTER_TYPE=type;
+  var rb=document.getElementById('rp-rawbt-btn');
+  var bb=document.getElementById('rp-browser-btn');
+  if(rb){ rb.style.borderColor=type==='rawbt'?'#3A6BC5':'#e0e8f5'; rb.style.background=type==='rawbt'?'#e8f0fe':'#fff'; }
+  if(bb){ bb.style.borderColor=type==='browser'?'#3A6BC5':'#e0e8f5'; bb.style.background=type==='browser'?'#e8f0fe':'#fff'; }
+}
+
 function setKitchenType(type){
-  KITCHEN_PRINTER_TYPE = type;
-  var rb = document.getElementById('kp-rawbt-btn');
-  var wb = document.getElementById('kp-wifi-btn');
-  var ip = document.getElementById('ps-kitchen-ip');
-  if(rb) rb.style.borderColor = type==='rawbt' ? '#3A6BC5' : '#e0e8f5';
-  if(rb) rb.style.background  = type==='rawbt' ? '#e8f0fe' : '#fff';
-  if(wb) wb.style.borderColor = type==='wifi'  ? '#3A6BC5' : '#e0e8f5';
-  if(wb) wb.style.background  = type==='wifi'  ? '#e8f0fe' : '#fff';
-  if(ip) ip.style.display     = type==='wifi'  ? 'block'   : 'none';
+  KITCHEN_PRINTER_TYPE=type;
+  var rb=document.getElementById('kp-rawbt-btn');
+  var wb=document.getElementById('kp-wifi-btn');
+  var ip=document.getElementById('ps-kitchen-ip');
+  if(rb) rb.style.borderColor=type==='rawbt'?'#3A6BC5':'#e0e8f5';
+  if(rb) rb.style.background=type==='rawbt'?'#e8f0fe':'#fff';
+  if(wb) wb.style.borderColor=type==='wifi'?'#3A6BC5':'#e0e8f5';
+  if(wb) wb.style.background=type==='wifi'?'#e8f0fe':'#fff';
+  if(ip) ip.style.display=type==='wifi'?'block':'none';
 }
 
 function savePrinterSettings(){
-  RECEIPT_PRINTER_IP   = document.getElementById('ps-receipt-ip').value.trim();
-  KITCHEN_PRINTER_IP   = document.getElementById('ps-kitchen-ip').value.trim();
-  AUTO_KITCHEN_PRINT   = document.getElementById('ps-auto-kitchen').checked;
-  _printerConfig = { receiptIP:RECEIPT_PRINTER_IP, kitchenType:KITCHEN_PRINTER_TYPE,
-                     kitchenIP:KITCHEN_PRINTER_IP, autoKitchen:AUTO_KITCHEN_PRINT };
+  RAWBT_PAPER_MM=Number((document.getElementById('ps-rawbt-paper')||{}).value)||58;
+  RAWBT_CHARS_PER_LINE=Number((document.getElementById('ps-rawbt-chars')||{}).value)||32;
+  AUTO_RECEIPT_PRINT=!!((document.getElementById('ps-auto-receipt')||{}).checked);
+  KITCHEN_PRINTER_IP=(document.getElementById('ps-kitchen-ip').value||'').trim();
+  AUTO_KITCHEN_PRINT=document.getElementById('ps-auto-kitchen').checked;
+  _printerConfig={
+    receiptType:RECEIPT_PRINTER_TYPE,
+    receiptIP:'',
+    rawbtPaperMM:RAWBT_PAPER_MM,
+    rawbtChars:RAWBT_CHARS_PER_LINE,
+    autoReceipt:AUTO_RECEIPT_PRINT,
+    kitchenType:KITCHEN_PRINTER_TYPE,
+    kitchenIP:KITCHEN_PRINTER_IP,
+    autoKitchen:AUTO_KITCHEN_PRINT
+  };
   _savePrinterConfig();
   closeModal('printer-settings-modal');
-  showToast('✅ Printer settings saved!','success');
+  showToast('✅ XP-58IID / RawBT printer settings saved!','success');
+}
+
+function testRawBTPrinter(){
+  var width=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
+  var line='='.repeat(width);
+  var text=[
+    line,
+    'GREEK TO GO TAVERNA',
+    'XP-58IID / RAWBT TEST',
+    line,
+    'Paper: 58mm',
+    'ESC/POS thermal printer',
+    'If this prints, RawBT is ready.',
+    line,'','',''
+  ].join('\\n');
+  try{
+    window.location.href='rawbt:'+encodeURIComponent(text);
+    showToast('🖨️ Opening RawBT test print…','info');
+  }catch(e){
+    showToast('RawBT could not be opened. Install/configure RawBT on this Android device.','error');
+  }
 }
 
 async function testPrinterConnection(type){
-  var ip = type==='receipt' ? RECEIPT_PRINTER_IP : KITCHEN_PRINTER_IP;
+  if(type==='receipt'){ testRawBTPrinter(); return; }
+  var ip=KITCHEN_PRINTER_IP;
   if(!ip){ showToast('Enter an IP address first.','error'); return; }
   showToast('Testing '+ip+'…','info');
   try{
-    // Try to reach printer web interface
-    var r = await fetch('http://'+ip, {signal:AbortSignal.timeout(3000)});
+    await fetch('http://'+ip,{signal:AbortSignal.timeout(3000)});
     showToast('✅ Printer at '+ip+' is reachable!','success');
-  } catch(e){
-    // Try port 9100 check via image (CORS workaround)
-    showToast('⚠️ Direct test blocked by browser. If printer is on WiFi, it should work. Try printing.','warning');
+  }catch(e){
+    showToast('⚠️ Browser could not test the printer directly. Try printing.','warning');
   }
 }
 
