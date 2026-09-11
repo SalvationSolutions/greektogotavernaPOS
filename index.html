@@ -3496,6 +3496,7 @@ button{
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbxA97jKz4mWxOiEyxk9zfXuV3jAtL4LjBR862MPzdhXdWXxlABKQdHdNY5LujmmHlrQPg/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
+const POS_BUILD = '11.2-LOGIN-JSONP-FIX';
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
 function _saveSecureSession(result){
@@ -3857,7 +3858,7 @@ let _heartbeatTimer   = null;
 let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
-const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
+const CALL_TIMEOUT_MS = 8000;       // 8s per individual request
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
 
 // ── Offline queue ────────────────────────────────────────────────────────────
@@ -3961,34 +3962,16 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // LOGIN TRANSPORT — JSONP FIRST for GitHub Pages.
-  // Apps Script web apps commonly redirect POST requests cross-origin, which
-  // browsers can block. The deployed v8.6 backend accepts action=login via JSONP.
-  // POST is retained only as a compatibility fallback.
+  // LOGIN TRANSPORT — JSONP ONLY for GitHub Pages.
+  // v8.6 backend accepts login through doGet/JSONP. Avoid the cross-origin POST
+  // redirect fallback because browsers can block it and make Login appear unresponsive.
   if(action==='login'){
-    var jsonpLoginErr=null;
     try{
       var jsonpLogin=await _jsonpAction(url,'login',data||{});
-      if(jsonpLogin!==null && jsonpLogin!==undefined){
-        // Older backend versions explicitly reject GET login. In that one case,
-        // continue to POST instead of treating POST_REQUIRED as final.
-        if(String(jsonpLogin.error||'').toUpperCase()!=='POST_REQUIRED') return jsonpLogin;
-      }else{
-        jsonpLoginErr=new Error('Empty JSONP login response.');
-      }
+      if(jsonpLogin!==null && jsonpLogin!==undefined) return jsonpLogin;
+      throw new Error('Empty login response.');
     }catch(loginErr){
-      jsonpLoginErr=loginErr;
-    }
-
-    try{
-      var postLogin=await _postTransport(url,action,data||{});
-      if(postLogin!==null && postLogin!==undefined) return postLogin;
-      throw new Error('Empty POST login response.');
-    }catch(postLoginErr){
-      _setCallError(
-        'LOGIN FAILED — JSONP: '+(jsonpLoginErr && jsonpLoginErr.message ? jsonpLoginErr.message : (jsonpLoginErr||'POST_REQUIRED'))+
-        ' | POST: '+(postLoginErr.message||postLoginErr)
-      );
+      _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
     }
   }
@@ -5899,6 +5882,10 @@ async function doLogin(){
   }
 
   _loginBusy=true;
+  if(errEl){
+    errEl.style.color='#0B477E';
+    errEl.textContent='Connecting to Google Sheets…';
+  }
   var btn=document.querySelector('.login-btn');
   if(btn){
     btn.disabled=true;
@@ -5908,6 +5895,7 @@ async function doLogin(){
   try{
     // v10.9: one login request only. _call() is JSONP-first and POST-fallback.
     var result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
+    if(errEl) errEl.style.color='#C83F3F';
 
     if(!result){
       var transportDetail=String(_lastCallError||'');
@@ -5930,7 +5918,7 @@ async function doLogin(){
       }else if(code==='NO_SPREADSHEET'){
         if(errEl) errEl.textContent='Backend is online but not connected to the Google Sheet. Set SPREADSHEET_ID in Apps Script or bind the script to the Sheet.';
       }else if(code==='POST_REQUIRED'){
-        if(errEl) errEl.textContent='The deployed Apps Script is still an older version. Deploy the v8.6 login-enabled backend as a new version.';
+        if(errEl) errEl.textContent='The deployed Apps Script is still an older version. Deploy G2G_BACKEND_v8.6_LOGIN_JSONP_SALESLOG_DEDUP.gs as a new version.';
       }else if(code==='FATAL' || code==='SERVER_ERROR'){
         if(errEl) errEl.textContent='Apps Script error: '+(msg||code);
       }else{
@@ -5962,6 +5950,7 @@ async function doLogin(){
     onSignedIn();
 
   }catch(e){
+    if(errEl) errEl.style.color='#C83F3F';
     console.error('G2G login exception:',e);
     if(errEl) errEl.textContent='Login error: '+(e && e.message ? e.message : 'Unexpected browser error');
   }finally{
