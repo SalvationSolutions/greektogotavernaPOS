@@ -1621,7 +1621,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyY-Ln4fYpYK2BOqrvBAjr_Nc_VuJPo4f0oiTfN79O-OZzl-ymWIwZzdCa33_xsPC5EUg/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyLu-xoPS4i37VQizGXSUQKx5d6Aox_0ppS_mgv5jUFQu7Lt4emqLaua6ADXIXj0u5_cA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -3338,7 +3338,7 @@ function onSignedIn() {
   renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
   if(SHEETS_URL){
-    setTimeout(function(){ _initialSync(); }, 700);
+    setTimeout(function(){ _initialSync(); }, 100);
   } else {
     setDBStatus('disconnected','No Sheet — Offline');
   }
@@ -3637,7 +3637,7 @@ async function loginPinSubmit() {
   msgEl.className = 'c-pin-msg ok';
   _saveSecureSession(result);
   const c = result.user;
-  setTimeout(()=>{
+  {
     const active = document.getElementById('active-cashier');
     if (active) active.innerHTML = '👤 ' + c.name;
     var _lb = document.getElementById('logout-btn');
@@ -3648,7 +3648,7 @@ async function loginPinSubmit() {
     if(typeof renderShiftLog==='function') renderShiftLog();
     if(typeof pushShiftToSheets==='function') pushShiftToSheets(_entry);
     onSignedIn();
-  }, 400);
+  }
 }
 
 function loginPinBack() {
@@ -4577,38 +4577,18 @@ window.addEventListener('storage',function(e){ if(e.key==='gtg_kitchen_ping'){ t
 function _saveKitchenOrders(){ try{ localStorage.setItem('gtg_kitchen_orders', JSON.stringify(kitchenOrders.slice(-200))); }catch(e){} }
 
 /* ── Send to Kitchen ──────────────────────────────────────── */
-function sendToKitchen(){
+async function sendToKitchen(){
   if(!order.length){ showToast('No items in order to send!','error'); return; }
-  var tableEl = document.getElementById('table-num');
-  var custEl  = document.getElementById('cust-name');
-  var notesEl = document.getElementById('order-notes');
-
-  var ko = {
-    id:       Date.now(),
-    orderNum: String(orderCount).padStart(4,'0'),
-    table:    (tableEl&&tableEl.value) ? tableEl.value : 'Walk-in',
-    customer: (custEl&&custEl.value)   ? custEl.value  : '',
-    notes:    (notesEl&&notesEl.value) ? notesEl.value : '',
-    cashier:  (typeof activeCashier!=='undefined') ? activeCashier : '',
-    items:    order.map(function(o){ return {name:o.name, qty:o.qty, cat:o.cat||''}; }),
-    sentAt:   Date.now(),
-    status:   'pending'
-  };
-
-  kitchenOrders.push(ko);
-  _saveKitchenOrders();
-
-  // Push to Google Sheets in background
-  if(SHEETS_URL) sheetsCall('addKitchenOrder',{order:ko});
-
-  // Auto-print kitchen ticket
-  if(typeof AUTO_KITCHEN_PRINT!=='undefined' && AUTO_KITCHEN_PRINT){
-    setTimeout(function(){ printKitchenTicket(ko); }, 400);
-  }
-
-  showToast('🍳 Order sent to kitchen! Table: '+ko.table,'success');
-  // If kitchen tab is visible, refresh it
-  if(document.getElementById('kitchen-view').classList.contains('active')) renderKitchen();
+  var tableEl=document.getElementById('table-num'), custEl=document.getElementById('cust-name'), notesEl=document.getElementById('order-notes');
+  var ko={id:Date.now(),orderNum:String(orderCount).padStart(4,'0'),table:(tableEl&&tableEl.value)||'Walk-in',customer:(custEl&&custEl.value)||'',notes:(notesEl&&notesEl.value)||'',cashier:(typeof activeCashier!=='undefined')?activeCashier:'',items:order.map(function(o){return {name:o.name,qty:o.qty,cat:o.cat||''};}),sentAt:Date.now(),status:'pending'};
+  if(!SHEETS_URL){showToast('Kitchen order not sent — Google Sheets is disconnected.','error');return;}
+  showToast('Sending order to kitchen…','info');
+  var res=await sheetsCall('addKitchenOrder',{order:ko});
+  if(!res||!res.ok){showToast('Kitchen order was not synced. '+(_lastCallError||'Please try again.'),'error');return;}
+  kitchenOrders.push(ko); _saveKitchenOrders();
+  if(typeof AUTO_KITCHEN_PRINT!=='undefined'&&AUTO_KITCHEN_PRINT)setTimeout(function(){printKitchenTicket(ko);},400);
+  showToast(res.duplicate?'🍳 Kitchen order already synced.':'🍳 Order sent to kitchen! Table: '+ko.table,'success');
+  if(document.getElementById('kitchen-view').classList.contains('active'))renderKitchen();
 }
 
 /* ── Kitchen Display Render ───────────────────────────────── */
