@@ -4677,16 +4677,25 @@ function renderKitchen(){
   }).join("");
 }
 
-function markKitchenDone(id){
+async function markKitchenDone(id){
   var ko = kitchenOrders.find(function(o){ return o.id===id; });
   if(!ko) return;
-  ko.status   = 'done';
-  ko.doneAt   = Date.now();
-  _saveKitchenOrders();
-  // Update Sheets in background
-  if(SHEETS_URL) sheetsCall('updateKitchenOrder',{id:id, status:'done'});
-  renderKitchen();
-  showToast('Order marked as done!','success');
+  var previousStatus=ko.status, previousDoneAt=ko.doneAt;
+  ko.status='done'; ko.doneAt=Date.now(); renderKitchen();
+  if(!SHEETS_URL){
+    _saveKitchenOrders();
+    showToast('Order marked as done locally; Google Sheets URL is missing.','warning');
+    return;
+  }
+  showToast('Updating kitchen order…','info');
+  var res=await sheetsCall('updateKitchenOrder',{id:id,status:'done'});
+  if(res&&res.ok){
+    _saveKitchenOrders();
+    showToast('Order marked as done and synced.','success');
+  }else{
+    ko.status=previousStatus; ko.doneAt=previousDoneAt; _saveKitchenOrders(); renderKitchen();
+    showToast('Could not sync Mark Done to Google Sheets. '+(_lastCallError||'Please try again.'),'error');
+  }
 }
 
 function toggleKitchenDone(){
@@ -4699,7 +4708,7 @@ function toggleKitchenDone(){
 /* ── Auto-refresh kitchen from Sheets every 30s ────────────── */
 function startKitchenAutoRefresh(){
   stopKitchenAutoRefresh();
-  _kitchenTimer = setInterval(function(){ refreshKitchen(); }, 30000);
+  _kitchenTimer = setInterval(function(){ refreshKitchen(); }, 4000);
 }
 function stopKitchenAutoRefresh(){ if(_kitchenTimer){ clearInterval(_kitchenTimer); _kitchenTimer=null; } }
 
