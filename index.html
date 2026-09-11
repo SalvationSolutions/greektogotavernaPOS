@@ -4160,7 +4160,9 @@ async function refreshSalesFromSheets(silent){
 }
 
 async function _eodReadyForNewSale(showMessage){
-  await refreshSalesFromSheets(true);
+  // Do not download the entire SalesLog during payment. The cache is refreshed
+  // by the background sync timer and when Reports/Analytics are opened. A full
+  // read here added one 12-second timeout before every Cash transaction.
   var today=_todayKey();
   var priorDates=salesLog.map(function(s){return s.dateKey;}).filter(function(d){return d&&d<today;}).sort();
   if(!priorDates.length)return true;
