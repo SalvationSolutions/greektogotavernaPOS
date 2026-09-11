@@ -2228,16 +2228,10 @@ async function pushSaleToSheets(s){
     showToast('⛔ SALE NOT SAVED TO SALESLOG — '+why,'error');
     return false;
   }
-  var verify=await _call(SHEETS_URL,'salesStatus',{});
-  var reload=await _call(SHEETS_URL,'getSales',{limit:5000});
-  if(verify && verify.ok===true && reload && reload.ok===true && Array.isArray(reload.items)){
-    salesLog=reload.items.map(_normaliseSheetSale).filter(function(x){return !!x.dateKey;});
-    _sheetsOnline=true;
-    setDBStatus('connected','Google Sheets ✓');
-    showToast('✅ Sale captured in SalesLog'+(res.row?' (row '+res.row+')':'')+' — '+Number(verify.rowCount||salesLog.length)+' total sale(s)','success');
-  }else{
-    showToast('⚠️ Sale write returned OK, but SalesLog read-back failed: '+(_lastCallError||'verification error'),'warning');
-  }
+  _sheetsOnline=true;
+  setDBStatus('connected','Google Sheets ✓');
+  showToast(res.duplicate ? '✅ Existing sale recognized — no duplicate added.' : '✅ Sale saved to SalesLog.','success');
+  // Reports refresh in the background after the receipt is displayed.
   return true;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
@@ -2731,12 +2725,10 @@ function clearOrder(){
 /* ═══════════════════ PAYMENT ═══════════════════ */
 async function processPayment(method){
   if(!order.length){showToast('No items in order!','error');return;}
-  if(!(await _eodReadyForNewSale(true)))return;
   return await finalizePayment(method,'','');
 }
 async function openGCash(){
   if(!order.length){showToast('No items in order!','error');return;}
-  if(!(await _eodReadyForNewSale(true)))return;
   document.getElementById('gcash-disp').textContent=`₱${getTotals().tot.toFixed(2)}`;
   document.getElementById('gcash-num').value=''; document.getElementById('gcash-ref').value='';
   openModal('gcash-modal');
@@ -4207,8 +4199,11 @@ finalizePayment = async function(method, gcashNum, gcashRef){
   var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
   if(!ok) return false;
 
-  await refreshSalesFromSheets(true);
-  renderReports();
+  // Refresh reports after the payment UI completes; never make the cashier
+  // wait for a second full SalesLog download.
+  setTimeout(function(){
+    refreshSalesFromSheets(true).then(function(){ renderReports(); });
+  },0);
 
   if(tableEl) tableEl.value='';
   if(notesEl) notesEl.value='';
