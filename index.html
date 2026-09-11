@@ -4355,9 +4355,13 @@ function renderCatTabs(){
   // Filter out empty/undefined/null categories
   const cats=['All',...new Set(menuItems.map(i=>i.cat).filter(function(c){ return c && String(c).trim() !== '' && String(c) !== 'undefined'; }))];
   var strip = document.getElementById('cat-tabs');
-  strip.innerHTML = cats.map(function(c){
-    return '<button class="cat-tab '+(c===currentCat?'active':'')+' " onclick="setCategory(\'' + c.replace(/'/g,"\\'") + '\')">' + c + '</button>';
-  }).join("");
+  // The current redesigned POS does not include the legacy #cat-tabs strip.
+  // Guard this optional element so a successful login cannot crash while opening the POS.
+  if(strip){
+    strip.innerHTML = cats.map(function(c){
+      return '<button class="cat-tab '+(c===currentCat?'active':'')+' " onclick="setCategory(\'' + c.replace(/'/g,"\\'") + '\')">' + c + '</button>';
+    }).join("");
+  }
   // Update scroll arrows after render
   setTimeout(updateCatArrows, 80);
   var strip2=document.getElementById('cat-tabs');
@@ -5763,24 +5767,27 @@ function loginSelectStaff(id) {
     {'av-b':'#2E7DD1','av-t':'#27AE60','av-o':'#E2820B','av-p':'#8E44AD'}[c.color] : c.color)
     : '#2E7DD1';
   const initials = c.name.split(' ').map(w=>w[0]).join("").slice(0,2).toUpperCase();
-  document.getElementById('lpin-who').innerHTML =
-    `<div class="lpin-who-av" style="background:${bg}">${initials}</div>
-     <div class="lpin-who-info">
-       <div class="lpin-who-name">${c.name}</div>
-       <div class="lpin-who-hint">Enter your PIN to continue</div>
-     </div>`;
-  document.getElementById('lstaff-select').style.display = 'none';
-  document.getElementById('lstaff-pin').style.display = '';
-  document.getElementById('lpin-msg').textContent = '';
-  document.getElementById('lpin-msg').className = 'c-pin-msg';
+  var whoEl=document.getElementById('lpin-who');
+  if(whoEl){
+    whoEl.innerHTML =
+      `<div class="lpin-who-av" style="background:${bg}">${initials}</div>
+       <div class="lpin-who-info">
+         <div class="lpin-who-name">${c.name}</div>
+         <div class="lpin-who-hint">Enter your PIN to continue</div>
+       </div>`;
+  }
+  var staffSelect=document.getElementById('lstaff-select'); if(staffSelect) staffSelect.style.display='none';
+  var staffPin=document.getElementById('lstaff-pin'); if(staffPin) staffPin.style.display='';
+  var pinMsg=document.getElementById('lpin-msg'); if(pinMsg){pinMsg.textContent='';pinMsg.className='c-pin-msg';}
   _renderLoginPinDots();
   _renderLoginKeypad();
 }
 
 function _renderLoginPinDots() {
   const len = 4;
-  document.getElementById('lpin-dots').innerHTML =
-    Array.from({length:len},(_,i)=>
+  var dots=document.getElementById('lpin-dots');
+  if(!dots) return;
+  dots.innerHTML = Array.from({length:len},(_,i)=>
       `<div class="pin-circle${i<_loginPinEntry.length?' filled':''}""></div>`).join("");
 }
 
