@@ -2438,6 +2438,231 @@ button{
 }
 </style>
 
+
+<style id="v106-login-and-speed-fix">
+/* =========================================================
+   LOGIN — approved scenic Greek style, no tree/logo graphic
+   ========================================================= */
+#login-screen{
+  position:fixed !important;
+  inset:0 !important;
+  z-index:9999 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  overflow:auto !important;
+  padding:clamp(28px,6vw,90px) !important;
+  background-color:#0F3974 !important;
+  background-image:
+    linear-gradient(90deg,rgba(232,246,255,.22) 0%,rgba(232,246,255,.10) 42%,rgba(7,42,83,.28) 100%),
+    url("https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1600&auto=format&fit=crop&q=85") !important;
+  background-size:cover !important;
+  background-position:center !important;
+  background-repeat:no-repeat !important;
+}
+
+#login-screen .approved-login-stage{
+  width:min(390px,92vw) !important;
+  min-height:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  justify-content:center !important;
+  gap:0 !important;
+  padding:0 !important;
+  position:relative !important;
+  z-index:1 !important;
+}
+
+/* Remove every legacy graphic/tagline/decorative login element. */
+#login-screen .approved-brand-block,
+#login-screen .approved-brand-logo,
+#login-screen .approved-tagline,
+#login-screen .approved-login-decoration,
+#login-screen .approved-script,
+#login-screen .approved-landmark,
+#login-screen .login-sub,
+#login-screen .login-footer,
+#login-screen .login-decor,
+#login-screen .greek-decor,
+#login-screen .house-decor,
+#login-screen .triangle-decor,
+#login-screen .login-art,
+#login-screen .login-bottom-art{
+  display:none !important;
+}
+
+#login-screen .approved-login-card{
+  width:100% !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  padding:0 !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+}
+
+#login-screen .login-title{
+  margin:0 0 34px !important;
+  text-align:left !important;
+  color:#08386F !important;
+  font-family:'Cinzel',serif !important;
+  font-size:clamp(36px,5vw,58px) !important;
+  font-weight:900 !important;
+  line-height:.92 !important;
+  letter-spacing:1px !important;
+  text-shadow:0 1px 0 rgba(255,255,255,.35) !important;
+}
+
+#login-screen .approved-field{
+  margin:0 0 14px !important;
+  position:relative !important;
+}
+
+#login-screen .approved-field label{
+  display:none !important;
+}
+
+#login-screen .approved-field input{
+  width:100% !important;
+  height:58px !important;
+  border:1.5px solid rgba(190,214,240,.95) !important;
+  border-radius:10px !important;
+  padding:0 50px !important;
+  background:rgba(255,255,255,.96) !important;
+  color:#0B315A !important;
+  font-family:'Nunito',sans-serif !important;
+  font-size:18px !important;
+  font-weight:600 !important;
+  outline:none !important;
+  box-shadow:0 3px 12px rgba(7,42,83,.06) !important;
+}
+
+#login-screen .approved-field input:focus{
+  border-color:#2E7DD1 !important;
+  box-shadow:0 0 0 3px rgba(46,125,209,.12) !important;
+}
+
+/* Simple user/lock icons only — no tree icon. */
+#login-screen .approved-user-field:before{
+  content:"♙" !important;
+  position:absolute !important;
+  left:16px !important;
+  top:17px !important;
+  z-index:2 !important;
+  color:#0B4B82 !important;
+  font-size:18px !important;
+}
+#login-screen .approved-pin-field:before{
+  content:"🔒" !important;
+  position:absolute !important;
+  left:15px !important;
+  top:16px !important;
+  z-index:2 !important;
+  font-size:16px !important;
+}
+
+#login-screen .pin-eye{
+  position:absolute !important;
+  right:14px !important;
+  top:15px !important;
+  width:30px !important;
+  height:30px !important;
+  border:0 !important;
+  background:transparent !important;
+  color:#0B4B82 !important;
+  font-size:18px !important;
+  cursor:pointer !important;
+}
+
+#login-screen .login-err{
+  min-height:20px !important;
+  margin:2px 0 8px !important;
+  color:#C83F3F !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+}
+
+#login-screen .login-btn{
+  width:100% !important;
+  min-height:58px !important;
+  border:0 !important;
+  border-radius:10px !important;
+  background:#08386F !important;
+  color:#fff !important;
+  font-family:'Nunito',sans-serif !important;
+  font-size:18px !important;
+  font-weight:900 !important;
+  box-shadow:0 5px 16px rgba(8,56,111,.18) !important;
+  cursor:pointer !important;
+  transition:none !important;
+}
+
+/* Remove the separate Exit button; normal Logout remains. */
+.exit-btn{display:none !important;}
+
+/* Keep POS Menu visible in the header. */
+.header-nav .nav-btn[onclick*="'pos-menu'"],
+.header-nav .nav-btn[onclick*='"pos-menu"']{
+  display:inline-flex !important;
+}
+
+/* Reduce costly effects that can make the UI feel sluggish. */
+.modal-overlay{backdrop-filter:none !important;}
+.menu-item,
+.nav-btn,
+.pay-btn,
+.add-btn,
+.dt-btn,
+.qty-btn,
+.login-btn,
+button{
+  transition:none !important;
+}
+.menu-item:hover,
+.nav-btn:hover,
+.pay-btn:hover,
+.add-btn:hover{
+  transform:none !important;
+}
+
+@media(max-width:700px){
+  #login-screen{
+    justify-content:center !important;
+    padding:24px 18px !important;
+    background-position:center bottom !important;
+  }
+  #login-screen .approved-login-stage{
+    width:min(380px,100%) !important;
+  }
+  #login-screen .approved-login-card{
+    background:rgba(255,255,255,.90) !important;
+    border-radius:20px !important;
+    padding:28px 20px 24px !important;
+    box-shadow:0 14px 36px rgba(7,42,83,.18) !important;
+  }
+  #login-screen .login-title{
+    font-size:34px !important;
+    margin-bottom:24px !important;
+  }
+}
+
+@media(max-width:420px){
+  #login-screen .approved-login-card{
+    padding:24px 16px 20px !important;
+  }
+  #login-screen .login-title{
+    font-size:30px !important;
+  }
+  #login-screen .approved-field input,
+  #login-screen .login-btn{
+    min-height:54px !important;
+    height:54px !important;
+    font-size:16px !important;
+  }
+}
+</style>
+
 </head>
 <body>
 
@@ -2446,7 +2671,7 @@ button{
 <div id="login-screen">
   <div class="approved-login-stage">
 <div class="approved-login-card">
-      <div class="login-title">GREEK TO GO TAVERNA</div>
+      <div class="login-title">GREEK<br>TO GO<br>TAVERNA</div>
 <div class="login-field approved-field approved-user-field">
         <label>Username</label>
         <input type="text" id="login-name" placeholder="Username" autofocus autocomplete="username">
@@ -2504,6 +2729,7 @@ button{
   </div>
   <nav class="header-nav">
     <button class="nav-btn active"      onclick="showTab('pos',this)">🧾 POS</button>
+    <button class="nav-btn"             onclick="showTab('pos-menu',this)">🍽️ POS Menu</button>
     <button class="nav-btn"             onclick="showTab('inventory',this)">📦 Inventory</button>
     <button class="nav-btn grab-nav"    onclick="showTab('grab',this)">🟢 GrabFood</button>
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
@@ -2519,8 +2745,7 @@ button{
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
     <div class="cashier-badge" id="active-cashier">👤 No Cashier</div>
     <div class="clock" id="clock">--:--:--</div>
-    <button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button>
-    <div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
+<div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
       <div class="g-user-initials" id="g-user-initials">?</div>
       <span class="g-user-name" id="g-user-display">User</span>
     </div>
@@ -3452,6 +3677,7 @@ async function loadPosMenuFromSheetsFast(force){
     if(res && Array.isArray(res.items)){
       var loaded=_mapPosMenuResponse(res.items);
       menuItems=loaded;
+      _saveMenuLocally();
       renderCatTabs();
       renderMenu();
       if(typeof renderPosMenu==='function') renderPosMenu();
@@ -3510,11 +3736,25 @@ async function loadCashiersFromSheetsFast(force){
 
 async function loadCoreDataFast(force){
   if(_coreLoadPromise && !force) return _coreLoadPromise;
-  _coreLoadPromise=Promise.allSettled([
-    loadPosMenuFromSheetsFast(!!force),
-    loadInventoryFromSheetsFast(!!force),
-    loadCashiersFromSheetsFast(!!force)
-  ]);
+
+  _coreLoadPromise=(async function(){
+    // POS is the primary screen: start its menu request first.
+    var menuPromise=loadPosMenuFromSheetsFast(!!force);
+
+    // Give Apps Script a short head start for the menu before starting
+    // Inventory and Cashier requests. This avoids 3 simultaneous cold calls.
+    var secondaryPromise=new Promise(function(resolve){
+      setTimeout(resolve,450);
+    }).then(function(){
+      return Promise.allSettled([
+        loadInventoryFromSheetsFast(!!force),
+        loadCashiersFromSheetsFast(!!force)
+      ]);
+    });
+
+    return Promise.allSettled([menuPromise,secondaryPromise]);
+  })();
+
   try{return await _coreLoadPromise;}
   finally{_coreLoadPromise=null;}
 }
@@ -3542,6 +3782,10 @@ function showTab(tab, btn) {
     renderCatTabs();
     if(menuItems && menuItems.length) renderMenu();
     else loadPosMenuFromSheetsFast(false);
+  }
+
+  if(tab==='pos-menu'){
+    renderPosMenu();
   }
 
   if(tab==='inventory'){
@@ -5113,11 +5357,18 @@ function onSignedIn() {
   document.getElementById('g-user-initials').textContent = initials;
   document.getElementById('g-menu-name').textContent = googleUser.name;
   document.getElementById('g-menu-email').textContent = googleUser.role || 'Staff';
-  renderCatTabs(); renderMenu(); renderInventory();
+  // Render cached POS menu immediately so the ordering screen opens fast.
+  renderCatTabs();
+  renderMenu();
+  renderInventory();
   renderCashierRoster();
+
   if(SHEETS_URL){
-    loadCoreDataFast(false);           // menu/inventory/cashiers immediately and in parallel
-    setTimeout(function(){ _initialSync(); }, 50); // sales/history in background
+    // Refresh operational data in the background.
+    loadCoreDataFast(false);
+
+    // SalesLog/Reports are lower priority; do not let them delay POS Menu.
+    setTimeout(function(){ _initialSync(); }, 1600);
   } else {
     setDBStatus('disconnected','No Sheet — Offline');
   }
@@ -5132,11 +5383,8 @@ async function _initialSync(){
 
   setDBStatus('loading','Connecting…');
 
-  // Core operational data should never wait for SalesLog.
-  // POS Menu, Inventory and Cashiers load in parallel immediately.
-  var corePromise=loadCoreDataFast(false);
-
-  // Verify connection separately.
+  // Core operational data already starts immediately after login.
+  // Keep SalesLog health/report sync separate so POS remains responsive.
   var healthPromise=_call(SHEETS_URL,'salesStatus',{});
 
   var health=await healthPromise;
@@ -5145,7 +5393,6 @@ async function _initialSync(){
     _syncDone=false;
     _sheetsOnline=false;
     setDBStatus('disconnected','Google Sheets connection issue');
-    await corePromise;
     return;
   }
 
@@ -5155,7 +5402,6 @@ async function _initialSync(){
   _saveSyncErrors();
   _updateSyncBadge();
 
-  await corePromise;
 
   // Reports/analytics are non-critical for taking orders, so load last.
   refreshSalesFromSheets(true).then(function(ok){
