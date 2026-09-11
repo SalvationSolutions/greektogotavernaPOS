@@ -1617,7 +1617,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbwK_sUdE0pGPGXV3axHBroZhjkSsXRt7cSXmMGVVCRO0zyc5TM4HyRSN2P0C83KzRqABw/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyMx630E4F7k0AqbEcUdQmuwx5W4lzVAGYiKVhXMeD1I5yHRtFwQhkYJ5giPOJBZOsWoQ/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -2203,23 +2203,6 @@ async function pushSaleToSheets(s){
     showToast('⛔ SALE NOT SAVED — Google Sheets URL is missing.','error');
     return false;
   }
-  // If a previous request succeeded but its response was lost, recognize the
-  // existing order before attempting another append.
-  try{
-    var existing=await _call(SHEETS_URL,'getSales',{limit:5000});
-    if(existing && Array.isArray(existing.items)){
-      var day=String(s.date||'').slice(0,10), orderNo=String(s.orderNum||'');
-      var already=existing.items.some(function(row){
-        var ro=String(row.orderNum||row['Order#']||row.Order||'');
-        var rd=String(row.date||row.Date||row.time||'').slice(0,10);
-        return ro===orderNo && (!day || !rd || rd===day);
-      });
-      if(already){
-        salesLog=existing.items.map(_normaliseSheetSale).filter(function(x){return !!x.dateKey;});
-        return true;
-      }
-    }
-  }catch(e){}
   var res=await sheetsCall('logSale',{sale:s});
   if(!res || !res.ok || res.saved===false){
     var why=(res&&((res.message||res.error)))||_lastCallError||'Unknown SalesLog error';
