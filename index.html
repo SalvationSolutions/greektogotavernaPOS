@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0B2545">
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>GREEK TO GO TAVERNA POS</title>
+<title>GREEK TO GO TAVERNA</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1012,16 +1012,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #login-screen .approved-field label{display:none!important;}
 #login-screen .approved-field input{
   width:100%!important;height:64px!important;border:2px solid #D6E3F2!important;border-radius:14px!important;
-  padding:0 54px 0 56px!important;font-family:'Nunito',sans-serif!important;font-size:20px!important;font-weight:600!important;
+  padding:0 54px 0 20px!important;font-family:'Nunito',sans-serif!important;font-size:20px!important;font-weight:600!important;
   color:#0B315A!important;background:#fff!important;outline:none!important;text-align:left!important;
   transition:border-color .2s,box-shadow .2s!important;
 }
+#login-screen .approved-pin-field input{padding:0 54px 0 56px!important;}
 #login-screen .approved-field input::placeholder{color:#A7ADB5!important;opacity:1!important;font-weight:500!important;}
 #login-screen .approved-field input:focus{border-color:#2F78D5!important;box-shadow:0 0 0 4px rgba(47,120,213,.10)!important;}
 #login-screen .approved-user-field:before,#login-screen .approved-pin-field:before{
   position:absolute;left:19px;top:50%;transform:translateY(-50%);z-index:2;color:#0F4B84;font-size:23px;line-height:1;
 }
-#login-screen .approved-user-field:before{content:'♙';font-family:Arial,sans-serif;transform:translateY(-53%) rotate(180deg);}
+#login-screen .approved-user-field:before{content:'';}
 #login-screen .approved-pin-field:before{content:'🔒';font-size:18px;}
 #login-screen .pin-eye{
   position:absolute;right:14px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;background:transparent;
@@ -2438,231 +2439,6 @@ button{
 }
 </style>
 
-
-<style id="v106-login-and-speed-fix">
-/* =========================================================
-   LOGIN — approved scenic Greek style, no tree/logo graphic
-   ========================================================= */
-#login-screen{
-  position:fixed !important;
-  inset:0 !important;
-  z-index:9999 !important;
-  display:flex !important;
-  align-items:center !important;
-  justify-content:flex-start !important;
-  overflow:auto !important;
-  padding:clamp(28px,6vw,90px) !important;
-  background-color:#0F3974 !important;
-  background-image:
-    linear-gradient(90deg,rgba(232,246,255,.22) 0%,rgba(232,246,255,.10) 42%,rgba(7,42,83,.28) 100%),
-    url("https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1600&auto=format&fit=crop&q=85") !important;
-  background-size:cover !important;
-  background-position:center !important;
-  background-repeat:no-repeat !important;
-}
-
-#login-screen .approved-login-stage{
-  width:min(390px,92vw) !important;
-  min-height:0 !important;
-  display:flex !important;
-  flex-direction:column !important;
-  align-items:stretch !important;
-  justify-content:center !important;
-  gap:0 !important;
-  padding:0 !important;
-  position:relative !important;
-  z-index:1 !important;
-}
-
-/* Remove every legacy graphic/tagline/decorative login element. */
-#login-screen .approved-brand-block,
-#login-screen .approved-brand-logo,
-#login-screen .approved-tagline,
-#login-screen .approved-login-decoration,
-#login-screen .approved-script,
-#login-screen .approved-landmark,
-#login-screen .login-sub,
-#login-screen .login-footer,
-#login-screen .login-decor,
-#login-screen .greek-decor,
-#login-screen .house-decor,
-#login-screen .triangle-decor,
-#login-screen .login-art,
-#login-screen .login-bottom-art{
-  display:none !important;
-}
-
-#login-screen .approved-login-card{
-  width:100% !important;
-  background:transparent !important;
-  border:0 !important;
-  border-radius:0 !important;
-  padding:0 !important;
-  box-shadow:none !important;
-  backdrop-filter:none !important;
-}
-
-#login-screen .login-title{
-  margin:0 0 34px !important;
-  text-align:left !important;
-  color:#08386F !important;
-  font-family:'Cinzel',serif !important;
-  font-size:clamp(36px,5vw,58px) !important;
-  font-weight:900 !important;
-  line-height:.92 !important;
-  letter-spacing:1px !important;
-  text-shadow:0 1px 0 rgba(255,255,255,.35) !important;
-}
-
-#login-screen .approved-field{
-  margin:0 0 14px !important;
-  position:relative !important;
-}
-
-#login-screen .approved-field label{
-  display:none !important;
-}
-
-#login-screen .approved-field input{
-  width:100% !important;
-  height:58px !important;
-  border:1.5px solid rgba(190,214,240,.95) !important;
-  border-radius:10px !important;
-  padding:0 50px !important;
-  background:rgba(255,255,255,.96) !important;
-  color:#0B315A !important;
-  font-family:'Nunito',sans-serif !important;
-  font-size:18px !important;
-  font-weight:600 !important;
-  outline:none !important;
-  box-shadow:0 3px 12px rgba(7,42,83,.06) !important;
-}
-
-#login-screen .approved-field input:focus{
-  border-color:#2E7DD1 !important;
-  box-shadow:0 0 0 3px rgba(46,125,209,.12) !important;
-}
-
-/* Simple user/lock icons only — no tree icon. */
-#login-screen .approved-user-field:before{
-  content:"♙" !important;
-  position:absolute !important;
-  left:16px !important;
-  top:17px !important;
-  z-index:2 !important;
-  color:#0B4B82 !important;
-  font-size:18px !important;
-}
-#login-screen .approved-pin-field:before{
-  content:"🔒" !important;
-  position:absolute !important;
-  left:15px !important;
-  top:16px !important;
-  z-index:2 !important;
-  font-size:16px !important;
-}
-
-#login-screen .pin-eye{
-  position:absolute !important;
-  right:14px !important;
-  top:15px !important;
-  width:30px !important;
-  height:30px !important;
-  border:0 !important;
-  background:transparent !important;
-  color:#0B4B82 !important;
-  font-size:18px !important;
-  cursor:pointer !important;
-}
-
-#login-screen .login-err{
-  min-height:20px !important;
-  margin:2px 0 8px !important;
-  color:#C83F3F !important;
-  font-size:12px !important;
-  font-weight:700 !important;
-}
-
-#login-screen .login-btn{
-  width:100% !important;
-  min-height:58px !important;
-  border:0 !important;
-  border-radius:10px !important;
-  background:#08386F !important;
-  color:#fff !important;
-  font-family:'Nunito',sans-serif !important;
-  font-size:18px !important;
-  font-weight:900 !important;
-  box-shadow:0 5px 16px rgba(8,56,111,.18) !important;
-  cursor:pointer !important;
-  transition:none !important;
-}
-
-/* Remove the separate Exit button; normal Logout remains. */
-.exit-btn{display:none !important;}
-
-/* Keep POS Menu visible in the header. */
-.header-nav .nav-btn[onclick*="'pos-menu'"],
-.header-nav .nav-btn[onclick*='"pos-menu"']{
-  display:inline-flex !important;
-}
-
-/* Reduce costly effects that can make the UI feel sluggish. */
-.modal-overlay{backdrop-filter:none !important;}
-.menu-item,
-.nav-btn,
-.pay-btn,
-.add-btn,
-.dt-btn,
-.qty-btn,
-.login-btn,
-button{
-  transition:none !important;
-}
-.menu-item:hover,
-.nav-btn:hover,
-.pay-btn:hover,
-.add-btn:hover{
-  transform:none !important;
-}
-
-@media(max-width:700px){
-  #login-screen{
-    justify-content:center !important;
-    padding:24px 18px !important;
-    background-position:center bottom !important;
-  }
-  #login-screen .approved-login-stage{
-    width:min(380px,100%) !important;
-  }
-  #login-screen .approved-login-card{
-    background:rgba(255,255,255,.90) !important;
-    border-radius:20px !important;
-    padding:28px 20px 24px !important;
-    box-shadow:0 14px 36px rgba(7,42,83,.18) !important;
-  }
-  #login-screen .login-title{
-    font-size:34px !important;
-    margin-bottom:24px !important;
-  }
-}
-
-@media(max-width:420px){
-  #login-screen .approved-login-card{
-    padding:24px 16px 20px !important;
-  }
-  #login-screen .login-title{
-    font-size:30px !important;
-  }
-  #login-screen .approved-field input,
-  #login-screen .login-btn{
-    min-height:54px !important;
-    height:54px !important;
-    font-size:16px !important;
-  }
-}
-</style>
-
 </head>
 <body>
 
@@ -2671,7 +2447,7 @@ button{
 <div id="login-screen">
   <div class="approved-login-stage">
 <div class="approved-login-card">
-      <div class="login-title">GREEK<br>TO GO<br>TAVERNA</div>
+      <div class="login-title">GREEK TO GO TAVERNA</div>
 <div class="login-field approved-field approved-user-field">
         <label>Username</label>
         <input type="text" id="login-name" placeholder="Username" autofocus autocomplete="username">
@@ -2687,7 +2463,7 @@ button{
 
     
     </div>
-    <div class="login-footer">GreekToGo POS &middot; BS EST.2014</div>
+    <div class="login-footer">Greek To Go &middot; BS EST.2014</div>
   </div>
 </div>
 
@@ -2745,7 +2521,8 @@ button{
     <div class="db-status loading" id="db-status"><div class="db-dot"></div><span id="db-status-txt">Connecting…</span></div>
     <div class="cashier-badge" id="active-cashier">👤 No Cashier</div>
     <div class="clock" id="clock">--:--:--</div>
-<div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
+    <button class="exit-btn" onclick="doLogout()" title="Exit POS">⏻ Exit</button>
+    <div class="g-user-chip" id="g-user-chip" style="display:none" onclick="toggleUserMenu()">
       <div class="g-user-initials" id="g-user-initials">?</div>
       <span class="g-user-name" id="g-user-display">User</span>
     </div>
@@ -3467,7 +3244,7 @@ button{
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyeotQ_p4SFaTEmIqIGVP9SOu8EFy8K2OtZmXqrxjuJmgYR-_SrN1yyWHKAY-naep9B/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyseP-hexGb1QHCzLnInUFbTr8wwkAdVIJ1t_k_IEMcuw_4G77Q8d7V8TMvXUiIKi6h-g/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -3673,18 +3450,33 @@ async function loadPosMenuFromSheetsFast(force){
     if(grid && (!menuItems || !menuItems.length)){
       grid.innerHTML='<div class="loading-grid"><div class="spinner"></div><p>Loading menu…</p></div>';
     }
+    // Show retry button if Sheets takes longer than 15 s
+    var _retryTimer=setTimeout(function(){
+      var g=document.getElementById('menu-grid');
+      if(g && g.querySelector('.spinner')){
+        g.innerHTML='<div class="loading-grid">'
+          +'<p style="font-weight:700;color:#E05050">Menu load is taking longer than expected.</p>'
+          +'<p style="font-size:11px;margin-top:6px;color:#888">Check your Google Sheets connection.</p>'
+          +'<button onclick="loadPosMenuFromSheetsFast(true)" style="margin-top:12px;padding:8px 20px;background:#2E7DD1;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">&#x1F504; Retry</button>'
+          +'</div>';
+      }
+    }, 15000);
     var res=await sheetsCall('getPosMenu');
+    clearTimeout(_retryTimer);
     if(res && Array.isArray(res.items)){
       var loaded=_mapPosMenuResponse(res.items);
       menuItems=loaded;
-      _saveMenuLocally();
       renderCatTabs();
       renderMenu();
       if(typeof renderPosMenu==='function') renderPosMenu();
       return loaded.length>0;
     }
     if(grid && (!menuItems || !menuItems.length)){
-      grid.innerHTML='<div class="loading-grid"><p style="font-weight:700;color:#E05050">Menu could not be loaded.</p><p style="font-size:11px;margin-top:6px">Check Google Sheets connection and try again.</p></div>';
+      grid.innerHTML='<div class="loading-grid">'
+        +'<p style="font-weight:700;color:#E05050">Menu could not be loaded.</p>'
+        +'<p style="font-size:11px;margin-top:6px">Check Google Sheets connection and try again.</p>'
+        +'<button onclick="loadPosMenuFromSheetsFast(true)" style="margin-top:12px;padding:8px 20px;background:#2E7DD1;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">&#x1F504; Retry</button>'
+        +'</div>';
     }
     return false;
   })();
@@ -3736,25 +3528,11 @@ async function loadCashiersFromSheetsFast(force){
 
 async function loadCoreDataFast(force){
   if(_coreLoadPromise && !force) return _coreLoadPromise;
-
-  _coreLoadPromise=(async function(){
-    // POS is the primary screen: start its menu request first.
-    var menuPromise=loadPosMenuFromSheetsFast(!!force);
-
-    // Give Apps Script a short head start for the menu before starting
-    // Inventory and Cashier requests. This avoids 3 simultaneous cold calls.
-    var secondaryPromise=new Promise(function(resolve){
-      setTimeout(resolve,450);
-    }).then(function(){
-      return Promise.allSettled([
-        loadInventoryFromSheetsFast(!!force),
-        loadCashiersFromSheetsFast(!!force)
-      ]);
-    });
-
-    return Promise.allSettled([menuPromise,secondaryPromise]);
-  })();
-
+  _coreLoadPromise=Promise.allSettled([
+    loadPosMenuFromSheetsFast(!!force),
+    loadInventoryFromSheetsFast(!!force),
+    loadCashiersFromSheetsFast(!!force)
+  ]);
   try{return await _coreLoadPromise;}
   finally{_coreLoadPromise=null;}
 }
@@ -3784,10 +3562,6 @@ function showTab(tab, btn) {
     else loadPosMenuFromSheetsFast(false);
   }
 
-  if(tab==='pos-menu'){
-    renderPosMenu();
-  }
-
   if(tab==='inventory'){
     renderInventory();
     if(!stockInventory || !stockInventory.length) loadInventoryFromSheetsFast(false);
@@ -3803,6 +3577,11 @@ function showTab(tab, btn) {
     renderCashierRoster();
     renderShiftLog();
     if(!cashiers || !cashiers.length) loadCashiersFromSheetsFast(false);
+  }
+
+  if(tab==='pos-menu'){
+    if(typeof renderPosMenu==='function') renderPosMenu();
+    if(!menuItems || !menuItems.length) loadPosMenuFromSheetsFast(false);
   }
 
   if(tab==='reports') refreshSalesFromSheets(true).then(renderReports);
@@ -3934,31 +3713,12 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // LOGIN TRANSPORT:
-  // 1) Try POST first.
-  // 2) Google Apps Script web apps can redirect POST requests in a way that
-  //    browsers/GitHub Pages reject as a CORS/connection error.
-  //    If POST fails, fall back to the same JSONP bridge already used by
-  //    the rest of this POS so sign-in can still complete.
+  // Login stays POST-only so the PIN is never placed in the URL.
   if(action==='login'){
-    var postLoginErr=null;
     try{
-      var postLogin=await _postTransport(url,action,data||{});
-      if(postLogin!==null && postLogin!==undefined) return postLogin;
-      postLoginErr=new Error('Empty POST login response.');
+      return await _postTransport(url,action,data||{});
     }catch(loginErr){
-      postLoginErr=loginErr;
-    }
-
-    try{
-      var jsonpLogin=await _jsonpAction(url,'login',data||{});
-      if(jsonpLogin!==null && jsonpLogin!==undefined) return jsonpLogin;
-      throw new Error('Empty JSONP login response.');
-    }catch(jsonpLoginErr){
-      _setCallError(
-        'LOGIN FAILED — POST: '+(postLoginErr && postLoginErr.message ? postLoginErr.message : postLoginErr)+
-        ' | JSONP: '+(jsonpLoginErr.message||jsonpLoginErr)
-      );
+      _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
     }
   }
@@ -5376,18 +5136,11 @@ function onSignedIn() {
   document.getElementById('g-user-initials').textContent = initials;
   document.getElementById('g-menu-name').textContent = googleUser.name;
   document.getElementById('g-menu-email').textContent = googleUser.role || 'Staff';
-  // Render cached POS menu immediately so the ordering screen opens fast.
-  renderCatTabs();
-  renderMenu();
-  renderInventory();
+  renderCatTabs(); renderMenu(); renderInventory();
   renderCashierRoster();
-
   if(SHEETS_URL){
-    // Refresh operational data in the background.
-    loadCoreDataFast(false);
-
-    // SalesLog/Reports are lower priority; do not let them delay POS Menu.
-    setTimeout(function(){ _initialSync(); }, 1600);
+    loadCoreDataFast(false);           // menu/inventory/cashiers immediately and in parallel
+    setTimeout(function(){ _initialSync(); }, 50); // sales/history in background
   } else {
     setDBStatus('disconnected','No Sheet — Offline');
   }
@@ -5402,25 +5155,38 @@ async function _initialSync(){
 
   setDBStatus('loading','Connecting…');
 
-  // Core operational data already starts immediately after login.
-  // Keep SalesLog health/report sync separate so POS remains responsive.
-  var healthPromise=_call(SHEETS_URL,'salesStatus',{});
+  // Core operational data (menu/inventory/cashiers) ALWAYS loads regardless of
+  // health-check result — never block the POS on a salesStatus call.
+  var corePromise=loadCoreDataFast(false);
 
-  var health=await healthPromise;
+  // Health check runs in parallel but must NOT block core data.
+  var health=null;
+  try{
+    health=await Promise.race([
+      _call(SHEETS_URL,'salesStatus',{}),
+      new Promise(function(res){ setTimeout(function(){ res(null); }, 10000); })
+    ]);
+  }catch(e){ health=null; }
+
+  // Always await core data first so menu/inventory/cashiers are rendered.
+  await corePromise;
+
   if(!health || !health.ok){
-    // Keep any successfully loaded menu/inventory/cashier data usable.
-    _syncDone=false;
+    _syncDone=false;   // allow retry on next tab switch / reconnect
     _sheetsOnline=false;
-    setDBStatus('disconnected','Google Sheets connection issue');
+    setDBStatus('disconnected','Tap to retry Google Sheets');
+    // Auto-retry core data once after 8 s so a slow start doesn't leave blank menus.
+    setTimeout(function(){
+      if(!_sheetsOnline) loadCoreDataFast(true).catch(function(){});
+    }, 8000);
     return;
   }
 
   _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
-  _syncErrors=[];
-  _saveSyncErrors();
-  _updateSyncBadge();
-
+  if(typeof _syncErrors!=='undefined'){ _syncErrors=[]; }
+  if(typeof _saveSyncErrors==='function') _saveSyncErrors();
+  if(typeof _updateSyncBadge==='function') _updateSyncBadge();
 
   // Reports/analytics are non-critical for taking orders, so load last.
   refreshSalesFromSheets(true).then(function(ok){
@@ -5797,7 +5563,7 @@ async function doLogin(){
     }
 
     if(!result){
-      if(errEl) errEl.textContent=_lastCallError ? 'Sign-in connection failed. Please check the Google Sheets web app deployment.' : 'Connection problem while signing in. Please try again.';
+      if(errEl) errEl.textContent='Connection problem while signing in. Please try again.';
       return;
     }
 
