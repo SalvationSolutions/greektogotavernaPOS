@@ -4695,8 +4695,9 @@ function stopKitchenAutoRefresh(){ if(_kitchenTimer){ clearInterval(_kitchenTime
 async function refreshKitchen(){
   if(!SHEETS_URL){ renderKitchen(); return; }
   var res = await sheetsCall('getKitchenOrders');
-  if(res && res.orders && res.orders.length){
-    // Merge Sheet orders with local (Sheet is the source of truth for multi-device)
+  if(res && Array.isArray(res.orders)){
+    // Google Sheets is the source of truth. An empty array must clear local
+    // storage too; otherwise deleted/completed orders remain visible forever.
     var sheetOrders = res.orders.map(function(o){
       return {
         id:       parseInt(o.id)||0,
@@ -4712,7 +4713,13 @@ async function refreshKitchen(){
     });
     // Only replace with sheet data that is NOT older than 8 hours
     var cutoff = Date.now() - (8*60*60*1000);
-    kitchenOrders = sheetOrders.filter(function(o){ return o.sentAt > cutoff; });
+    var seen={};
+    kitchenOrders = sheetOrders.filter(function(o){
+      var key=String(o.id||o.orderNum||'');
+      if(o.sentAt<=cutoff || !key || seen[key]) return false;
+      seen[key]=true;
+      return true;
+    });
     _saveKitchenOrders();
   }
   renderKitchen();
