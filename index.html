@@ -1014,7 +1014,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="pay-grid">
         <button class="pay-btn cash"  onclick="processPayment('Cash')">💵 Cash</button>
         <button class="pay-btn gcash" onclick="openGCash()">📱 GCash</button>
-
+        <button class="pay-btn free-meal" onclick="processFreeMeal()" style="grid-column:1/-1;background:#C9A84C;color:#0B2545;">🎁 FREE MEAL</button>
       </div>
       <button class="clear-btn" onclick="clearOrder()">🗑 Clear Order</button>
     </div>
@@ -1034,7 +1034,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
       <label style="font-size:10px;font-weight:800;color:var(--gray-soft);text-transform:uppercase">Sales Date<br><input id="rpt-date" type="date" onchange="renderReports()" style="margin-top:4px;border:1.5px solid var(--blue-pale);border-radius:9px;padding:8px 10px;font:inherit;color:var(--blue-deep);background:#fff"></label>
       <button class="add-btn" style="background:var(--blue-deep)" onclick="refreshSalesFromSheets(false).then(renderReports)">🔄 Refresh</button>
-      <button class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Complete EOD for Selected Date</button>
+      <button id="eod-send-btn" class="add-btn" style="background:var(--success)" onclick="sendEODReport()">📤 Complete EOD for Selected Date</button>
+      <div id="eod-send-status" role="status" aria-live="polite" style="min-width:220px;padding:8px 11px;border-radius:9px;background:var(--blue-ghost);border:1px solid var(--blue-pale);font-size:11px;font-weight:800;color:var(--gray-soft);">EOD status: Ready</div>
     </div>
   </div>
 
@@ -2733,6 +2734,11 @@ async function processPayment(method){
   if(!order.length){showToast('No items in order!','error');return;}
   return await finalizePayment(method,'','');
 }
+async function processFreeMeal(){
+  if(!order.length){showToast('No items in order!','error');return;}
+  if(!confirm('Mark this whole order as FREE MEAL?\n\nIt will be saved to SalesLog with ₱0.00 total and inventory will still be deducted.')) return false;
+  return await finalizePayment('FREE MEAL','','');
+}
 async function openGCash(){
   if(!order.length){showToast('No items in order!','error');return;}
   document.getElementById('gcash-disp').textContent=`₱${getTotals().tot.toFixed(2)}`;
@@ -2747,6 +2753,11 @@ function confirmGCash(){
 }
 async function finalizePayment(method,gcashNum,gcashRef){
   const{sub,da,vat,tot}=getTotals();
+  const isFreeMeal=String(method||'').toUpperCase()==='FREE MEAL';
+  const saleSub=isFreeMeal?0:sub;
+  const saleDisc=isFreeMeal?0:da;
+  const saleVat=isFreeMeal?0:vat;
+  const saleTot=isFreeMeal?0:tot;
   const cust=document.getElementById('cust-name').value||'Walk-in';
   const ordNum=String(orderCount).padStart(4,'0');
   const dateStr=_salesTimestamp();
@@ -2761,14 +2772,14 @@ async function finalizePayment(method,gcashNum,gcashRef){
     method:method,
     payment:method,
     items:order.map(function(o){
-      return {qty:Number(o.qty)||0,name:String(o.name||''),price:Number(o.price)||0,cat:String(o.cat||'Other')};
+      return {qty:Number(o.qty)||0,name:String(o.name||''),price:isFreeMeal?0:(Number(o.price)||0),cat:String(o.cat||'Other')};
     }),
-    subtotal:Number(sub.toFixed(2)),
-    discount:Number(da.toFixed(2)),
-    discountLabel:da>0?discLabel():'None',
-    discLabel:da>0?discLabel():'None',
-    vat:Number((vat||0).toFixed(2)),
-    total:Number(tot.toFixed(2))
+    subtotal:Number(saleSub.toFixed(2)),
+    discount:Number(saleDisc.toFixed(2)),
+    discountLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
+    discLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
+    vat:Number((saleVat||0).toFixed(2)),
+    total:Number(saleTot.toFixed(2))
   };
 
   // CRITICAL: do not finish the transaction unless Google Sheets confirms the row.
@@ -2786,12 +2797,17 @@ async function finalizePayment(method,gcashNum,gcashRef){
   _saveMenuLocally();
 
   document.getElementById('r-date').textContent=dateStr;
-  document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(parseFloat(o.price)*o.qty).toFixed(2)}</span></div>`).join("");
-  document.getElementById('r-sub').textContent=`₱${sub.toFixed(2)}`;
-  document.getElementById('r-total').textContent=`₱${tot.toFixed(2)}`;
+  document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(isFreeMeal?0:(parseFloat(o.price)*o.qty)).toFixed(2)}</span></div>`).join("");
+  document.getElementById('r-sub').textContent=`₱${saleSub.toFixed(2)}`;
+  document.getElementById('r-total').textContent=`₱${saleTot.toFixed(2)}`;
   const rdr=document.getElementById('r-disc-row');
-  if(da>0){rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;}
-  else rdr.style.display='none';
+  if(isFreeMeal){
+    rdr.style.display='flex';
+    document.getElementById('r-disc-lbl').textContent='FREE MEAL';
+    document.getElementById('r-disc-val').textContent='₱0.00';
+  } else if(da>0){
+    rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;
+  } else rdr.style.display='none';
   let ml=method+' — '+cust; if(method==='GCash') ml+=` | ${gcashNum}`;
   document.getElementById('r-method').textContent=ml;
   const gref=document.getElementById('r-gcash-ref');
@@ -4134,6 +4150,7 @@ function _normaliseSheetSale(s,index){
   if(!Array.isArray(items))items=[];
   return {
     id:when?when.getTime():index,
+    transactionId:String(s.transactionId||s.TransactionID||s.transactionID||s.saleId||''),
     orderNum:String(s.orderNum||s['Order#']||s.Order||''),
     time:rawTime,dateKey:dateKey,date:dateKey,hour:when?when.getHours():0,
     table:s.table||'Walk-in',customer:s.customer||s.Customer||'Walk-in',notes:s.notes||'',
@@ -4346,7 +4363,53 @@ function renderReports(){
   var names=Object.keys(itemMap).sort(function(a,b){return itemMap[b].qty-itemMap[a].qty;}).slice(0,10);
   document.getElementById('rpt-top-items').innerHTML=names.length?'<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--gray-soft);font-size:11px"><th align="left">Item</th><th align="center">Qty</th><th align="right">Revenue</th></tr>'+names.map(function(n){return '<tr style="border-top:1px solid var(--blue-ghost)"><td style="padding:6px 0">'+n+'</td><td align="center">'+itemMap[n].qty+'</td><td align="right">₱'+itemMap[n].rev.toFixed(2)+'</td></tr>';}).join('')+'</table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No item sales for this date.</div>';
 
-  document.getElementById('rpt-orders').innerHTML=daySales.length?'<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px"><tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order#</th><th align="left">Date</th><th align="left">Customer</th><th align="left">Cashier</th><th align="left">Method</th><th align="left">Items</th><th align="right">Subtotal</th><th align="right">Discount</th><th align="left">DiscountLabel</th><th align="right">VAT</th><th align="right">Total</th></tr>'+daySales.slice().reverse().map(function(s){var itemTxt=(s.items||[]).map(function(i){return (Number(i.qty)||0)+'x '+(i.name||'');}).join(', ');return '<tr style="border-bottom:1px solid var(--blue-ghost)"><td style="padding:6px 8px">'+s.orderNum+'</td><td>'+_prettyDateKey(s.dateKey)+'</td><td>'+s.customer+'</td><td>'+s.cashier+'</td><td>'+s.method+'</td><td>'+itemTxt+'</td><td align="right">₱'+s.subtotal.toFixed(2)+'</td><td align="right">₱'+s.discount.toFixed(2)+'</td><td>'+s.discLabel+'</td><td align="right">₱'+s.vat.toFixed(2)+'</td><td align="right" style="font-weight:800">₱'+s.total.toFixed(2)+'</td></tr>';}).join('')+'<tr style="font-weight:900;background:var(--blue-ghost)"><td colspan="6" style="padding:8px">TOTAL</td><td align="right">₱'+totalSub.toFixed(2)+'</td><td align="right">₱'+totalDisc.toFixed(2)+'</td><td></td><td align="right">₱'+totalVAT.toFixed(2)+'</td><td align="right">₱'+totalRev.toFixed(2)+'</td></tr></table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders for '+_prettyDateKey(selected)+'.</div>';
+  document.getElementById('rpt-orders').innerHTML=daySales.length?'<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:980px"><tr style="background:var(--blue-deep);color:#fff"><th style="padding:8px" align="left">Order#</th><th align="left">Date</th><th align="left">Customer</th><th align="left">Cashier</th><th align="left">Method</th><th align="left">Items</th><th align="right">Subtotal</th><th align="right">Discount</th><th align="left">DiscountLabel</th><th align="right">VAT</th><th align="right">Total</th><th align="center">Action</th></tr>'+daySales.slice().reverse().map(function(s){var itemTxt=(s.items||[]).map(function(i){return (Number(i.qty)||0)+'x '+(i.name||'');}).join(', ');var saleIndex=salesLog.indexOf(s);return '<tr style="border-bottom:1px solid var(--blue-ghost)"><td style="padding:6px 8px">'+s.orderNum+'</td><td>'+_prettyDateKey(s.dateKey)+'</td><td>'+s.customer+'</td><td>'+s.cashier+'</td><td>'+s.method+'</td><td>'+itemTxt+'</td><td align="right">₱'+s.subtotal.toFixed(2)+'</td><td align="right">₱'+s.discount.toFixed(2)+'</td><td>'+s.discLabel+'</td><td align="right">₱'+s.vat.toFixed(2)+'</td><td align="right" style="font-weight:800">₱'+s.total.toFixed(2)+'</td><td align="center"><button type="button" onclick="reprintSalesTransaction('+saleIndex+')" style="padding:6px 10px;border:none;border-radius:7px;background:var(--blue-accent);color:#fff;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap;">🖨 Reprint</button></td></tr>';}).join('')+'<tr style="font-weight:900;background:var(--blue-ghost)"><td colspan="6" style="padding:8px">TOTAL</td><td align="right">₱'+totalSub.toFixed(2)+'</td><td align="right">₱'+totalDisc.toFixed(2)+'</td><td></td><td align="right">₱'+totalVAT.toFixed(2)+'</td><td align="right">₱'+totalRev.toFixed(2)+'</td><td></td></tr></table>':'<div style="color:var(--gray-soft);text-align:center;padding:16px">No orders for '+_prettyDateKey(selected)+'.</div>';
+}
+
+
+function _receiptEsc(v){
+  return String(v===undefined||v===null?'':v).replace(/[&<>"']/g,function(ch){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+
+function reprintSalesTransaction(index){
+  var sale=(Array.isArray(salesLog)&&salesLog[index])?salesLog[index]:null;
+  if(!sale){showToast('Transaction not found. Refresh Sales Reports and try again.','error');return;}
+
+  var items=Array.isArray(sale.items)?sale.items:[];
+  var rows=items.map(function(i){
+    var q=Number(i.qty)||0,p=Number(i.price)||0;
+    return '<tr><td style="padding:3px 0">'+_receiptEsc(i.name||'Item')+'</td>'
+      +'<td style="text-align:center;padding:0 8px">x'+q+'</td>'
+      +'<td style="text-align:right">&#8369;'+(p*q).toFixed(2)+'</td></tr>';
+  }).join('');
+
+  var method=_receiptEsc(sale.method||'');
+  var freeMeal=String(sale.method||'').toUpperCase()==='FREE MEAL';
+  var body='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt '+_receiptEsc(sale.orderNum||'')+'</title>'
+    +'<style>@page{margin:0;size:80mm auto}*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:11px;width:72mm;margin:0 auto;padding:4mm;color:#000}'
+    +'h2{font-size:13px;text-align:center;margin:0 0 2px}.c{text-align:center}.i{margin:5px 0;font-size:10px}hr{border:none;border-top:1px dashed #000;margin:6px 0}'
+    +'table{width:100%;border-collapse:collapse;font-size:11px}.t{font-size:14px;font-weight:900}.f{text-align:center;font-size:10px;margin-top:8px}</style></head><body>'
+    +'<h2>GREEK TO GO TAVERNA</h2><div class="c">REPRINT TRANSACTION</div><hr>'
+    +'<div class="i">Order #: <b>'+_receiptEsc(sale.orderNum||'')+'</b></div>'
+    +'<div class="i">Date: <b>'+_receiptEsc(sale.time||sale.date||'')+'</b></div>'
+    +'<div class="i">Customer: <b>'+_receiptEsc(sale.customer||'Walk-in')+'</b></div>'
+    +'<div class="i">Cashier: <b>'+_receiptEsc(sale.cashier||'')+'</b></div>'
+    +'<div class="i">Payment: <b>'+method+'</b></div><hr>'
+    +'<table>'+rows+'</table><hr>'
+    +'<div style="text-align:right"><div>Subtotal: &#8369;'+Number(sale.subtotal||0).toFixed(2)+'</div>'
+    +(Number(sale.discount||0)>0?'<div>Discount: -&#8369;'+Number(sale.discount||0).toFixed(2)+'</div>':'')
+    +(freeMeal?'<div><b>FREE MEAL</b></div>':'')
+    +'<div>VAT: &#8369;'+Number(sale.vat||0).toFixed(2)+'</div>'
+    +'<div class="t">TOTAL: &#8369;'+Number(sale.total||0).toFixed(2)+'</div></div>'
+    +'<hr><div class="f">*** REPRINT ***<br>Thank you! Please come again.</div>'
+    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>'
+    +'</body></html>';
+
+  var w=window.open('','_blank','width=420,height=620');
+  if(w){w.document.write(body);w.document.close();showToast('🖨 Reprint opened for '+(sale.orderNum||'transaction')+'.','success');}
+  else showToast('Allow popups to reprint receipts.','error');
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -4514,23 +4577,60 @@ function renderAnalytics(){
 }
 
 /* ── EOD REPORT TO SHEETS ─────────────────────────────────── */
+function setEODSendStatus(state,message){
+  var el=document.getElementById('eod-send-status');
+  var btn=document.getElementById('eod-send-btn');
+  if(!el)return;
+  var map={
+    ready:{bg:'var(--blue-ghost)',border:'var(--blue-pale)',color:'var(--gray-soft)',icon:'ℹ️'},
+    sending:{bg:'#FFF8E5',border:'#E8C97A',color:'#8A6500',icon:'⏳'},
+    success:{bg:'#EAF8F0',border:'#8AD5AA',color:'#137A3D',icon:'✅'},
+    error:{bg:'#FDECEC',border:'#F2A4A4',color:'#B42318',icon:'❌'}
+  };
+  var s=map[state]||map.ready;
+  el.style.background=s.bg;el.style.borderColor=s.border;el.style.color=s.color;
+  el.textContent=s.icon+' '+message;
+  if(btn)btn.disabled=(state==='sending');
+}
 async function sendEODReport(){
   await refreshSalesFromSheets(true);
   var picker=document.getElementById('rpt-date');
   var selected=(picker&&picker.value)?picker.value:_todayKey();
   var daySales=salesLog.filter(function(s){return s.dateKey===selected;});
-  if(!daySales.length){showToast('No sales for '+_prettyDateKey(selected)+' to close.','error');return;}
+  if(!daySales.length){
+    setEODSendStatus('error','No sales for '+_prettyDateKey(selected)+' to close.');
+    showToast('No sales for '+_prettyDateKey(selected)+' to close.','error');
+    return;
+  }
+
+  setEODSendStatus('sending','Checking EOD status for '+_prettyDateKey(selected)+'…');
   var check=await sheetsCall('getEOD',{date:selected});
-  if(check&&check.ok&&check.completed){showToast('✅ EOD already completed for '+_prettyDateKey(selected)+'.','success');return;}
+  if(check&&check.ok&&check.completed){
+    setEODSendStatus('success','EOD already completed for '+_prettyDateKey(selected)+'.');
+    showToast('✅ EOD already completed for '+_prettyDateKey(selected)+'.','success');
+    return;
+  }
+
   var eod={date:selected,generatedAt:new Date().toISOString(),totalOrders:daySales.length,
     totalRevenue:daySales.reduce(function(a,o){return a+o.total;},0),
     totalDiscount:daySales.reduce(function(a,o){return a+o.discount;},0),
     totalVAT:daySales.reduce(function(a,o){return a+o.vat;},0),
     cashier:typeof activeCashier!=='undefined'?activeCashier:'—'};
+
+  setEODSendStatus('sending','Sending '+daySales.length+' transaction(s) to Google Sheets…');
   showToast('Sending EOD report…','info');
+
   var res=await sheetsCall('logEOD',{report:eod,orders:daySales});
-  if(res&&res.ok){showToast('✅ EOD completed for '+_prettyDateKey(selected)+'.','success');await refreshSalesFromSheets(true);renderReports();}
-  else showToast('❌ EOD failed. Update/redeploy Apps Script v8.2.','error');
+  if(res&&res.ok){
+    setEODSendStatus('success','EOD sent successfully · '+_prettyDateKey(selected)+' · '+daySales.length+' order(s) · ₱'+eod.totalRevenue.toFixed(2));
+    showToast('✅ EOD completed and saved to Google Sheets.','success');
+    await refreshSalesFromSheets(true);
+    renderReports();
+  }else{
+    var reason=(res&&(res.message||res.error))||_lastCallError||'No response from Apps Script';
+    setEODSendStatus('error','EOD failed: '+reason);
+    showToast('❌ EOD failed: '+reason,'error');
+  }
 }
 
 /* showTab is fully defined above — no override needed */
