@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="PRINTING-FIXED-2026-09-13">
+<meta name="gtg-receipt-build" content="REAL-PRINT-FIX-2026-09-13">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1016,24 +1016,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .g2g-authentic{font-size:15px}
 }
 </style>
-
-<style id="gtg-gcash-reference-ui">
-#gcash-modal .modal{
-  width:min(400px,calc(100vw - 24px)) !important;
-}
-#gcash-modal .gcash-numbox{
-  text-align:left !important;
-  letter-spacing:.4px !important;
-  font-size:14px !important;
-}
-@media(max-width:480px){
-  #gcash-modal .modal{padding:18px !important;border-radius:18px !important;}
-  #gcash-modal .gcash-header{padding:16px !important;}
-  #gcash-modal .gcash-amt{font-size:25px !important;}
-  #gcash-modal .gcash-confirm{min-height:48px;font-size:13px !important;}
-}
-</style>
-
 </head>
 <body>
 
@@ -1828,11 +1810,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="gcash-sub">Mobile Wallet Payment</div>
       <div class="gcash-amt" id="gcash-disp">₱0.00</div>
     </div>
-    <div class="mf">
-      <label>Reference #</label>
-      <input class="gcash-numbox" type="text" id="gcash-num"
-        placeholder="Enter GCash reference number" maxlength="30"
-        autocomplete="off" inputmode="numeric">
+    <div class="mf"><label>Reference #</label>
+      <input class="gcash-numbox" type="text" id="gcash-num" placeholder="Enter GCash reference number" maxlength="30" autocomplete="off" inputmode="numeric">
     </div>
     <button class="gcash-confirm" onclick="confirmGCash()">✅ Confirm GCash Payment</button>
     <p class="gcash-note">⚠️ Verify on merchant GCash app before confirming.</p>
@@ -5594,10 +5573,7 @@ function printReceiptBrowser(){
     '</div>'
   ].join('');
 
-  var printHtml='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title><style>'+css+'</style>
-
-
-</head><body>'+body
+  var printHtml='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title><style>'+css+'</style></head><body>'+body
     +'<'+ 'script>window.onload=function(){setTimeout(function(){window.print()},250);window.onafterprint=function(){window.close()}}<'+'/script>'
     +'</body></html>';
 
@@ -5653,75 +5629,109 @@ function printKitchenTicket(kitchenOrder){
 
 </script>
 
-<script id="gtg-printing-fix">
+<script id="gtg-printing-real-fix">
 (function(){
-  function isIOS(){
+  function gtgIsIOS(){
     return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   }
-  function hasShare(){ return typeof navigator.share !== 'undefined'; }
 
-  window.printReceipt = function(){
+  function gtgButton(label, bg, handler){
+    var b=document.createElement('button');
+    b.className='m-save';
+    b.type='button';
+    b.textContent=label;
+    b.style.background=bg;
+    b.style.fontSize='14px';
+    b.style.padding='14px';
+    b.onclick=handler;
+    return b;
+  }
+
+  window.printReceipt=function(){
     if(!window.order || !order.length){
-      if(typeof showToast==='function') showToast('No items in order to print.','error');
+      showToast('No items in order to print.','error');
       return;
     }
 
     var container=document.getElementById('print-btn-container');
     var hint=document.getElementById('print-hint');
     var status=document.getElementById('bt-status-msg');
+    if(!container){ return; }
+
+    container.innerHTML='';
     if(status){
       status.textContent='Choose a print method below.';
       status.style.color='var(--gray-soft)';
     }
 
-    var android=/Android/i.test(navigator.userAgent);
-    var ios=isIOS();
-    var buttons=[];
-    var hints=[];
+    var isAndroid=/Android/i.test(navigator.userAgent);
+    var isIOS=gtgIsIOS();
 
-    if(android){
-      buttons.push('<button class="m-save" style="background:#27AE60;font-size:15px;padding:14px" onclick="closeModal(\\'bt-printer-modal\\');printViaRawBT()">📶 Bluetooth Thermal Printer</button>');
-      buttons.push('<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>');
-      if(hasShare()) buttons.push('<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>');
-      hints.push('Pair XP-58IID in Android Bluetooth Settings, then select it inside RawBT.');
-    }else if(ios){
-      buttons.push('<button class="m-save" style="background:#1a1a1a;font-size:15px;padding:14px" onclick="shareReceipt()">🖨️ Print / Share Receipt</button>');
-      buttons.push('<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>');
-      hints.push('Use the iOS print/share sheet or your printer app.');
-    }else{
-      buttons.push('<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>');
-      if(hasShare()) buttons.push('<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>');
-      hints.push('Use the browser print dialog to select a printer or Save as PDF.');
+    if(isAndroid){
+      container.appendChild(gtgButton('📶 Bluetooth Thermal Printer','#27AE60',function(){
+        closeModal('bt-printer-modal');
+        printViaRawBT();
+      }));
+      container.appendChild(gtgButton('🖥️ Print / Save as PDF','var(--blue-accent)',function(){
+        printReceiptBrowser();
+      }));
+      if(navigator.share){
+        container.appendChild(gtgButton('📤 Share Receipt','#555',function(){ shareReceipt(); }));
+      }
+      if(hint) hint.innerHTML='For XP-58IID Bluetooth printing: pair the printer in Android Settings, then select it inside RawBT.<br>For PDF/system printing, use Print / Save as PDF.';
+    } else if(isIOS){
+      container.appendChild(gtgButton('🖨️ Print / Share Receipt','#1a1a1a',function(){ shareReceipt(); }));
+      container.appendChild(gtgButton('🖥️ Print / Save as PDF','var(--blue-accent)',function(){
+        printReceiptBrowser();
+      }));
+      if(hint) hint.innerHTML='Use the iOS print/share sheet or your printer app.';
+    } else {
+      container.appendChild(gtgButton('🖥️ System Printer / Save as PDF','var(--blue-accent)',function(){
+        printReceiptBrowser();
+      }));
+      if(navigator.share){
+        container.appendChild(gtgButton('📤 Share Receipt','#555',function(){ shareReceipt(); }));
+      }
+      if(hint) hint.innerHTML='XP-58IID uses Classic Bluetooth, so browser Web Bluetooth may not detect it. Use your operating system printer setup, then select XP-58IID in the print dialog.';
     }
 
-    if(container) container.innerHTML=buttons.join('');
-    if(hint) hint.innerHTML=hints.join('<br>');
-    if(typeof openModal==='function') openModal('bt-printer-modal');
+    openModal('bt-printer-modal');
   };
 
-  window.printReceiptBrowser = function(){
-    if(typeof closeModal==='function') closeModal('bt-printer-modal');
+  window.printReceiptBrowser=function(){
+    closeModal('bt-printer-modal');
+
+    /* Open immediately from the click so mobile/desktop popup blockers allow it. */
+    var w=window.open('about:blank','gtg_receipt_print','width=430,height=760');
+    if(!w){
+      showToast('Print window was blocked. Allow popups for this POS site.','error');
+      return;
+    }
 
     try{
-      var totals = getTotals();
-      var orderNum = String(orderCount).padStart(6,'0');
-      var tableVal = (document.getElementById('table-num')||{}).value||'';
-      var custVal = (document.getElementById('cust-name')||{}).value||'';
-      var cashier = (typeof activeCashier!=='undefined' && activeCashier) ? activeCashier :
-                    ((typeof googleUser!=='undefined' && googleUser && googleUser.name) ? googleUser.name : '');
+      var totals=getTotals();
+      var orderNum=String(orderCount).padStart(6,'0');
+      var tableVal=(document.getElementById('table-num')||{}).value||'';
+      var custVal=(document.getElementById('cust-name')||{}).value||'';
+      var cashier=(typeof activeCashier!=='undefined' && activeCashier) ? activeCashier :
+        ((typeof googleUser!=='undefined' && googleUser && googleUser.name) ? googleUser.name : '');
 
-      var rows = order.map(function(o){
-        var unit=Number(o.price||0), qty=Number(o.qty||0);
-        return '<tr><td class="qty">'+qty+'</td><td class="item">'+String(o.name||'')+'</td>'
+      var rows=order.map(function(o){
+        var unit=Number(o.price||0);
+        var qty=Number(o.qty||0);
+        return '<tr>'
+          +'<td class="qty">'+qty+'</td>'
+          +'<td class="item">'+String(o.name||'')+'</td>'
           +'<td class="price">&#8369;'+unit.toFixed(2)+'</td>'
-          +'<td class="amt">&#8369;'+(unit*qty).toFixed(2)+'</td></tr>';
+          +'<td class="amt">&#8369;'+(unit*qty).toFixed(2)+'</td>'
+          +'</tr>';
       }).join('');
 
-      var qrImg=document.querySelector('#receipt-loyalty-qr img');
-      var qrSrc=qrImg?qrImg.src:'';
-      var logoImg=document.querySelector('.g2g-mobile-brand img');
-      var logoSrc=logoImg?logoImg.src:'';
+      var qrEl=document.querySelector('#receipt-loyalty-qr img');
+      var qrSrc=qrEl ? qrEl.src : '';
+      var logoEl=document.querySelector('.g2g-mobile-brand img');
+      var logoSrc=logoEl ? logoEl.src : '';
 
       var now=new Date();
       var dateStr=now.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
@@ -5763,69 +5773,21 @@ function printKitchenTicket(kitchenOrder){
         +'<hr class="dash">'
         +(qrSrc?'<div class="qr"><img src="'+qrSrc+'"><div class="loyalty">Scan the QR code to register<br>and join the Greek To Go<br>Taverna Loyalty Program.</div></div>':'');
 
-      var doc='<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title><style>'+css+'</style></head><body>'+body+'</body></html>';
+      var doc='<!doctype html><html><head><meta charset="utf-8"><title>Greek To Go Receipt</title><style>'+css+'</style></head><body>'+body
+        +'<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);}<\/script>'
+        +'</body></html>';
 
-      var old=document.getElementById('gtg-print-frame');
-      if(old) old.remove();
-
-      var frame=document.createElement('iframe');
-      frame.id='gtg-print-frame';
-      frame.style.position='fixed';
-      frame.style.right='0';
-      frame.style.bottom='0';
-      frame.style.width='1px';
-      frame.style.height='1px';
-      frame.style.border='0';
-      frame.style.opacity='0';
-      document.body.appendChild(frame);
-
-      var fdoc=frame.contentWindow.document;
-      fdoc.open();
-      fdoc.write(doc);
-      fdoc.close();
-
-      var doPrint=function(){
-        try{
-          frame.contentWindow.focus();
-          frame.contentWindow.print();
-        }catch(e){
-          console.error(e);
-          if(typeof showToast==='function') showToast('Browser print dialog could not open.','error');
-        }
-        setTimeout(function(){try{frame.remove();}catch(e){}},4000);
-      };
-
-      var imgs=fdoc.images;
-      if(imgs.length){
-        var pending=imgs.length;
-        var done=function(){pending--;if(pending<=0)setTimeout(doPrint,150);};
-        Array.from(imgs).forEach(function(img){
-          if(img.complete) done();
-          else {img.onload=done;img.onerror=done;}
-        });
-      }else{
-        setTimeout(doPrint,150);
-      }
+      w.document.open();
+      w.document.write(doc);
+      w.document.close();
     }catch(e){
-      console.error('printReceiptBrowser error',e);
-      if(typeof showToast==='function') showToast('Could not prepare receipt for printing.','error');
+      console.error(e);
+      try{w.close();}catch(_){}
+      showToast('Could not prepare receipt for printing.','error');
     }
   };
 
   window.printBrowser=function(){ return window.printReceiptBrowser(); };
-
-  var originalPrintBluetooth=window.printBluetooth;
-  window.printBluetooth=async function(){
-    var el=document.getElementById('bt-status-msg');
-    if(!navigator.bluetooth){
-      if(el){
-        el.textContent='Direct Web Bluetooth is not available here. On Android use RawBT; otherwise use the system print dialog.';
-        el.style.color='#E05050';
-      }
-      return;
-    }
-    if(typeof originalPrintBluetooth==='function') return originalPrintBluetooth();
-  };
 })();
 </script>
 
