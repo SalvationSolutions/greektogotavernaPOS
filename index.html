@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="58MM-RECEIPT-RESPONSIVE-LOGIN-2026-09-13">
+<meta name="gtg-receipt-build" content="RESPONSIVE-LOGIN-GCASH-REFERENCE-FINAL-2026-09-13">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -852,6 +852,188 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 </style>
 
+<style id="g2g-responsive-login-ui">
+#login-screen{
+  position:fixed; inset:0; z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(12px,3vw,34px);
+  background:
+    radial-gradient(circle at 85% 8%, rgba(74,145,220,.34), transparent 34%),
+    radial-gradient(circle at 10% 92%, rgba(18,89,160,.30), transparent 35%),
+    linear-gradient(135deg,#082d59 0%,#0b447f 50%,#0b5dab 100%);
+  overflow:auto;
+}
+.g2g-login-shell{
+  width:min(1260px,94vw);
+  min-height:min(760px,88vh);
+  display:grid;
+  grid-template-columns:1.02fr .98fr;
+  background:#fff;
+  border-radius:28px;
+  overflow:hidden;
+  box-shadow:0 28px 70px rgba(0,22,52,.34);
+}
+.g2g-login-scene{
+  position:relative; overflow:hidden;
+  min-height:690px;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/118px 100%,
+    linear-gradient(0deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/100% 118px,
+    linear-gradient(135deg,#0b3c72 0%,#073464 62%,#052b55 100%);
+}
+.g2g-watermark{position:absolute;left:-18px;top:22px;opacity:.10;width:210px}
+.g2g-watermark img{width:100%;display:block}
+.g2g-arch{
+  position:absolute; width:360px;height:360px; border:36px solid rgba(255,255,255,.92);
+  border-right-color:transparent;border-bottom-color:transparent;border-radius:50%;
+  top:-145px;right:-70px;transform:rotate(-6deg);
+}
+.g2g-pendant{position:absolute;right:15%;top:0;width:90px;height:165px}
+.g2g-wire{position:absolute;left:44px;top:0;width:2px;height:78px;background:#78552f}
+.g2g-lamp{
+  position:absolute;left:14px;top:72px;width:62px;height:62px;border-radius:45% 45% 50% 50%;
+  background:radial-gradient(circle at 50% 45%,#ffe9a8 0 12%,#d89b3c 20%,#8e5a25 62%,#4c331f 100%);
+  box-shadow:0 0 28px rgba(232,177,74,.55);
+}
+.g2g-scene-logo{
+  position:absolute;left:50%;top:48%;transform:translate(-50%,-52%);
+  width:min(390px,58%); padding:26px;
+  background:linear-gradient(145deg,#25367e,#273274);
+  box-shadow:0 14px 32px rgba(0,0,0,.16);
+}
+.g2g-scene-logo img{display:block;width:100%;height:auto}
+.g2g-scene-tagline{
+  position:absolute;left:50%;bottom:110px;transform:translateX(-50%);
+  color:#fff;text-align:center;font-size:14px;line-height:1.45;font-weight:700;
+  letter-spacing:6px;white-space:nowrap;
+}
+.g2g-scene-tagline span{display:block;width:44px;height:2px;background:#d8a028;margin:15px auto 0}
+.g2g-table{
+  position:absolute;left:-5%;bottom:-12px;width:61%;height:95px;
+  background:#f4e7cc;border-radius:55% 55% 0 0/35% 35% 0 0;
+}
+.g2g-vase{
+  position:absolute;left:31%;bottom:42px;width:44px;height:72px;background:#f7f7f4;border-radius:14px 14px 20px 20px;
+  box-shadow:0 4px 12px rgba(0,0,0,.14);
+}
+.g2g-vase i{position:absolute;bottom:62px;width:3px;height:82px;background:#8ea259;transform-origin:bottom}
+.g2g-vase i:nth-child(1){left:11px;transform:rotate(-10deg)}
+.g2g-vase i:nth-child(2){left:23px;transform:rotate(2deg)}
+.g2g-vase i:nth-child(3){left:34px;transform:rotate(13deg)}
+.g2g-lantern{
+  position:absolute;left:45%;bottom:42px;width:38px;height:50px;border:4px solid #493929;border-radius:5px;background:#263544
+}
+.g2g-lantern b{position:absolute;inset:14px;border-radius:50%;background:#f7c65e;box-shadow:0 0 14px #f7c65e}
+
+.g2g-login-form-panel{position:relative;display:flex;align-items:center;justify-content:center;background:#fff;padding:48px}
+.g2g-login-form-wrap{width:min(520px,100%);text-align:left}
+.g2g-mobile-brand{display:none;text-align:center;margin-bottom:16px}
+.g2g-mobile-brand img{width:170px;max-width:55vw;height:auto}
+.login-title{
+  font-family:'Nunito',sans-serif!important;
+  font-size:clamp(34px,4vw,50px)!important;
+  line-height:1.05;font-weight:900!important;color:#0b2f62!important;
+  text-align:center;margin:0 0 8px!important;
+}
+.login-sub{font-size:15px!important;color:#607696!important;text-align:center;margin:0 0 34px!important}
+.login-field{margin-bottom:18px!important}
+.login-field label{
+  display:block;margin-bottom:7px!important;color:#0b315f!important;
+  font-size:12px!important;font-weight:900!important;letter-spacing:.5px!important;
+}
+.g2g-input-wrap{position:relative}
+.g2g-input-wrap input{
+  width:100%;height:58px;border:1.7px solid #bdd2ea!important;border-radius:13px!important;
+  padding:0 48px 0 52px!important;background:#fff!important;
+  color:#16385f!important;font-size:15px!important;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.g2g-input-wrap input:focus{border-color:#4595dc!important;box-shadow:0 0 0 4px rgba(69,149,220,.14)}
+.g2g-field-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);z-index:2;color:#0c3e78;font-size:20px}
+.g2g-eye{
+  position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  border:0;background:transparent;color:#0b3c72;font-size:18px;cursor:pointer;padding:8px
+}
+.login-err{min-height:17px;margin:0 0 6px!important;text-align:center}
+.login-btn{
+  width:100%!important;height:58px!important;padding:0 18px!important;
+  border:0!important;border-radius:12px!important;
+  background:linear-gradient(90deg,#0c4a89,#0b69bd)!important;color:#fff!important;
+  font-family:'Nunito',sans-serif!important;font-size:16px!important;font-weight:900!important;
+  box-shadow:0 10px 22px rgba(11,81,146,.18);cursor:pointer;margin:0!important;
+}
+.login-btn span{font-size:26px;vertical-align:-2px;margin-left:8px}
+.g2g-pos-brand{display:flex;align-items:center;gap:18px;margin:32px 0 20px;color:#0d3565;text-align:center}
+.g2g-pos-brand>span{height:1px;background:#d2deec;flex:1}
+.g2g-pos-brand b{display:block;font-size:11px;letter-spacing:4px}
+.g2g-pos-brand small{display:block;font-size:10px;letter-spacing:5px;color:#7392b8;margin-top:7px}
+.g2g-authentic{text-align:center;color:#cb8b2d;font-size:20px;font-family:'Cinzel',serif;font-style:italic}
+#login-screen>.login-footer{display:none!important}
+
+@media(max-width:1050px){
+  .g2g-login-shell{width:min(930px,95vw);min-height:min(650px,90vh)}
+  .g2g-login-form-panel{padding:34px}
+  .g2g-login-scene{min-height:620px}
+  .g2g-scene-logo{width:62%;padding:18px}
+  .g2g-scene-tagline{font-size:11px;letter-spacing:4px;bottom:84px}
+  .g2g-table{height:78px}
+  .login-title{font-size:34px!important}
+  .login-sub{margin-bottom:25px!important}
+}
+
+@media(max-width:760px){
+  #login-screen{padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom))}
+  .g2g-login-shell{display:block;width:min(480px,100%);min-height:0;border-radius:22px}
+  .g2g-login-scene{display:none}
+  .g2g-login-form-panel{padding:24px 20px 26px;display:block}
+  .g2g-mobile-brand{
+    display:block;margin:-24px -20px 20px;padding:23px 16px 18px;
+    background:
+      radial-gradient(circle at 86% 18%,rgba(223,167,64,.35),transparent 14%),
+      linear-gradient(135deg,#073665,#0b4d8c);
+  }
+  .g2g-mobile-brand img{filter:none}
+  .login-title{font-size:30px!important}
+  .login-sub{font-size:13px!important;margin-bottom:23px!important}
+  .g2g-input-wrap input{height:52px;font-size:14px!important}
+  .login-btn{height:52px!important}
+  .g2g-pos-brand{margin:24px 0 14px;gap:10px}
+  .g2g-pos-brand b{font-size:9px;letter-spacing:2.6px}
+  .g2g-pos-brand small{font-size:8px;letter-spacing:3.5px}
+  .g2g-authentic{font-size:17px}
+}
+
+@media(max-width:420px){
+  .g2g-login-shell{border-radius:18px}
+  .g2g-login-form-panel{padding:20px 16px 22px}
+  .g2g-mobile-brand{margin:-20px -16px 18px;padding:19px 12px 15px}
+  .g2g-mobile-brand img{width:145px}
+  .login-title{font-size:27px!important}
+  .login-sub{font-size:12px!important}
+  .login-field{margin-bottom:14px!important}
+  .g2g-input-wrap input{height:49px;padding-left:46px!important;font-size:13px!important}
+  .login-btn{height:50px!important;font-size:14px!important}
+  .g2g-authentic{font-size:15px}
+}
+</style>
+
+<style id="gtg-gcash-reference-ui">
+#gcash-modal .modal{
+  width:min(400px,calc(100vw - 24px)) !important;
+}
+#gcash-modal .gcash-numbox{
+  text-align:left !important;
+  letter-spacing:.4px !important;
+  font-size:14px !important;
+}
+@media(max-width:480px){
+  #gcash-modal .modal{padding:18px !important;border-radius:18px !important;}
+  #gcash-modal .gcash-header{padding:16px !important;}
+  #gcash-modal .gcash-amt{font-size:25px !important;}
+  #gcash-modal .gcash-confirm{min-height:48px;font-size:13px !important;}
+}
+</style>
+
 </head>
 <body>
 
@@ -1646,9 +1828,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="gcash-sub">Mobile Wallet Payment</div>
       <div class="gcash-amt" id="gcash-disp">₱0.00</div>
     </div>
-    <div class="mf"><label>GCash Number</label><input class="gcash-numbox" type="tel" id="gcash-num" placeholder="09XX XXX XXXX" maxlength="11"></div>
-    <div class="mf"><label>Account / Reference Name</label>
-      <input type="text" id="gcash-ref" placeholder="GCash registered name" style="width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:9px 12px;font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
+    <div class="mf">
+      <label>Reference #</label>
+      <input class="gcash-numbox" type="text" id="gcash-num"
+        placeholder="Enter GCash reference number" maxlength="30"
+        autocomplete="off" inputmode="numeric">
     </div>
     <button class="gcash-confirm" onclick="confirmGCash()">✅ Confirm GCash Payment</button>
     <p class="gcash-note">⚠️ Verify on merchant GCash app before confirming.</p>
@@ -2821,14 +3005,14 @@ async function processFreeMeal(){
 async function openGCash(){
   if(!order.length){showToast('No items in order!','error');return;}
   document.getElementById('gcash-disp').textContent=`₱${getTotals().tot.toFixed(2)}`;
-  document.getElementById('gcash-num').value=''; document.getElementById('gcash-ref').value='';
+  document.getElementById('gcash-num').value='';
   openModal('gcash-modal');
 }
 function confirmGCash(){
-  const num=document.getElementById('gcash-num').value.trim();
-  const ref=document.getElementById('gcash-ref').value.trim();
-  if(!num||num.length<10){showToast('Enter valid GCash number!','error');return;}
-  closeModal('gcash-modal'); return finalizePayment('GCash',num,ref||'N/A');
+  const ref=document.getElementById('gcash-num').value.trim();
+  if(!ref){showToast('Enter GCash reference number!','error');return;}
+  closeModal('gcash-modal');
+  return finalizePayment('GCash',ref,'N/A');
 }
 async function finalizePayment(method,gcashNum,gcashRef){
   const{sub,da,vat,tot}=getTotals();
@@ -2887,11 +3071,10 @@ async function finalizePayment(method,gcashNum,gcashRef){
   } else if(da>0){
     rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;
   } else rdr.style.display='none';
-  let ml=method+' — '+cust; if(method==='GCash') ml+=` | ${gcashNum}`;
+  let ml=method+' — '+cust; if(method==='GCash') ml+=` | Reference #: ${gcashNum}`;
   document.getElementById('r-method').textContent=ml;
   const gref=document.getElementById('r-gcash-ref');
-  if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Name: ${gcashRef}`;}
-  else gref.style.display='none';
+  gref.style.display='none';
   document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
   document.getElementById('r-ordnum').textContent='#'+ordNum;
   orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
@@ -5234,12 +5417,11 @@ function printReceiptBrowser(){
     '.qrwrap{text-align:center;margin-top:7px;page-break-inside:avoid;break-inside:avoid}',
     '.qrwrap img{display:block;width:30mm;height:30mm;object-fit:contain;margin:0 auto 4px;image-rendering:pixelated}',
     '.loyalty{font-family:"Courier New",monospace;font-size:7px;line-height:1.3;text-align:center}',
-    '.foot{font-family:"Courier New",monospace;font-size:7px;text-align:center;margin-top:4px}'
+    '.foot{display:none}'
   ].join('');
 
   var body = [
     '<div class="logo">'+(logoData?'<img src="'+logoData+'" alt="Greek To Go Taverna">':'<b>GREEK TO GO TAVERNA</b>')+'</div>',
-    '<hr class="rule">',
     '<div class="meta">',
       '<div class="lbl">Date</div><div class="val">: '+dateStr+'</div>',
       tableVal?'<div class="rightlbl">Table:</div><div class="val">'+tableVal+'</div>':'<div></div><div></div>',
@@ -5272,7 +5454,6 @@ function printReceiptBrowser(){
     '<div class="qrwrap">',
       '<img src="'+qrData+'" alt="Loyalty Registration QR">',
       '<div class="loyalty">Scan the QR code to register<br>and join the Greek To Go<br>Taverna Loyalty Program.</div>',
-      '<div class="foot">GREEK TO GO TAVERNA</div>',
     '</div>'
   ].join('');
 
@@ -5373,12 +5554,11 @@ function printReceiptBrowser(){
     '.qrwrap{text-align:center;margin-top:7px;page-break-inside:avoid;break-inside:avoid}',
     '.qrwrap img{display:block;width:30mm;height:30mm;object-fit:contain;margin:0 auto 4px;image-rendering:pixelated}',
     '.loyalty{font-family:"Courier New",monospace;font-size:7px;line-height:1.3;text-align:center}',
-    '.foot{font-family:"Courier New",monospace;font-size:7px;text-align:center;margin-top:4px}'
+    '.foot{display:none}'
   ].join('');
 
   var body = [
     '<div class="logo">'+(logoData?'<img src="'+logoData+'" alt="Greek To Go Taverna">':'<b>GREEK TO GO TAVERNA</b>')+'</div>',
-    '<hr class="rule">',
     '<div class="meta">',
       '<div class="lbl">Date</div><div class="val">: '+dateStr+'</div>',
       tableVal?'<div class="rightlbl">Table:</div><div class="val">'+tableVal+'</div>':'<div></div><div></div>',
@@ -5411,175 +5591,11 @@ function printReceiptBrowser(){
     '<div class="qrwrap">',
       '<img src="'+qrData+'" alt="Loyalty Registration QR">',
       '<div class="loyalty">Scan the QR code to register<br>and join the Greek To Go<br>Taverna Loyalty Program.</div>',
-      '<div class="foot">GREEK TO GO TAVERNA</div>',
     '</div>'
   ].join('');
 
   var printHtml='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title><style>'+css+'</style>
-<style id="g2g-responsive-login-ui">
-#login-screen{
-  position:fixed; inset:0; z-index:9999;
-  display:flex; align-items:center; justify-content:center;
-  padding:clamp(12px,3vw,34px);
-  background:
-    radial-gradient(circle at 85% 8%, rgba(74,145,220,.34), transparent 34%),
-    radial-gradient(circle at 10% 92%, rgba(18,89,160,.30), transparent 35%),
-    linear-gradient(135deg,#082d59 0%,#0b447f 50%,#0b5dab 100%);
-  overflow:auto;
-}
-.g2g-login-shell{
-  width:min(1260px,94vw);
-  min-height:min(760px,88vh);
-  display:grid;
-  grid-template-columns:1.02fr .98fr;
-  background:#fff;
-  border-radius:28px;
-  overflow:hidden;
-  box-shadow:0 28px 70px rgba(0,22,52,.34);
-}
-.g2g-login-scene{
-  position:relative; overflow:hidden;
-  min-height:690px;
-  background:
-    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/118px 100%,
-    linear-gradient(0deg,rgba(255,255,255,.025) 1px,transparent 1px) 0 0/100% 118px,
-    linear-gradient(135deg,#0b3c72 0%,#073464 62%,#052b55 100%);
-}
-.g2g-watermark{position:absolute;left:-18px;top:22px;opacity:.10;width:210px}
-.g2g-watermark img{width:100%;display:block}
-.g2g-arch{
-  position:absolute; width:360px;height:360px; border:36px solid rgba(255,255,255,.92);
-  border-right-color:transparent;border-bottom-color:transparent;border-radius:50%;
-  top:-145px;right:-70px;transform:rotate(-6deg);
-}
-.g2g-pendant{position:absolute;right:15%;top:0;width:90px;height:165px}
-.g2g-wire{position:absolute;left:44px;top:0;width:2px;height:78px;background:#78552f}
-.g2g-lamp{
-  position:absolute;left:14px;top:72px;width:62px;height:62px;border-radius:45% 45% 50% 50%;
-  background:radial-gradient(circle at 50% 45%,#ffe9a8 0 12%,#d89b3c 20%,#8e5a25 62%,#4c331f 100%);
-  box-shadow:0 0 28px rgba(232,177,74,.55);
-}
-.g2g-scene-logo{
-  position:absolute;left:50%;top:48%;transform:translate(-50%,-52%);
-  width:min(390px,58%); padding:26px;
-  background:linear-gradient(145deg,#25367e,#273274);
-  box-shadow:0 14px 32px rgba(0,0,0,.16);
-}
-.g2g-scene-logo img{display:block;width:100%;height:auto}
-.g2g-scene-tagline{
-  position:absolute;left:50%;bottom:110px;transform:translateX(-50%);
-  color:#fff;text-align:center;font-size:14px;line-height:1.45;font-weight:700;
-  letter-spacing:6px;white-space:nowrap;
-}
-.g2g-scene-tagline span{display:block;width:44px;height:2px;background:#d8a028;margin:15px auto 0}
-.g2g-table{
-  position:absolute;left:-5%;bottom:-12px;width:61%;height:95px;
-  background:#f4e7cc;border-radius:55% 55% 0 0/35% 35% 0 0;
-}
-.g2g-vase{
-  position:absolute;left:31%;bottom:42px;width:44px;height:72px;background:#f7f7f4;border-radius:14px 14px 20px 20px;
-  box-shadow:0 4px 12px rgba(0,0,0,.14);
-}
-.g2g-vase i{position:absolute;bottom:62px;width:3px;height:82px;background:#8ea259;transform-origin:bottom}
-.g2g-vase i:nth-child(1){left:11px;transform:rotate(-10deg)}
-.g2g-vase i:nth-child(2){left:23px;transform:rotate(2deg)}
-.g2g-vase i:nth-child(3){left:34px;transform:rotate(13deg)}
-.g2g-lantern{
-  position:absolute;left:45%;bottom:42px;width:38px;height:50px;border:4px solid #493929;border-radius:5px;background:#263544
-}
-.g2g-lantern b{position:absolute;inset:14px;border-radius:50%;background:#f7c65e;box-shadow:0 0 14px #f7c65e}
 
-.g2g-login-form-panel{position:relative;display:flex;align-items:center;justify-content:center;background:#fff;padding:48px}
-.g2g-login-form-wrap{width:min(520px,100%);text-align:left}
-.g2g-mobile-brand{display:none;text-align:center;margin-bottom:16px}
-.g2g-mobile-brand img{width:170px;max-width:55vw;height:auto}
-.login-title{
-  font-family:'Nunito',sans-serif!important;
-  font-size:clamp(34px,4vw,50px)!important;
-  line-height:1.05;font-weight:900!important;color:#0b2f62!important;
-  text-align:center;margin:0 0 8px!important;
-}
-.login-sub{font-size:15px!important;color:#607696!important;text-align:center;margin:0 0 34px!important}
-.login-field{margin-bottom:18px!important}
-.login-field label{
-  display:block;margin-bottom:7px!important;color:#0b315f!important;
-  font-size:12px!important;font-weight:900!important;letter-spacing:.5px!important;
-}
-.g2g-input-wrap{position:relative}
-.g2g-input-wrap input{
-  width:100%;height:58px;border:1.7px solid #bdd2ea!important;border-radius:13px!important;
-  padding:0 48px 0 52px!important;background:#fff!important;
-  color:#16385f!important;font-size:15px!important;outline:none;
-  transition:border-color .2s,box-shadow .2s;
-}
-.g2g-input-wrap input:focus{border-color:#4595dc!important;box-shadow:0 0 0 4px rgba(69,149,220,.14)}
-.g2g-field-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);z-index:2;color:#0c3e78;font-size:20px}
-.g2g-eye{
-  position:absolute;right:16px;top:50%;transform:translateY(-50%);
-  border:0;background:transparent;color:#0b3c72;font-size:18px;cursor:pointer;padding:8px
-}
-.login-err{min-height:17px;margin:0 0 6px!important;text-align:center}
-.login-btn{
-  width:100%!important;height:58px!important;padding:0 18px!important;
-  border:0!important;border-radius:12px!important;
-  background:linear-gradient(90deg,#0c4a89,#0b69bd)!important;color:#fff!important;
-  font-family:'Nunito',sans-serif!important;font-size:16px!important;font-weight:900!important;
-  box-shadow:0 10px 22px rgba(11,81,146,.18);cursor:pointer;margin:0!important;
-}
-.login-btn span{font-size:26px;vertical-align:-2px;margin-left:8px}
-.g2g-pos-brand{display:flex;align-items:center;gap:18px;margin:32px 0 20px;color:#0d3565;text-align:center}
-.g2g-pos-brand>span{height:1px;background:#d2deec;flex:1}
-.g2g-pos-brand b{display:block;font-size:11px;letter-spacing:4px}
-.g2g-pos-brand small{display:block;font-size:10px;letter-spacing:5px;color:#7392b8;margin-top:7px}
-.g2g-authentic{text-align:center;color:#cb8b2d;font-size:20px;font-family:'Cinzel',serif;font-style:italic}
-#login-screen>.login-footer{display:none!important}
-
-@media(max-width:1050px){
-  .g2g-login-shell{width:min(930px,95vw);min-height:min(650px,90vh)}
-  .g2g-login-form-panel{padding:34px}
-  .g2g-login-scene{min-height:620px}
-  .g2g-scene-logo{width:62%;padding:18px}
-  .g2g-scene-tagline{font-size:11px;letter-spacing:4px;bottom:84px}
-  .g2g-table{height:78px}
-  .login-title{font-size:34px!important}
-  .login-sub{margin-bottom:25px!important}
-}
-
-@media(max-width:760px){
-  #login-screen{padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom))}
-  .g2g-login-shell{display:block;width:min(480px,100%);min-height:0;border-radius:22px}
-  .g2g-login-scene{display:none}
-  .g2g-login-form-panel{padding:24px 20px 26px;display:block}
-  .g2g-mobile-brand{
-    display:block;margin:-24px -20px 20px;padding:23px 16px 18px;
-    background:
-      radial-gradient(circle at 86% 18%,rgba(223,167,64,.35),transparent 14%),
-      linear-gradient(135deg,#073665,#0b4d8c);
-  }
-  .g2g-mobile-brand img{filter:none}
-  .login-title{font-size:30px!important}
-  .login-sub{font-size:13px!important;margin-bottom:23px!important}
-  .g2g-input-wrap input{height:52px;font-size:14px!important}
-  .login-btn{height:52px!important}
-  .g2g-pos-brand{margin:24px 0 14px;gap:10px}
-  .g2g-pos-brand b{font-size:9px;letter-spacing:2.6px}
-  .g2g-pos-brand small{font-size:8px;letter-spacing:3.5px}
-  .g2g-authentic{font-size:17px}
-}
-
-@media(max-width:420px){
-  .g2g-login-shell{border-radius:18px}
-  .g2g-login-form-panel{padding:20px 16px 22px}
-  .g2g-mobile-brand{margin:-20px -16px 18px;padding:19px 12px 15px}
-  .g2g-mobile-brand img{width:145px}
-  .login-title{font-size:27px!important}
-  .login-sub{font-size:12px!important}
-  .login-field{margin-bottom:14px!important}
-  .g2g-input-wrap input{height:49px;padding-left:46px!important;font-size:13px!important}
-  .login-btn{height:50px!important;font-size:14px!important}
-  .g2g-authentic{font-size:15px}
-}
-</style>
 
 </head><body>'+body
     +'<'+ 'script>window.onload=function(){setTimeout(function(){window.print()},250);window.onafterprint=function(){window.close()}}<'+'/script>'
