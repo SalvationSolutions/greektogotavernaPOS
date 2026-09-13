@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="LAST-RECEIPT-PRINT-FIX-2026-09-13">
+<meta name="gtg-receipt-build" content="PERSISTENT-LAST-RECEIPT-FIX-2026-09-13">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -3056,6 +3056,28 @@ async function finalizePayment(method,gcashNum,gcashRef){
   gref.style.display='none';
   document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
   document.getElementById('r-ordnum').textContent='#'+ordNum;
+
+  // Persist the completed receipt BEFORE any New Order / Done action can clear the cart.
+  try{
+    var _gtgReceiptSnapshot={
+      items:order.map(function(o){
+        return {id:o.id,name:String(o.name||''),qty:Number(o.qty||0),price:isFreeMeal?0:Number(o.price||0),cat:String(o.cat||'')};
+      }),
+      totals:{sub:Number(saleSub||0),da:Number(saleDisc||0),tot:Number(saleTot||0)},
+      table:(document.getElementById('table-num')||{}).value||'',
+      customer:cust||'Walk-in',
+      cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+      orderNum:ordNum,
+      method:method||'Cash',
+      gcashRef:gcashNum||'',
+      date:dateStr
+    };
+    localStorage.setItem('gtg_last_completed_receipt',JSON.stringify(_gtgReceiptSnapshot));
+    window._gtgLastReceipt=_gtgReceiptSnapshot;
+  }catch(_receiptSaveErr){
+    console.error('Could not save completed receipt snapshot',_receiptSaveErr);
+  }
+
   orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
   openModal('receipt-modal'); renderMenu();
   if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
@@ -5792,123 +5814,105 @@ function printKitchenTicket(kitchenOrder){
 </script>
 
 
-<script id="gtg-last-receipt-fix">
-(function(){
-  window._gtgLastReceipt = window._gtgLastReceipt || null;
 
-  function cloneItems(items){
-    return (items||[]).map(function(o){
-      return {
-        id:o.id,
-        name:String(o.name||''),
-        qty:Number(o.qty||0),
-        price:Number(o.price||0),
-        cat:String(o.cat||'')
-      };
-    });
+
+
+<script id="gtg-persistent-receipt-print">
+(function(){
+  function loadLastReceipt(){
+    if(window._gtgLastReceipt && window._gtgLastReceipt.items && window._gtgLastReceipt.items.length){
+      return window._gtgLastReceipt;
+    }
+    try{
+      var raw=localStorage.getItem('gtg_last_completed_receipt');
+      if(raw){
+        var s=JSON.parse(raw);
+        if(s && Array.isArray(s.items) && s.items.length){
+          window._gtgLastReceipt=s;
+          return s;
+        }
+      }
+    }catch(e){}
+    return null;
   }
 
-  function currentSnapshot(){
-    if(window.order && order.length){
+  function liveReceipt(){
+    if(typeof order!=='undefined' && Array.isArray(order) && order.length){
       var totals=getTotals();
       return {
-        items:cloneItems(order),
-        totals:{
-          sub:Number(totals.sub||0),
-          da:Number(totals.da||0),
-          tot:Number(totals.tot||0)
-        },
+        items:order.map(function(o){return {name:o.name,qty:Number(o.qty||0),price:Number(o.price||0)};}),
+        totals:{sub:Number(totals.sub||0),da:Number(totals.da||0),tot:Number(totals.tot||0)},
         table:(document.getElementById('table-num')||{}).value||'',
-        customer:(document.getElementById('cust-name')||{}).value||'',
+        customer:(document.getElementById('cust-name')||{}).value||'Walk-in',
         cashier:(typeof activeCashier!=='undefined'&&activeCashier)?activeCashier:
-          ((typeof googleUser!=='undefined'&&googleUser&&googleUser.name)?googleUser.name:''),
-        orderNum:String(orderCount).padStart(6,'0'),
-        date:new Date()
+          ((typeof googleUser!=='undefined'&&googleUser&&googleUser.name)?googleUser.name:'—'),
+        orderNum:String(orderCount).padStart(4,'0'),
+        method:'Pending',
+        date:new Date().toISOString()
       };
     }
-    return window._gtgLastReceipt;
+    return null;
   }
 
-  /* Save the completed transaction BEFORE New Order clears the cart. */
-  if(typeof window.finalizePayment === 'function' && !window._gtgFinalizeWrapped){
-    var _origFinalizePayment=window.finalizePayment;
-    window.finalizePayment=async function(){
-      var before=currentSnapshot();
-      var result=await _origFinalizePayment.apply(this,arguments);
-      if(result!==false && before && before.items && before.items.length){
-        window._gtgLastReceipt=before;
-      }
-      return result;
-    };
-    window._gtgFinalizeWrapped=true;
+  function receiptData(){
+    return liveReceipt() || loadLastReceipt();
   }
 
-  /* Print Receipt can now print the current order OR the most recent completed receipt. */
-  var _origPrintReceipt=window.printReceipt;
+  function addPrintButton(container,label,bg,fn){
+    var b=document.createElement('button');
+    b.type='button'; b.className='m-save'; b.textContent=label;
+    b.style.background=bg; b.style.fontSize='14px'; b.style.padding='14px';
+    b.onclick=fn; container.appendChild(b);
+  }
+
   window.printReceipt=function(){
-    var snap=currentSnapshot();
-    if(!snap || !snap.items || !snap.items.length){
-      if(typeof showToast==='function') showToast('No current or completed receipt available to print.','error');
+    var snap=receiptData();
+    if(!snap){
+      showToast('No receipt data available yet. Complete a payment first.','error');
       return;
-    }
-
-    /* If there is an active order, use the existing flow unchanged. */
-    if(window.order && order.length){
-      return _origPrintReceipt.apply(this,arguments);
     }
 
     var container=document.getElementById('print-btn-container');
     var hint=document.getElementById('print-hint');
     var status=document.getElementById('bt-status-msg');
-    if(container) container.innerHTML='';
+    if(!container) return;
+
+    container.innerHTML='';
     if(status){
-      status.textContent='Printing last completed receipt.';
+      status.textContent=(liveReceipt()?'Current order receipt':'Last completed receipt');
       status.style.color='var(--blue-accent)';
     }
 
-    var isAndroid=/Android/i.test(navigator.userAgent);
-    function addButton(label,bg,fn){
-      var b=document.createElement('button');
-      b.type='button'; b.className='m-save'; b.textContent=label;
-      b.style.background=bg;b.style.fontSize='14px';b.style.padding='14px';
-      b.onclick=fn;
-      if(container) container.appendChild(b);
-    }
-
-    if(isAndroid){
-      addButton('📶 Bluetooth Thermal Printer','#27AE60',function(){
-        closeModal('bt-printer-modal');
-        window.printViaRawBT();
+    if(/Android/i.test(navigator.userAgent)){
+      addPrintButton(container,'📶 Bluetooth Thermal Printer','#27AE60',function(){
+        closeModal('bt-printer-modal'); printViaRawBT();
       });
     }
-    addButton('🖥️ Print / Save as PDF','var(--blue-accent)',function(){
-      window.printReceiptBrowser();
+    addPrintButton(container,'🖥️ Print / Save as PDF','var(--blue-accent)',function(){
+      printReceiptBrowser();
     });
     if(navigator.share){
-      addButton('📤 Share Receipt','#555',function(){
-        /* Keep share fallback available, but browser print uses exact receipt. */
-        window.printReceiptBrowser();
+      addPrintButton(container,'📤 Share Receipt','#555',function(){
+        shareReceiptFromSnapshot();
       });
     }
-    if(hint) hint.innerHTML='This is the most recent completed transaction.';
-    if(typeof openModal==='function') openModal('bt-printer-modal');
+
+    if(hint) hint.innerHTML=liveReceipt()
+      ? 'Printing the current order.'
+      : 'Printing the most recent completed transaction.';
+    openModal('bt-printer-modal');
   };
 
   window.printReceiptBrowser=function(){
-    if(typeof closeModal==='function') closeModal('bt-printer-modal');
-    var snap=currentSnapshot();
-    if(!snap || !snap.items || !snap.items.length){
-      showToast('No receipt data available.','error'); return;
-    }
+    closeModal('bt-printer-modal');
+    var snap=receiptData();
+    if(!snap){ showToast('No receipt data available.','error'); return; }
 
     var w=window.open('about:blank','gtg_receipt_print','width=430,height=760');
-    if(!w){
-      showToast('Print window blocked. Allow popups for this POS site.','error');
-      return;
-    }
+    if(!w){ showToast('Print window blocked. Allow popups for this site.','error'); return; }
 
     try{
-      var rows=snap.items.map(function(o){
+      var rows=(snap.items||[]).map(function(o){
         var unit=Number(o.price||0), qty=Number(o.qty||0);
         return '<tr><td class="qty">'+qty+'</td><td class="item">'+String(o.name||'')+'</td>'
           +'<td class="price">&#8369;'+unit.toFixed(2)+'</td>'
@@ -5920,9 +5924,11 @@ function printKitchenTicket(kitchenOrder){
       var logoEl=document.querySelector('.g2g-mobile-brand img');
       var logoSrc=logoEl?logoEl.src:'';
 
-      var dt=snap.date instanceof Date?snap.date:new Date(snap.date||Date.now());
+      var dt=new Date(snap.date||Date.now());
+      if(isNaN(dt.getTime())) dt=new Date();
       var dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
       var timeStr=dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      var t=snap.totals||{};
 
       var css=[
         '@page{size:58mm auto;margin:0}',
@@ -5944,12 +5950,11 @@ function printKitchenTicket(kitchenOrder){
         '.loyalty{text-align:center;font-size:7px;line-height:1.3}'
       ].join('');
 
-      var t=snap.totals||{};
       var body=''
         +(logoSrc?'<div class="logo"><img src="'+logoSrc+'"></div>':'<div class="logo"><b>GREEK TO GO TAVERNA</b></div>')
         +'<div class="meta">Date&nbsp;&nbsp;&nbsp;&nbsp;: <b>'+dateStr+'</b></div>'
         +'<div class="meta">Time&nbsp;&nbsp;&nbsp;&nbsp;: <b>'+timeStr+'</b>'+(snap.table?' &nbsp; Table: <b>'+snap.table+'</b>':'')+'</div>'
-        +'<div class="meta">Trans # : <b>ORD-'+snap.orderNum+'</b></div>'
+        +'<div class="meta">Trans # : <b>ORD-'+String(snap.orderNum||'')+'</b></div>'
         +(snap.cashier?'<div class="meta">Cashier : <b>'+snap.cashier+'</b></div>':'')
         +(snap.customer?'<div class="meta">Customer: <b>'+snap.customer+'</b></div>':'')
         +'<hr class="dash">'
@@ -5958,6 +5963,8 @@ function printKitchenTicket(kitchenOrder){
         +'<div class="sumrow"><span>Subtotal</span><span>&#8369;'+Number(t.sub||0).toFixed(2)+'</span></div>'
         +'<div class="sumrow"><span>Discount</span><span>&#8369;'+Number(t.da||0).toFixed(2)+'</span></div>'
         +'<div class="sumrow total"><span>TOTAL</span><span>&#8369;'+Number(t.tot||0).toFixed(2)+'</span></div>'
+        +'<div class="meta">Payment: <b>'+String(snap.method||'Cash')+'</b></div>'
+        +(snap.gcashRef?'<div class="meta">Reference #: <b>'+snap.gcashRef+'</b></div>':'')
         +'<hr class="dash">'
         +(qrSrc?'<div class="qr"><img src="'+qrSrc+'"><div class="loyalty">Scan the QR code to register<br>and join the Greek To Go<br>Taverna Loyalty Program.</div></div>':'');
 
@@ -5965,51 +5972,55 @@ function printKitchenTicket(kitchenOrder){
         +'<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},300);}<\/script>'
         +'</body></html>';
 
-      w.document.open();w.document.write(doc);w.document.close();
+      w.document.open(); w.document.write(doc); w.document.close();
     }catch(e){
-      console.error(e);try{w.close();}catch(_){}
+      console.error(e); try{w.close();}catch(_){}
       showToast('Could not prepare receipt for printing.','error');
     }
   };
 
-  /* RawBT also prints the last completed receipt when the live cart is empty. */
-  var _origRawBT=window.printViaRawBT;
   window.printViaRawBT=function(){
-    if(window.order && order.length){
-      return _origRawBT.apply(this,arguments);
-    }
-    var snap=currentSnapshot();
-    if(!snap || !snap.items || !snap.items.length){
-      showToast('No receipt data available.','error'); return;
-    }
+    var snap=receiptData();
+    if(!snap){ showToast('No receipt data available.','error'); return; }
 
-    var width=Math.max(24,Math.min(42,(typeof RAWBT_CHARS_PER_LINE!=='undefined'?RAWBT_CHARS_PER_LINE:32)||32));
-    var line='='.repeat(width), dash='-'.repeat(width), lines=[];
-    var t=snap.totals||{};
-    lines.push(line);
+    var t=snap.totals||{}, lines=[];
     lines.push('GREEK TO GO TAVERNA');
-    lines.push(line);
-    lines.push('Order #: '+snap.orderNum);
+    lines.push('================================');
+    lines.push('Order #: '+String(snap.orderNum||''));
     lines.push(new Date(snap.date||Date.now()).toLocaleString('en-PH'));
     if(snap.table) lines.push('Table: '+snap.table);
     if(snap.customer) lines.push('Customer: '+snap.customer);
     if(snap.cashier) lines.push('Cashier: '+snap.cashier);
-    lines.push(dash);
-    snap.items.forEach(function(o){
-      var nm=String(o.name||'').slice(0,18);
-      lines.push(nm+' x'+o.qty+' P'+(Number(o.price||0)*Number(o.qty||0)).toFixed(2));
+    lines.push('--------------------------------');
+    (snap.items||[]).forEach(function(o){
+      lines.push(String(o.name||'').slice(0,18)+' x'+o.qty+' P'+(Number(o.price||0)*Number(o.qty||0)).toFixed(2));
     });
-    lines.push(dash);
+    lines.push('--------------------------------');
     lines.push('Subtotal: P'+Number(t.sub||0).toFixed(2));
     if(Number(t.da||0)>0) lines.push('Discount: -P'+Number(t.da||0).toFixed(2));
     lines.push('TOTAL: P'+Number(t.tot||0).toFixed(2));
-    lines.push('');lines.push('');
+    if(snap.method) lines.push('Payment: '+snap.method);
+    if(snap.gcashRef) lines.push('Reference #: '+snap.gcashRef);
+    lines.push(''); lines.push('');
 
     var a=document.createElement('a');
     a.href='rawbt:'+encodeURIComponent(lines.join('\n'));
     a.style.display='none';
-    document.body.appendChild(a);a.click();
+    document.body.appendChild(a); a.click();
     setTimeout(function(){try{a.remove();}catch(e){}},1000);
+  };
+
+  window.shareReceiptFromSnapshot=async function(){
+    var snap=receiptData();
+    if(!snap){ showToast('No receipt data available.','error'); return; }
+    var t=snap.totals||{}, lines=['GREEK TO GO TAVERNA','Order #: '+String(snap.orderNum||'')];
+    (snap.items||[]).forEach(function(o){
+      lines.push(o.qty+'x '+o.name+' - P'+(Number(o.price||0)*Number(o.qty||0)).toFixed(2));
+    });
+    lines.push('TOTAL: P'+Number(t.tot||0).toFixed(2));
+    try{
+      if(navigator.share) await navigator.share({title:'Greek To Go Receipt',text:lines.join('\n')});
+    }catch(e){}
   };
 })();
 </script>
