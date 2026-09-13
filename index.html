@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="REAL-PRINT-FIX-2026-09-13">
+<meta name="gtg-receipt-build" content="LAST-RECEIPT-PRINT-FIX-2026-09-13">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -5788,6 +5788,229 @@ function printKitchenTicket(kitchenOrder){
   };
 
   window.printBrowser=function(){ return window.printReceiptBrowser(); };
+})();
+</script>
+
+
+<script id="gtg-last-receipt-fix">
+(function(){
+  window._gtgLastReceipt = window._gtgLastReceipt || null;
+
+  function cloneItems(items){
+    return (items||[]).map(function(o){
+      return {
+        id:o.id,
+        name:String(o.name||''),
+        qty:Number(o.qty||0),
+        price:Number(o.price||0),
+        cat:String(o.cat||'')
+      };
+    });
+  }
+
+  function currentSnapshot(){
+    if(window.order && order.length){
+      var totals=getTotals();
+      return {
+        items:cloneItems(order),
+        totals:{
+          sub:Number(totals.sub||0),
+          da:Number(totals.da||0),
+          tot:Number(totals.tot||0)
+        },
+        table:(document.getElementById('table-num')||{}).value||'',
+        customer:(document.getElementById('cust-name')||{}).value||'',
+        cashier:(typeof activeCashier!=='undefined'&&activeCashier)?activeCashier:
+          ((typeof googleUser!=='undefined'&&googleUser&&googleUser.name)?googleUser.name:''),
+        orderNum:String(orderCount).padStart(6,'0'),
+        date:new Date()
+      };
+    }
+    return window._gtgLastReceipt;
+  }
+
+  /* Save the completed transaction BEFORE New Order clears the cart. */
+  if(typeof window.finalizePayment === 'function' && !window._gtgFinalizeWrapped){
+    var _origFinalizePayment=window.finalizePayment;
+    window.finalizePayment=async function(){
+      var before=currentSnapshot();
+      var result=await _origFinalizePayment.apply(this,arguments);
+      if(result!==false && before && before.items && before.items.length){
+        window._gtgLastReceipt=before;
+      }
+      return result;
+    };
+    window._gtgFinalizeWrapped=true;
+  }
+
+  /* Print Receipt can now print the current order OR the most recent completed receipt. */
+  var _origPrintReceipt=window.printReceipt;
+  window.printReceipt=function(){
+    var snap=currentSnapshot();
+    if(!snap || !snap.items || !snap.items.length){
+      if(typeof showToast==='function') showToast('No current or completed receipt available to print.','error');
+      return;
+    }
+
+    /* If there is an active order, use the existing flow unchanged. */
+    if(window.order && order.length){
+      return _origPrintReceipt.apply(this,arguments);
+    }
+
+    var container=document.getElementById('print-btn-container');
+    var hint=document.getElementById('print-hint');
+    var status=document.getElementById('bt-status-msg');
+    if(container) container.innerHTML='';
+    if(status){
+      status.textContent='Printing last completed receipt.';
+      status.style.color='var(--blue-accent)';
+    }
+
+    var isAndroid=/Android/i.test(navigator.userAgent);
+    function addButton(label,bg,fn){
+      var b=document.createElement('button');
+      b.type='button'; b.className='m-save'; b.textContent=label;
+      b.style.background=bg;b.style.fontSize='14px';b.style.padding='14px';
+      b.onclick=fn;
+      if(container) container.appendChild(b);
+    }
+
+    if(isAndroid){
+      addButton('📶 Bluetooth Thermal Printer','#27AE60',function(){
+        closeModal('bt-printer-modal');
+        window.printViaRawBT();
+      });
+    }
+    addButton('🖥️ Print / Save as PDF','var(--blue-accent)',function(){
+      window.printReceiptBrowser();
+    });
+    if(navigator.share){
+      addButton('📤 Share Receipt','#555',function(){
+        /* Keep share fallback available, but browser print uses exact receipt. */
+        window.printReceiptBrowser();
+      });
+    }
+    if(hint) hint.innerHTML='This is the most recent completed transaction.';
+    if(typeof openModal==='function') openModal('bt-printer-modal');
+  };
+
+  window.printReceiptBrowser=function(){
+    if(typeof closeModal==='function') closeModal('bt-printer-modal');
+    var snap=currentSnapshot();
+    if(!snap || !snap.items || !snap.items.length){
+      showToast('No receipt data available.','error'); return;
+    }
+
+    var w=window.open('about:blank','gtg_receipt_print','width=430,height=760');
+    if(!w){
+      showToast('Print window blocked. Allow popups for this POS site.','error');
+      return;
+    }
+
+    try{
+      var rows=snap.items.map(function(o){
+        var unit=Number(o.price||0), qty=Number(o.qty||0);
+        return '<tr><td class="qty">'+qty+'</td><td class="item">'+String(o.name||'')+'</td>'
+          +'<td class="price">&#8369;'+unit.toFixed(2)+'</td>'
+          +'<td class="amt">&#8369;'+(unit*qty).toFixed(2)+'</td></tr>';
+      }).join('');
+
+      var qrEl=document.querySelector('#receipt-loyalty-qr img');
+      var qrSrc=qrEl?qrEl.src:'';
+      var logoEl=document.querySelector('.g2g-mobile-brand img');
+      var logoSrc=logoEl?logoEl.src:'';
+
+      var dt=snap.date instanceof Date?snap.date:new Date(snap.date||Date.now());
+      var dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
+      var timeStr=dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+      var css=[
+        '@page{size:58mm auto;margin:0}',
+        '*{box-sizing:border-box}',
+        'html,body{margin:0;padding:0;background:#fff}',
+        'body{font-family:"Courier New",monospace;color:#000;width:58mm;max-width:58mm;padding:2mm;font-size:8px;overflow:hidden}',
+        '.logo{text-align:center;margin:0 0 4px}',
+        '.logo img{width:29mm;height:auto;display:block;margin:0 auto}',
+        '.meta{font-size:7.7px;line-height:1.35}',
+        '.dash{border:none;border-top:1px dashed #000;margin:4px 0}',
+        'table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:7.7px}',
+        'th,td{padding:2px 0;vertical-align:top}',
+        '.qty{width:6mm}.item{width:auto;padding-right:2px;overflow-wrap:anywhere}',
+        '.price,.amt{width:12mm;text-align:right;white-space:nowrap}',
+        '.sumrow{display:flex;justify-content:space-between;font-size:8px;line-height:1.45}',
+        '.total{font-size:12px;font-weight:900;margin-top:2px}',
+        '.qr{text-align:center;margin-top:5px;page-break-inside:avoid}',
+        '.qr img{width:30mm;height:30mm;object-fit:contain;display:block;margin:0 auto 4px;image-rendering:pixelated}',
+        '.loyalty{text-align:center;font-size:7px;line-height:1.3}'
+      ].join('');
+
+      var t=snap.totals||{};
+      var body=''
+        +(logoSrc?'<div class="logo"><img src="'+logoSrc+'"></div>':'<div class="logo"><b>GREEK TO GO TAVERNA</b></div>')
+        +'<div class="meta">Date&nbsp;&nbsp;&nbsp;&nbsp;: <b>'+dateStr+'</b></div>'
+        +'<div class="meta">Time&nbsp;&nbsp;&nbsp;&nbsp;: <b>'+timeStr+'</b>'+(snap.table?' &nbsp; Table: <b>'+snap.table+'</b>':'')+'</div>'
+        +'<div class="meta">Trans # : <b>ORD-'+snap.orderNum+'</b></div>'
+        +(snap.cashier?'<div class="meta">Cashier : <b>'+snap.cashier+'</b></div>':'')
+        +(snap.customer?'<div class="meta">Customer: <b>'+snap.customer+'</b></div>':'')
+        +'<hr class="dash">'
+        +'<table><thead><tr><th>QTY</th><th>ITEM</th><th style="text-align:right">PRICE</th><th style="text-align:right">TOTAL</th></tr></thead><tbody>'+rows+'</tbody></table>'
+        +'<hr class="dash">'
+        +'<div class="sumrow"><span>Subtotal</span><span>&#8369;'+Number(t.sub||0).toFixed(2)+'</span></div>'
+        +'<div class="sumrow"><span>Discount</span><span>&#8369;'+Number(t.da||0).toFixed(2)+'</span></div>'
+        +'<div class="sumrow total"><span>TOTAL</span><span>&#8369;'+Number(t.tot||0).toFixed(2)+'</span></div>'
+        +'<hr class="dash">'
+        +(qrSrc?'<div class="qr"><img src="'+qrSrc+'"><div class="loyalty">Scan the QR code to register<br>and join the Greek To Go<br>Taverna Loyalty Program.</div></div>':'');
+
+      var doc='<!doctype html><html><head><meta charset="utf-8"><title>Greek To Go Receipt</title><style>'+css+'</style></head><body>'+body
+        +'<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},300);}<\/script>'
+        +'</body></html>';
+
+      w.document.open();w.document.write(doc);w.document.close();
+    }catch(e){
+      console.error(e);try{w.close();}catch(_){}
+      showToast('Could not prepare receipt for printing.','error');
+    }
+  };
+
+  /* RawBT also prints the last completed receipt when the live cart is empty. */
+  var _origRawBT=window.printViaRawBT;
+  window.printViaRawBT=function(){
+    if(window.order && order.length){
+      return _origRawBT.apply(this,arguments);
+    }
+    var snap=currentSnapshot();
+    if(!snap || !snap.items || !snap.items.length){
+      showToast('No receipt data available.','error'); return;
+    }
+
+    var width=Math.max(24,Math.min(42,(typeof RAWBT_CHARS_PER_LINE!=='undefined'?RAWBT_CHARS_PER_LINE:32)||32));
+    var line='='.repeat(width), dash='-'.repeat(width), lines=[];
+    var t=snap.totals||{};
+    lines.push(line);
+    lines.push('GREEK TO GO TAVERNA');
+    lines.push(line);
+    lines.push('Order #: '+snap.orderNum);
+    lines.push(new Date(snap.date||Date.now()).toLocaleString('en-PH'));
+    if(snap.table) lines.push('Table: '+snap.table);
+    if(snap.customer) lines.push('Customer: '+snap.customer);
+    if(snap.cashier) lines.push('Cashier: '+snap.cashier);
+    lines.push(dash);
+    snap.items.forEach(function(o){
+      var nm=String(o.name||'').slice(0,18);
+      lines.push(nm+' x'+o.qty+' P'+(Number(o.price||0)*Number(o.qty||0)).toFixed(2));
+    });
+    lines.push(dash);
+    lines.push('Subtotal: P'+Number(t.sub||0).toFixed(2));
+    if(Number(t.da||0)>0) lines.push('Discount: -P'+Number(t.da||0).toFixed(2));
+    lines.push('TOTAL: P'+Number(t.tot||0).toFixed(2));
+    lines.push('');lines.push('');
+
+    var a=document.createElement('a');
+    a.href='rawbt:'+encodeURIComponent(lines.join('\n'));
+    a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){try{a.remove();}catch(e){}},1000);
+  };
 })();
 </script>
 
