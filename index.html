@@ -2046,7 +2046,7 @@ async function _call(url, action, data){
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
     'getSales','salesStatus','getEOD','logEOD',
     'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
-    'getHeldOrders','saveHeldOrder','deleteHeldOrder','logout'
+    'getHeldOrders','saveHeldOrder','deleteHeldOrder','completeHeldOrder','logout'
   ].indexOf(action)>=0;
 
   if(jsonpFirst){
@@ -4550,8 +4550,8 @@ async function showHeldOrders(){
         +(h.heldAt?'<div style="font-size:10px;color:var(--gray-soft);margin-top:2px">Held: '+h.heldAt+'</div>':'')
         +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
         +'<div style="display:flex;gap:6px;margin-top:8px">'
-        +'<button class="m-save" style="flex:1;padding:7px" onclick="recallOrder('+JSON.stringify(String(h.id))+')">Recall</button>'
-        +'<button class="m-cancel" style="padding:7px" onclick="discardHeld('+JSON.stringify(String(h.id))+')">Discard</button>'
+        +'<button class="m-save" style="flex:1;padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="recallOrder(decodeURIComponent(this.dataset.heldId))">Recall</button>'
+        +'<button class="m-cancel" style="padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="discardHeld(decodeURIComponent(this.dataset.heldId))">Discard</button>'
         +'</div></div>';
     }).join('');
   }
@@ -4562,13 +4562,8 @@ async function recallOrder(id){
   if(!h)return;
   if(order.length&&!confirm('Current order will be cleared. Recall held order?'))return;
 
-  var res=await sheetsCall('recallHeldOrder',{id:String(id)});
-  if(!res||!res.ok){
-    showToast('Could not recall held order from Google Sheets.','error');
-    await loadHeldOrdersFromSheets(true);
-    return;
-  }
-
+  // Keep the Google Sheets HeldOrders row in HELD status while the order is recalled.
+  // It is marked COMPLETED only after payment succeeds, so refresh/logout cannot lose it.
   order=JSON.parse(JSON.stringify(h.order||[]));
   disc=JSON.parse(JSON.stringify(h.disc||{type:'pct',value:0,applied:false}));
   _activeHeldOrderId=String(h.id);
@@ -4590,7 +4585,7 @@ async function recallOrder(id){
 }
 async function discardHeld(id){
   if(!confirm('Discard this held order permanently?'))return;
-  var res=await sheetsCall('deleteHeldOrder',{id:String(id)});
+  var res=await sheetsCall('deleteHeldOrder',{id:String(id),holdId:String(id),heldId:String(id)});
   if(!res||!res.ok){
     showToast('Could not discard held order from Google Sheets.','error');
     return;
