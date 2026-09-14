@@ -1029,7 +1029,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <button onclick="sendToKitchen()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#E65100;color:#fff;font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:6px;">🍳 Send to Kitchen</button>
       <!-- HOLD & SPLIT -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-        <button onclick="holdOrder()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">⏸ Hold Order</button>
+        <button id="hold-order-btn" onclick="holdOrder()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">⏸ Hold Order</button>
         <button onclick="openSplitBill()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">✂️ Split Bill</button>
       </div>
       <!-- PAYMENT -->
@@ -2582,57 +2582,54 @@ async function testSheetConnection(){
 
 // ── DEBUG: Test what the Apps Script actually returns ────────────
 async function testMenuConnection(){
-  showToast('Testing connection…','info');
-  if(!SHEETS_URL){ alert('No SHEETS_URL configured.'); return; }
+  showToast('Testing Google Sheets connection…','info');
+  if(!SHEETS_URL){
+    alert('❌ No Apps Script URL is configured in this POS.');
+    return;
+  }
 
-  // Direct JSONP test
-  var cbName = 'dbg_'+Date.now();
-  var result  = null;
-  var script  = document.createElement('script');
-  var timer   = null;
+  // Public health check first. This proves the deployment itself is reachable.
+  var ping = await _call(SHEETS_URL,'ping',{});
+  if(!ping || !ping.ok){
+    alert('❌ Apps Script ping failed.\n\n'+(_lastCallError||'No response from the deployed Web App.')+
+      '\n\nCheck that the /exec deployment is current and access is set to Anyone.');
+    return;
+  }
 
-  await new Promise(function(resolve){
-    window[cbName] = function(data){
-      result = data;
-      clearTimeout(timer);
-      document.body.removeChild(script);
-      delete window[cbName];
-      resolve();
-    };
-    timer = setTimeout(function(){
-      document.body.removeChild(script);
-      delete window[cbName];
-      resolve();
-    }, 12000);
-    script.src = SHEETS_URL + '?action=getPosMenu&callback=' + cbName;
-    document.body.appendChild(script);
-  });
+  // Protected read must use the normal authenticated POS transport.
+  if(!_authSession){
+    alert('✅ Apps Script is online (v'+(ping.v||'?')+').\n\n⚠️ No active POS session. Please sign in, then test again.');
+    return;
+  }
 
+  var result = await sheetsCall('getPosMenu',{});
   if(!result){
-    alert('❌ No response from Apps Script.\n\nCheck:\n1. Apps Script is deployed\n2. Access set to "Anyone"\n3. Internet connection');
+    alert('❌ Apps Script is online, but the authenticated menu request failed.\n\n'+
+      (_lastCallError||'No response from getPosMenu.'));
+    return;
+  }
+  if(result.authRequired){
+    alert('⚠️ Apps Script is online, but your POS session has expired. Please sign in again.');
+    return;
+  }
+  if(!result.ok && result.error){
+    alert('❌ Apps Script error: '+result.error+'\n\n'+(result.message||''));
     return;
   }
 
-  if(result.error){
-    alert('❌ Apps Script error:\n' + result.error + '\n\nYou may need to deploy a new version.');
-    return;
-  }
+  var count=Array.isArray(result.items)?result.items.length:0;
+  var msg='✅ Apps Script connected successfully.\n\n'+
+    'Backend: '+(ping.v||'online')+'\n'+
+    'Authenticated session: OK\n'+
+    'POS Menu items: '+count;
 
-  if(!result.items || result.items.length === 0){
-    alert('⚠️ Apps Script connected but returned 0 items.\n\nYour POS MENU CREATION sheet may be empty.\nAdd items in Google Sheets first.');
-    return;
+  if(count){
+    msg+='\n\nFirst item fields:\n'+Object.keys(result.items[0]).join(', ');
+  }else{
+    msg+='\n\n⚠️ POS MENU CREATION returned 0 items.';
   }
-
-  // Show first item keys and values
-  var first = result.items[0];
-  var keys  = Object.keys(first);
-  var msg   = '✅ Connected! Got ' + result.items.length + ' item(s).\n\n';
-  msg += 'Column headers found:\n';
-  keys.forEach(function(k){ msg += '  "' + k + '" = "' + first[k] + '"\n'; });
-  msg += '\nIf you see MENU NAME and PRODUCT ID above, tap Import from Sheet.';
   alert(msg);
 }
-
 async function backupMenuToSheets(){
   if(!SHEETS_URL){ showToast('No Sheet connected — saved locally only.','warning'); return; }
   if(!menuItems.length){ showToast('No menu items to save.','error'); return; }
@@ -2652,7 +2649,7 @@ async function importMenuFromSheets(){
   if(!confirm('Replace current POS Menu with Google Sheets data?\n(POS MENU CREATION tab)\n\nContinue?')) return;
   showToast('⬇ Importing POS Menu from Sheet…','info');
   var res = await sheetsCall('getPosMenu');
-  if(!res){ showToast('❌ Could not reach Sheets. Check connection.','error'); return; }
+  if(!res){ showToast('❌ Menu import failed — '+(_lastCallError||'No response from Apps Script.'),'error'); return; }
   if(!res.items || !res.items.length){ showToast('⚠️ POS MENU CREATION sheet is empty. Add items there first.','error'); return; }
   function gv(it,keys){
     for(var k=0;k<keys.length;k++){
@@ -4406,7 +4403,7 @@ finalizePayment = async function(method, gcashNum, gcashRef){
   if(!ok) return false;
 
   // A recalled held order remains in Google Sheets until its payment is confirmed.
-  await _completeActiveHeldOrder();
+  _completeActiveHeldOrder();
 
   // Refresh reports after the payment UI completes; never make the cashier
   // wait for a second full SalesLog download.
@@ -4435,6 +4432,8 @@ renderOrder = function(){
 var heldOrders = [];
 var _activeHeldOrderId = '';
 var _heldSyncBusy = false;
+var _holdBusy = false;
+var _heldCleanupBusy = false;
 
 function _heldId(){
   return 'HOLD-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
@@ -4482,53 +4481,64 @@ async function loadHeldOrdersFromSheets(silent){
   }
 }
 async function holdOrder(){
-  if(!order.length){ showToast('No items to hold!','error'); return; }
-  if(!_authSession||!SHEETS_URL){ showToast('Cannot HOLD while Google Sheets is disconnected.','error'); return; }
+  if(_holdBusy){ showToast('HOLD is already saving. Please wait.','warning'); return false; }
+  if(!order.length){ showToast('No items to hold!','error'); return false; }
+  if(!_authSession||!SHEETS_URL){ showToast('Cannot HOLD while Google Sheets is disconnected.','error'); return false; }
 
-  var tableEl=document.getElementById('table-num');
-  var custEl=document.getElementById('cust-name');
-  var notesEl=document.getElementById('order-notes');
-  var holdId=_activeHeldOrderId||_heldId();
-  var totals=getTotals();
-  var ordNum='#'+String(orderCount).padStart(4,'0');
+  _holdBusy=true;
+  var holdBtn=document.getElementById('hold-order-btn');
+  if(holdBtn){ holdBtn.disabled=true; holdBtn.dataset.oldText=holdBtn.textContent; holdBtn.textContent='Saving…'; }
+  try{
+    var tableEl=document.getElementById('table-num');
+    var custEl=document.getElementById('cust-name');
+    var notesEl=document.getElementById('order-notes');
+    // Generate exactly ONE Hold ID for this click and reuse it for the full request.
+    var holdId=_activeHeldOrderId||_heldId();
+    var totals=getTotals();
+    var ordNum='#'+String(orderCount).padStart(4,'0');
 
-  var held={
-    heldId:holdId,
-    id:holdId,
-    orderNum:ordNum,
-    label:(tableEl&&tableEl.value ? tableEl.value : 'Order')+' — '+(custEl&&custEl.value ? custEl.value : ordNum),
-    table:tableEl?tableEl.value:'',
-    customer:custEl?custEl.value:'Walk-in',
-    notes:notesEl?notesEl.value:'',
-    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
-    heldAt:_salesTimestamp(),
-    transactionId:_pendingTransactionId||'',
-    items:JSON.parse(JSON.stringify(order)),
-    order:JSON.parse(JSON.stringify(order)),
-    discountState:JSON.parse(JSON.stringify(disc)),
-    disc:JSON.parse(JSON.stringify(disc)),
-    subtotal:Number((totals.sub||0).toFixed(2)),
-    discount:Number((totals.da||0).toFixed(2)),
-    discountLabel:(totals.da>0?discLabel():'None'),
-    discLabel:(totals.da>0?discLabel():'None'),
-    vat:Number((totals.vat||0).toFixed(2)),
-    total:Number((totals.tot||0).toFixed(2))
-  };
+    var held={
+      heldId:holdId,
+      id:holdId,
+      orderNum:ordNum,
+      label:(tableEl&&tableEl.value ? tableEl.value : 'Order')+' — '+(custEl&&custEl.value ? custEl.value : ordNum),
+      table:tableEl?tableEl.value:'',
+      customer:custEl?custEl.value:'Walk-in',
+      notes:notesEl?notesEl.value:'',
+      cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+      heldAt:_salesTimestamp(),
+      transactionId:_pendingTransactionId||'',
+      items:JSON.parse(JSON.stringify(order)),
+      order:JSON.parse(JSON.stringify(order)),
+      discountState:JSON.parse(JSON.stringify(disc)),
+      disc:JSON.parse(JSON.stringify(disc)),
+      subtotal:Number((totals.sub||0).toFixed(2)),
+      discount:Number((totals.da||0).toFixed(2)),
+      discountLabel:(totals.da>0?discLabel():'None'),
+      discLabel:(totals.da>0?discLabel():'None'),
+      vat:Number((totals.vat||0).toFixed(2)),
+      total:Number((totals.tot||0).toFixed(2))
+    };
 
-  var res=await sheetsCall('saveHeldOrder',{order:held});
-  if(!res||!res.ok||res.saved===false){
-    showToast('⛔ HOLD failed — order kept open. '+((res&&(res.message||res.error))||_lastCallError||''),'error');
-    return;
+    var res=await sheetsCall('saveHeldOrder',{order:held});
+    if(!res||!res.ok||res.saved===false){
+      showToast('⛔ HOLD failed — order kept open. '+((res&&(res.message||res.error))||_lastCallError||''),'error');
+      return false;
+    }
+
+    _activeHeldOrderId='';
+    _pendingTransactionId='';
+    var normalized=_normaliseHeld(held);
+    var idx=heldOrders.findIndex(function(x){return String(x.id)===String(holdId);});
+    if(idx>=0) heldOrders[idx]=normalized; else heldOrders.push(normalized);
+    _updateHeldBtn();
+    clearOrder();
+    showToast('✅ Order held and saved to Google Sheets.','success');
+    return true;
+  } finally {
+    _holdBusy=false;
+    if(holdBtn){ holdBtn.disabled=false; holdBtn.textContent=holdBtn.dataset.oldText||'⏸ Hold Order'; }
   }
-
-  _activeHeldOrderId='';
-  _pendingTransactionId='';
-  var normalized=_normaliseHeld(held);
-  var idx=heldOrders.findIndex(function(x){return String(x.id)===String(holdId);});
-  if(idx>=0) heldOrders[idx]=normalized; else heldOrders.push(normalized);
-  _updateHeldBtn();
-  clearOrder();
-  showToast('✅ Order held and saved to Google Sheets.','success');
 }
 function _updateHeldBtn(){
   var btn=document.getElementById('held-orders-btn');
@@ -4537,7 +4547,7 @@ function _updateHeldBtn(){
   if(cnt){cnt.textContent=heldOrders.length;}
 }
 async function showHeldOrders(){
-  await loadHeldOrdersFromSheets(true);
+  // Open immediately from the last synced list; refresh quietly in the background.
   var el=document.getElementById('held-list');
   if(!heldOrders.length){
     el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>';
@@ -4556,6 +4566,34 @@ async function showHeldOrders(){
     }).join('');
   }
   openModal('held-modal');
+  setTimeout(function(){
+    loadHeldOrdersFromSheets(true).then(function(ok){
+      if(ok && document.getElementById('held-modal') && document.getElementById('held-modal').classList.contains('show')){
+        // Re-render only if the modal is still open; this avoids blocking the cashier.
+        showHeldOrdersFromCache_();
+      }
+    });
+  },0);
+}
+function showHeldOrdersFromCache_(){
+  var el=document.getElementById('held-list');
+  if(!el)return;
+  if(!heldOrders.length){
+    el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>';
+    return;
+  }
+  el.innerHTML=heldOrders.map(function(h){
+    var sub=(h.order||[]).reduce(function(s,o){return s+(parseFloat(o.price)||0)*(Number(o.qty)||0);},0);
+    return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:8px;">'
+      +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||h.orderNum||'Held Order')+'</div>'
+      +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order||[]).length+' item(s) · ₱'+sub.toFixed(2)+'</div>'
+      +(h.heldAt?'<div style="font-size:10px;color:var(--gray-soft);margin-top:2px">Held: '+h.heldAt+'</div>':'')
+      +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
+      +'<div style="display:flex;gap:6px;margin-top:8px">'
+      +'<button class="m-save" style="flex:1;padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="recallOrder(decodeURIComponent(this.dataset.heldId))">Recall</button>'
+      +'<button class="m-cancel" style="padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="discardHeld(decodeURIComponent(this.dataset.heldId))">Discard</button>'
+      +'</div></div>';
+  }).join('');
 }
 async function recallOrder(id){
   var h=heldOrders.find(function(o){return String(o.id)===String(id);});
@@ -4587,7 +4625,7 @@ async function discardHeld(id){
   if(!confirm('Discard this held order permanently?'))return;
   var res=await sheetsCall('deleteHeldOrder',{id:String(id),holdId:String(id),heldId:String(id)});
   if(!res||!res.ok){
-    showToast('Could not discard held order from Google Sheets.','error');
+    showToast('Could not discard held order — '+((res&&(res.message||res.error))||_lastCallError||'No response from Apps Script.'),'error');
     return;
   }
   heldOrders=heldOrders.filter(function(o){return String(o.id)!==String(id);});
@@ -4598,15 +4636,24 @@ async function discardHeld(id){
 async function _completeActiveHeldOrder(){
   if(!_activeHeldOrderId)return true;
   var id=String(_activeHeldOrderId);
-  var res=await sheetsCall('completeHeldOrder',{id:id});
-  if(res&&res.ok){
-    _activeHeldOrderId='';
-    heldOrders=heldOrders.filter(function(o){return String(o.id)!==id;});
-    _updateHeldBtn();
-    return true;
-  }
-  showToast('⚠️ Sale completed, but held-order cleanup needs retry.','warning');
-  return false;
+  // Do not make CASH/GCash wait for another Apps Script round trip after SalesLog saved.
+  _activeHeldOrderId='';
+  heldOrders=heldOrders.filter(function(o){return String(o.id)!==id;});
+  _updateHeldBtn();
+  if(_heldCleanupBusy) return true;
+  _heldCleanupBusy=true;
+  setTimeout(async function(){
+    try{
+      var res=await sheetsCall('completeHeldOrder',{id:id});
+      if(!res||!res.ok){
+        showToast('⚠️ Sale saved. Held-order cleanup will retry on next sync — '+((res&&(res.message||res.error))||_lastCallError||'No response from Apps Script.'),'warning');
+      }
+    } finally {
+      _heldCleanupBusy=false;
+      if(_authSession) loadHeldOrdersFromSheets(true);
+    }
+  },0);
+  return true;
 }
 
 /* ── SPLIT BILL ───────────────────────────────────────────── */
