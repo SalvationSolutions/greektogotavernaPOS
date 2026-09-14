@@ -2332,6 +2332,24 @@ async function pushSaleToSheets(s){
     return {ok:false,saved:false,message:'Google Sheets URL is missing.'};
   }
   var res=await sheetsCall('logSale',{sale:s});
+
+  // Apps Script can sometimes finish the append but lose/times-out the browser
+  // response. Never resend an uncertain sale. Read SalesLog back and verify the
+  // SAME Transaction ID first; this is safe for CASH and GCash.
+  if(!res && s && s.transactionId){
+    var verify=await sheetsCall('getSales',{limit:5000});
+    if(verify && verify.ok && Array.isArray(verify.items)){
+      var wanted=String(s.transactionId);
+      var found=verify.items.some(function(row){
+        return String(row.transactionId||row.TransactionID||row.transactionID||row.saleId||'')===wanted;
+      });
+      if(found){
+        res={ok:true,saved:true,verified:true,transactionId:wanted};
+        showToast('✅ Sale verified in SalesLog.','success');
+      }
+    }
+  }
+
   if(!res || !res.ok || res.saved===false){
     // A duplicate is an intentional server-side refusal, not a connection failure.
     if(res && res.duplicate){
@@ -2348,7 +2366,7 @@ async function pushSaleToSheets(s){
   _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
   if(res.duplicate) return res;
-  showToast('✅ Sale saved to SalesLog.','success');
+  if(!res.verified) showToast('✅ Sale saved to SalesLog.','success');
   // Reports refresh in the background after the receipt is displayed.
   return res;
 }
@@ -2862,7 +2880,20 @@ function floatCurrentOrder(){
     table:(tableEl&&tableEl.value)||'',
     customer:(custEl&&custEl.value)||'',
     notes:(notesEl&&notesEl.value)||'',
-    items:JSON.parse(JSON.stringify(order)),
+    // Store a self-contained snapshot of each menu line.  pid/detail make
+    // resume safe even if the live menu refreshes and numeric IDs change.
+    items:order.map(function(o){
+      var live=menuItems.find(function(m){return Number(m.id)===Number(o.id);})||{};
+      return {
+        id:o.id,
+        pid:String(live.pid||o.pid||''),
+        name:String(o.name||live.name||''),
+        cat:String(o.cat||live.cat||'Other'),
+        detail:String(live.detail||o.detail||''),
+        price:Number(o.price)||0,
+        qty:Number(o.qty)||1
+      };
+    }),
     disc:JSON.parse(JSON.stringify(disc||{type:'pct',value:0,applied:false})),
     srpCounts:JSON.parse(JSON.stringify(srpCounts||{sr:0,pwd:0})),
     total:Number(t.tot)||0
@@ -2888,11 +2919,15 @@ function renderFloatingOrders(){
     var when=new Date(f.floatedAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
     var itemCount=(f.items||[]).reduce(function(n,i){return n+(Number(i.qty)||0);},0);
     var who=[f.table?('Table '+f.table):'',f.customer||''].filter(Boolean).join(' · ')||'Walk-in';
+    var menuNames=(f.items||[]).map(function(i){
+      return (Number(i.qty)||1)+'× '+_floatingEsc(i.name||'Menu item');
+    }).join(' · ');
     return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:9px;background:#fff;">'
       +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
       +'<div><div style="font-weight:900;color:var(--blue-deep);font-size:14px;">📋 '+_floatingEsc(f.id)+'</div>'
       +'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">'+_floatingEsc(who)+' · '+itemCount+' item'+(itemCount===1?'':'s')+' · '+_floatingEsc(when)+'</div></div>'
       +'<div style="font-weight:900;color:var(--blue-deep);font-size:15px;">₱'+Number(f.total||0).toFixed(2)+'</div></div>'
+      +(menuNames?'<div style="font-size:12px;font-weight:900;color:var(--blue-deep);margin-top:8px;line-height:1.45;">🍽️ '+menuNames+'</div>':'')
       +(f.notes?'<div style="font-size:11px;margin-top:7px;color:var(--gray-soft);">📝 '+_floatingEsc(f.notes)+'</div>':'')
       +'<div style="display:flex;gap:7px;margin-top:10px;">'
       +'<button onclick="resumeFloatingOrder(\''+_floatingEsc(f.id)+'\')" style="flex:1;padding:8px;border:0;border-radius:9px;background:var(--blue-accent);color:#fff;font-weight:900;cursor:pointer;">↩ RESUME</button>'
@@ -2910,7 +2945,27 @@ function resumeFloatingOrder(id){
   if(idx<0){showToast('Floating transaction not found.','error');return;}
   var f=floatingOrders[idx];
   floatingOrders.splice(idx,1);
-  order=JSON.parse(JSON.stringify(f.items||[]));
+  order=(f.items||[]).map(function(saved){
+    var live=null;
+    if(saved.pid){
+      live=menuItems.find(function(m){return String(m.pid||'')===String(saved.pid);});
+    }
+    if(!live){
+      live=menuItems.find(function(m){
+        return String(m.name||'').trim().toLowerCase()===String(saved.name||'').trim().toLowerCase()
+          && Math.abs((Number(m.price)||0)-(Number(saved.price)||0))<0.001;
+      });
+    }
+    return {
+      id:live?live.id:saved.id,
+      pid:String(saved.pid||(live&&live.pid)||''),
+      name:String(saved.name||(live&&live.name)||'Menu item'),
+      cat:String(saved.cat||(live&&live.cat)||'Other'),
+      detail:String(saved.detail||(live&&live.detail)||''),
+      price:Number(saved.price)||0,
+      qty:Number(saved.qty)||1
+    };
+  });
   disc=JSON.parse(JSON.stringify(f.disc||{type:'pct',value:0,applied:false}));
   srpCounts=JSON.parse(JSON.stringify(f.srpCounts||{sr:0,pwd:0}));
   var tableEl=document.getElementById('table-num'); if(tableEl) tableEl.value=f.table||'';
@@ -4478,7 +4533,7 @@ async function _eodReadyForNewSale(showMessage){
   var latest=priorDates[priorDates.length-1];
   var res=await sheetsCall('getEOD',{date:latest});
   if(!res||!res.ok){
-    if(showMessage)showToast('Cannot verify EOD status. Update Apps Script to v8.2 and redeploy.','error');
+    if(showMessage)showToast('Cannot verify EOD status right now. Payment is not blocked; check EOD from Reports.','error');
     return false;
   }
   if(!res.completed){
@@ -4513,8 +4568,10 @@ finalizePayment = async function(method, gcashNum, gcashRef){
 
   _paymentFlowBusy=true;
   try{
-    if(!(await _eodReadyForNewSale(true))) return false;
-
+    // Do NOT put an EOD network request in front of every payment. That old
+    // pre-flight was the source of the v8.2 warning and could add a full 12s
+    // delay before CASH/GCash. EOD remains available in Reports and is checked
+    // asynchronously after the payment path starts.
     var tableEl=document.getElementById('table-num');
     var notesEl=document.getElementById('order-notes');
 
@@ -4525,6 +4582,7 @@ finalizePayment = async function(method, gcashNum, gcashRef){
     // wait for a second full SalesLog download.
     setTimeout(function(){
       refreshSalesFromSheets(true).then(function(){ renderReports(); });
+      _eodReadyForNewSale(false).catch(function(){});
     },0);
 
     if(tableEl) tableEl.value='';
