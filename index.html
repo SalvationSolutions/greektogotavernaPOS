@@ -955,7 +955,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="order-header">
       <button type="button" class="mobile-menu-btn" onclick="toggleMobileOrder(false)" aria-label="Return to the menu">← Menu</button>
       <div class="order-heading"><div class="order-title">Current Order</div><div class="order-num" id="order-num">Order #0001</div></div>
-      <button id="held-orders-btn" onclick="showHeldOrders()" style="display:none;font-size:10px;background:#E8F0FE;color:var(--blue-accent);border:none;border-radius:8px;padding:3px 8px;cursor:pointer;font-weight:700;font-family:Nunito,sans-serif;">⏸ <span id="held-count">0</span> Held</button>
       <span style="font-size:20px">🛒</span>
     </div>
     <div class="order-items" id="order-items">
@@ -1027,9 +1026,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       </div>
       <!-- SEND TO KITCHEN -->
       <button onclick="sendToKitchen()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#E65100;color:#fff;font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:6px;">🍳 Send to Kitchen</button>
-      <!-- HOLD & SPLIT -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-        <button id="hold-order-btn" onclick="holdOrder()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">⏸ Hold Order</button>
+      <!-- SPLIT BILL -->
+      <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:6px;">
         <button onclick="openSplitBill()" style="padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:12px;cursor:pointer;">✂️ Split Bill</button>
       </div>
       <!-- PAYMENT -->
@@ -1201,16 +1199,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   </div>
 </div>
 
-<!-- HELD ORDERS MODAL -->
-<div class="modal-overlay" id="held-modal" onclick="if(event.target===this)closeModal('held-modal')">
-  <div class="modal" style="max-width:400px;width:95vw;">
-    <h3>⏸ Held Orders</h3>
-    <div id="held-list" style="max-height:300px;overflow-y:auto;margin:12px 0;"></div>
-    <div class="modal-actions">
-      <button class="m-cancel" onclick="closeModal('held-modal')">Close</button>
-    </div>
-  </div>
-</div>
 
 <!-- SPLIT BILL MODAL -->
 <div class="modal-overlay" id="split-modal" onclick="if(event.target===this)closeModal('split-modal')">
@@ -1809,8 +1797,8 @@ setInterval(()=>{ document.getElementById('clock').textContent = new Date().toLo
 document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-PH');
 
 /* ═══════════════════ INACTIVITY AUTO-LOGOUT ═══════════════════
-   30 minutes of real user inactivity. Active/current or held orders protect
-   the cashier from being logged out until those orders are resolved. */
+   30 minutes of real user inactivity. An active/current order protects
+   the cashier from being logged out until the order is resolved. */
 var AUTO_LOGOUT_IDLE_MS = 30 * 60 * 1000;
 var _lastUserActivityAt = Date.now();
 var _idleWarningShown = false;
@@ -1824,9 +1812,7 @@ function _markUserActivity(){
 });
 
 function _hasProtectedOrder(){
-  return (typeof order!=='undefined'&&order&&order.length>0) ||
-         (typeof heldOrders!=='undefined'&&heldOrders&&heldOrders.length>0) ||
-         (typeof _activeHeldOrderId!=='undefined'&&!!_activeHeldOrderId);
+  return (typeof order!=='undefined'&&order&&order.length>0);
 }
 function _performAutoLogout(){
   _syncDone=false;
@@ -1846,7 +1832,7 @@ setInterval(function(){
   if(_hasProtectedOrder()){
     if(!_idleWarningShown){
       _idleWarningShown=true;
-      showToast('Auto logout postponed — active or held order is protected.','warning');
+      showToast('Auto logout postponed — active order is protected.','warning');
     }
     return;
   }
@@ -2043,33 +2029,11 @@ async function _call(url, action, data){
     }
   }
 
-  // HOLD contains the whole order payload. Sending that payload through JSONP puts
-  // all items into the URL and becomes noticeably slow on tablets. Save HOLD by
-  // POST first. The same Held ID is reused for the fallback, and the backend upserts
-  // by Held ID, so a retry cannot create a second held row.
-  if(action==='saveHeldOrder'){
-    try{
-      var holdPost=await _postTransport(url,action,data||{});
-      if(holdPost!==null && holdPost!==undefined) return holdPost;
-      throw new Error('Empty POST response.');
-    }catch(holdPostErr){
-      try{
-        var holdJsonp=await _jsonpAction(url,action,data||{});
-        if(holdJsonp!==null && holdJsonp!==undefined) return holdJsonp;
-        throw new Error('Empty JSONP response.');
-      }catch(holdJsonpErr){
-        _setCallError('SAVEHELDORDER FAILED — POST: '+(holdPostErr.message||holdPostErr)+
-          ' | JSONP: '+(holdJsonpErr.message||holdJsonpErr));
-        return null;
-      }
-    }
-  }
-
   var jsonpFirst=[
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
     'getSales','salesStatus','getEOD','logEOD',
     'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
-    'getHeldOrders','deleteHeldOrder','completeHeldOrder','logout'
+    'logout'
   ].indexOf(action)>=0;
 
   if(jsonpFirst){
@@ -2929,7 +2893,6 @@ function confirmGCash(){
   return finalizePayment('GCash',reference,accountName);
 }
 async function finalizePayment(method,gcashNum,gcashRef){
-  if(typeof _holdBusy!=='undefined' && _holdBusy){showToast('HOLD is still saving. Please wait for HOLD to finish before payment.','warning');return false;}
   if(_paymentBusy){showToast('Payment is already processing. Please do not tap again.','warning');return false;}
   if(!order.length){showToast('No items in order!','error');return false;}
   _setPaymentBusy(true);
@@ -3026,11 +2989,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
 function newOrder(){
   _pendingTransactionId='';
   _duplicateTransactionInfo=null;
-  // If a recalled HOLD is abandoned, do not delete it from Google Sheets.
-  // It will be available again after the next held-order refresh.
-  _activeHeldOrderId='';
   clearOrder();
-  if(_authSession) setTimeout(function(){loadHeldOrdersFromSheets(true);},0);
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
 var _rptDateInit=document.getElementById('rpt-date'); if(_rptDateInit&&!_rptDateInit.value)_rptDateInit.value=_todayKey();
   // Keep the current authenticated connection state between orders.
@@ -3631,10 +3590,7 @@ async function _initialSync(){
     renderCashierRoster();
   }
 
-  // Step 5: Restore HOLD / HELD orders from Google Sheets.
-  await loadHeldOrdersFromSheets(true);
-
-  // Step 6: Shared sales history for cross-device reports and analytics
+  // Step 5: Shared sales history for cross-device reports and analytics
   var salesOK = await refreshSalesFromSheets(true);
   if(!salesOK){
     _syncDone=false;
@@ -4436,19 +4392,6 @@ finalizePayment = async function(method, gcashNum, gcashRef){
     return false;
   }
 
-  // A recalled HELD order must be explicitly confirmed BEFORE any Apps Script
-  // call. CANCEL leaves the recalled order open and writes nothing to SalesLog.
-  var payingHeldOrder = !!_activeHeldOrderId;
-  if(payingHeldOrder){
-    var totalsForConfirm=getTotals();
-    var heldMethod=String(method||'PAYMENT').toUpperCase();
-    var heldTotal=Number((totalsForConfirm&&totalsForConfirm.tot)||0).toFixed(2);
-    if(!window.confirm('Confirm payment for this recalled HELD order?\n\nPayment: '+heldMethod+'\nTotal: ₱'+heldTotal+'\n\nPress OK to write this transaction to SalesLog.')){
-      showToast('Payment cancelled. Held order remains open and was not sent to SalesLog.','warning');
-      return false;
-    }
-  }
-
   _paymentFlowBusy=true;
   try{
     if(!(await _eodReadyForNewSale(true))) return false;
@@ -4458,9 +4401,6 @@ finalizePayment = async function(method, gcashNum, gcashRef){
 
     var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
     if(!ok) return false;
-
-    // A recalled held order remains in Google Sheets until its payment is confirmed.
-    _completeActiveHeldOrder();
 
     // Refresh reports after the payment UI completes; never make the cashier
     // wait for a second full SalesLog download.
@@ -4487,233 +4427,6 @@ renderOrder = function(){
     numEl.textContent = 'Order #'+String(orderCount).padStart(4,'0')+' · '+tableEl.value;
   }
 };
-
-/* ── HOLD ORDER — Google Sheets is authoritative ───────────────── */
-var heldOrders = [];
-var _activeHeldOrderId = '';
-var _heldSyncBusy = false;
-var _holdBusy = false;
-var _heldCleanupBusy = false;
-
-function _heldId(){
-  return 'HOLD-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
-}
-function _normaliseHeld(h){
-  h=h||{};
-  var ord=h.order||h.items||[];
-  var ds=h.disc||h.discountState||{type:'pct',value:0,applied:false};
-  if(typeof ord==='string'){try{ord=JSON.parse(ord);}catch(e){ord=[];}}
-  if(typeof ds==='string'){try{ds=JSON.parse(ds);}catch(e){ds={type:'pct',value:0,applied:false};}}
-  if(!Array.isArray(ord))ord=[];
-  if(!ds || typeof ds!=='object' || Array.isArray(ds)) ds={type:'pct',value:0,applied:false};
-  return {
-    id:String(h.id||h.heldId||h.holdId||h['Held ID']||''),
-    label:String(h.label||h.Label||'Held Order'),
-    orderNum:String(h.orderNum||h['Order#']||''),
-    table:String(h.table||h.Table||''),
-    customer:String(h.customer||h.Customer||''),
-    notes:String(h.notes||h.Notes||''),
-    cashier:String(h.cashier||h.Cashier||''),
-    heldAt:String(h.heldAt||h['Held At']||''),
-    transactionId:String(h.transactionId||h.TransactionID||''),
-    order:ord,
-    disc:ds,
-    status:String(h.status||'HELD')
-  };
-}
-async function loadHeldOrdersFromSheets(silent){
-  if(!_authSession||!SHEETS_URL) return false;
-  if(_heldSyncBusy) return false;
-  _heldSyncBusy=true;
-  try{
-    var res=await sheetsCall('getHeldOrders',{status:'HELD'});
-    if(!res||!res.ok||!Array.isArray(res.items)){
-      if(!silent) showToast('Unable to load held orders from Google Sheets.','warning');
-      return false;
-    }
-    heldOrders=res.items.map(_normaliseHeld).filter(function(h){
-      return h.id && h.id!==String(_activeHeldOrderId||'');
-    });
-    _updateHeldBtn();
-    return true;
-  } finally {
-    _heldSyncBusy=false;
-  }
-}
-async function holdOrder(){
-  if(_holdBusy){ showToast('HOLD is already saving. Please wait.','warning'); return false; }
-  if(!order.length){ showToast('No items to hold!','error'); return false; }
-  if(!_authSession||!SHEETS_URL){ showToast('Cannot HOLD while Google Sheets is disconnected.','error'); return false; }
-
-  _holdBusy=true;
-  var holdBtn=document.getElementById('hold-order-btn');
-  if(holdBtn){ holdBtn.disabled=true; holdBtn.dataset.oldText=holdBtn.textContent; holdBtn.textContent='Saving…'; }
-  try{
-    var tableEl=document.getElementById('table-num');
-    var custEl=document.getElementById('cust-name');
-    var notesEl=document.getElementById('order-notes');
-    // Generate exactly ONE Hold ID for this click and reuse it for the full request.
-    var holdId=_activeHeldOrderId||_heldId();
-    var totals=getTotals();
-    var ordNum='#'+String(orderCount).padStart(4,'0');
-
-    var held={
-      heldId:holdId,
-      id:holdId,
-      orderNum:ordNum,
-      label:(tableEl&&tableEl.value ? tableEl.value : 'Order')+' — '+(custEl&&custEl.value ? custEl.value : ordNum),
-      table:tableEl?tableEl.value:'',
-      customer:custEl?custEl.value:'Walk-in',
-      notes:notesEl?notesEl.value:'',
-      cashier:activeCashier||(googleUser&&googleUser.name)||'—',
-      heldAt:_salesTimestamp(),
-      transactionId:_pendingTransactionId||'',
-      // Send each large structure once. The backend accepts items + discountState.
-      items:JSON.parse(JSON.stringify(order)),
-      discountState:JSON.parse(JSON.stringify(disc)),
-      subtotal:Number((totals.sub||0).toFixed(2)),
-      discount:Number((totals.da||0).toFixed(2)),
-      discountLabel:(totals.da>0?discLabel():'None'),
-      discLabel:(totals.da>0?discLabel():'None'),
-      vat:Number((totals.vat||0).toFixed(2)),
-      total:Number((totals.tot||0).toFixed(2))
-    };
-
-    var res=await sheetsCall('saveHeldOrder',{order:held});
-    if(!res||!res.ok||res.saved===false){
-      showToast('⛔ HOLD failed — order kept open. '+((res&&(res.message||res.error))||_lastCallError||''),'error');
-      return false;
-    }
-
-    _activeHeldOrderId='';
-    _pendingTransactionId='';
-    var normalized=_normaliseHeld(held);
-    var idx=heldOrders.findIndex(function(x){return String(x.id)===String(holdId);});
-    if(idx>=0) heldOrders[idx]=normalized; else heldOrders.push(normalized);
-    _updateHeldBtn();
-    clearOrder();
-    showToast('✅ Order held and saved to Google Sheets.','success');
-    return true;
-  } finally {
-    _holdBusy=false;
-    if(holdBtn){ holdBtn.disabled=false; holdBtn.textContent=holdBtn.dataset.oldText||'⏸ Hold Order'; }
-  }
-}
-function _updateHeldBtn(){
-  var btn=document.getElementById('held-orders-btn');
-  var cnt=document.getElementById('held-count');
-  if(btn){btn.style.display=heldOrders.length?'inline-flex':'none';}
-  if(cnt){cnt.textContent=heldOrders.length;}
-}
-async function showHeldOrders(){
-  // Open immediately from the last synced list; refresh quietly in the background.
-  var el=document.getElementById('held-list');
-  if(!heldOrders.length){
-    el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>';
-  }else{
-    el.innerHTML=heldOrders.map(function(h){
-      var sub=(h.order||[]).reduce(function(s,o){return s+(parseFloat(o.price)||0)*(Number(o.qty)||0);},0);
-      return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:8px;">'
-        +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||h.orderNum||'Held Order')+'</div>'
-        +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order||[]).length+' item(s) · ₱'+sub.toFixed(2)+'</div>'
-        +(h.heldAt?'<div style="font-size:10px;color:var(--gray-soft);margin-top:2px">Held: '+h.heldAt+'</div>':'')
-        +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
-        +'<div style="display:flex;gap:6px;margin-top:8px">'
-        +'<button class="m-save" style="flex:1;padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="recallOrder(decodeURIComponent(this.dataset.heldId))">Recall</button>'
-        +'<button class="m-cancel" style="padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="discardHeld(decodeURIComponent(this.dataset.heldId))">Discard</button>'
-        +'</div></div>';
-    }).join('');
-  }
-  openModal('held-modal');
-  setTimeout(function(){
-    loadHeldOrdersFromSheets(true).then(function(ok){
-      if(ok && document.getElementById('held-modal') && document.getElementById('held-modal').classList.contains('show')){
-        // Re-render only if the modal is still open; this avoids blocking the cashier.
-        showHeldOrdersFromCache_();
-      }
-    });
-  },0);
-}
-function showHeldOrdersFromCache_(){
-  var el=document.getElementById('held-list');
-  if(!el)return;
-  if(!heldOrders.length){
-    el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>';
-    return;
-  }
-  el.innerHTML=heldOrders.map(function(h){
-    var sub=(h.order||[]).reduce(function(s,o){return s+(parseFloat(o.price)||0)*(Number(o.qty)||0);},0);
-    return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:8px;">'
-      +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||h.orderNum||'Held Order')+'</div>'
-      +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order||[]).length+' item(s) · ₱'+sub.toFixed(2)+'</div>'
-      +(h.heldAt?'<div style="font-size:10px;color:var(--gray-soft);margin-top:2px">Held: '+h.heldAt+'</div>':'')
-      +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
-      +'<div style="display:flex;gap:6px;margin-top:8px">'
-      +'<button class="m-save" style="flex:1;padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="recallOrder(decodeURIComponent(this.dataset.heldId))">Recall</button>'
-      +'<button class="m-cancel" style="padding:7px" data-held-id="'+encodeURIComponent(String(h.id))+'" onclick="discardHeld(decodeURIComponent(this.dataset.heldId))">Discard</button>'
-      +'</div></div>';
-  }).join('');
-}
-async function recallOrder(id){
-  var h=heldOrders.find(function(o){return String(o.id)===String(id);});
-  if(!h)return;
-  if(order.length&&!confirm('Current order will be cleared. Recall held order?'))return;
-
-  // Keep the Google Sheets HeldOrders row in HELD status while the order is recalled.
-  // It is marked COMPLETED only after payment succeeds, so refresh/logout cannot lose it.
-  order=JSON.parse(JSON.stringify(h.order||[]));
-  disc=JSON.parse(JSON.stringify(h.disc||{type:'pct',value:0,applied:false}));
-  _activeHeldOrderId=String(h.id);
-  _pendingTransactionId=String(h.transactionId||'');
-
-  var tableEl=document.getElementById('table-num');
-  var custEl=document.getElementById('cust-name');
-  var notesEl=document.getElementById('order-notes');
-  if(tableEl)tableEl.value=h.table||'';
-  if(custEl)custEl.value=h.customer||'';
-  if(notesEl)notesEl.value=h.notes||'';
-
-  heldOrders=heldOrders.filter(function(o){return String(o.id)!==String(id);});
-  _updateHeldBtn();
-  closeModal('held-modal');
-  renderOrder();
-  if(window.innerWidth<=900)toggleMobileOrder(true);
-  showToast('Order recalled from Google Sheets.','success');
-}
-async function discardHeld(id){
-  if(!confirm('Discard this held order permanently?'))return;
-  var res=await sheetsCall('deleteHeldOrder',{id:String(id),holdId:String(id),heldId:String(id)});
-  if(!res||!res.ok){
-    showToast('Could not discard held order — '+((res&&(res.message||res.error))||_lastCallError||'No response from Apps Script.'),'error');
-    return;
-  }
-  heldOrders=heldOrders.filter(function(o){return String(o.id)!==String(id);});
-  if(String(_activeHeldOrderId)===String(id))_activeHeldOrderId='';
-  _updateHeldBtn();
-  await showHeldOrders();
-}
-async function _completeActiveHeldOrder(){
-  if(!_activeHeldOrderId)return true;
-  var id=String(_activeHeldOrderId);
-  // Do not make CASH/GCash wait for another Apps Script round trip after SalesLog saved.
-  _activeHeldOrderId='';
-  heldOrders=heldOrders.filter(function(o){return String(o.id)!==id;});
-  _updateHeldBtn();
-  if(_heldCleanupBusy) return true;
-  _heldCleanupBusy=true;
-  setTimeout(async function(){
-    try{
-      var res=await sheetsCall('completeHeldOrder',{id:id});
-      if(!res||!res.ok){
-        showToast('⚠️ Sale saved. Held-order cleanup will retry on next sync — '+((res&&(res.message||res.error))||_lastCallError||'No response from Apps Script.'),'warning');
-      }
-    } finally {
-      _heldCleanupBusy=false;
-      if(_authSession) loadHeldOrdersFromSheets(true);
-    }
-  },0);
-  return true;
-}
 
 /* ── SPLIT BILL ───────────────────────────────────────────── */
 var _splitCount = 2;
