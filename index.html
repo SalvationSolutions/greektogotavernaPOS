@@ -1676,7 +1676,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyrUpLkcueqex-agxKaOQAPlja8Hc8UFz3asmSDF_-xWOd7IfKai8UXZ21U_tdaUL2d/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbykyn7GcgiiFm6vaF4UEaYYFHWMx1SyC7EVhCI9aDvfNeFMpEEwCt83jWjSYKDebS5x2Q/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -1925,8 +1925,8 @@ let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
 const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
-const SALE_WRITE_TIMEOUT_MS = 7000; // SalesLog write should answer quickly; read-back verifies uncertain writes
-const SALE_VERIFY_TIMEOUT_MS = 5000;
+const SALE_WRITE_TIMEOUT_MS = 4500; // never make cashier wait long for a lost write response
+const SALE_VERIFY_TIMEOUT_MS = 2200; // each exact Transaction ID verification attempt
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
 
 // ── Offline queue ────────────────────────────────────────────────────────────
@@ -2328,48 +2328,52 @@ function _salesTimestamp(){
   return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes())+':'+z(d.getSeconds());
 }
 
+async function _verifySaleWritten(transactionId){
+  var wanted=String(transactionId||'').trim();
+  if(!wanted) return null;
+  // Apps Script may finish the write after the browser loses the JSONP response.
+  // Poll only the exact Transaction ID; never download SalesLog and never resend.
+  for(var attempt=0; attempt<5; attempt++){
+    if(attempt>0) await new Promise(function(resolve){setTimeout(resolve,700);});
+    try{
+      var verify=await _jsonpAction(SHEETS_URL,'findSaleByTransactionId',{transactionId:wanted},SALE_VERIFY_TIMEOUT_MS);
+      if(verify && verify.ok && verify.found){
+        return {ok:true,saved:true,verified:true,transactionId:wanted,row:verify.row};
+      }
+    }catch(e){}
+  }
+  return null;
+}
+
 async function pushSaleToSheets(s){
   if(!SHEETS_URL){
     showToast('⛔ SALE NOT SAVED — Google Sheets URL is missing.','error');
     return {ok:false,saved:false,message:'Google Sheets URL is missing.'};
   }
+
   var res=await sheetsCall('logSale',{sale:s});
 
-  // Apps Script can sometimes finish the append but lose/times-out the browser
-  // response. Never resend an uncertain sale. Read SalesLog back and verify the
-  // SAME Transaction ID first; this is safe for CASH and GCash.
   if(!res && s && s.transactionId){
-    // Fast exact lookup: never download the whole SalesLog just to verify one sale.
-    // The backend uses TextFinder on the TransactionID column.
-    var wanted=String(s.transactionId);
-    var verify=null;
-    try{
-      verify=await _jsonpAction(SHEETS_URL,'findSaleByTransactionId',{transactionId:wanted},SALE_VERIFY_TIMEOUT_MS);
-    }catch(e){ verify=null; }
-    if(verify && verify.ok && verify.found){
-      res={ok:true,saved:true,verified:true,transactionId:wanted,row:verify.row};
-      showToast('✅ Sale verified in SalesLog.','success');
-    }
+    showToast('⏳ Payment received. Verifying SalesLog…','warning');
+    res=await _verifySaleWritten(s.transactionId);
+    if(res) showToast('✅ Payment confirmed in SalesLog.','success');
   }
 
   if(!res || !res.ok || res.saved===false){
-    // A duplicate is an intentional server-side refusal, not a connection failure.
     if(res && res.duplicate){
       _sheetsOnline=true;
       setDBStatus('connected','Google Sheets ✓');
       return res;
     }
-    var why=(res&&((res.message||res.error)))||_lastCallError||'Unknown SalesLog error';
-    // Do not place uncertain sale writes in the generic retry queue; a prior
-    // request may have reached Sheets even when its response was lost.
-    showToast('⛔ SALE NOT SAVED TO SALESLOG — '+why,'error');
+    var why=(res&&((res.message||res.error)))||_lastCallError||'SalesLog did not confirm the transaction.';
+    showToast('⛔ SALE NOT CONFIRMED — '+why,'error');
     return {ok:false,saved:false,message:why};
   }
+
   _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
   if(res.duplicate) return res;
-  if(!res.verified) showToast('✅ Sale saved to SalesLog.','success');
-  // Reports refresh in the background after the receipt is displayed.
+  if(!res.verified) showToast('✅ Payment confirmed in SalesLog.','success');
   return res;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
@@ -3042,12 +3046,46 @@ function deleteDuplicateTransaction(){
   showToast('Duplicate order deleted. No new SalesLog entry was created.','success');
 }
 
+function showPaymentConfirmation(title, lines){
+  return new Promise(function(resolve){
+    var old=document.getElementById('payment-confirm-overlay');
+    if(old) old.remove();
+    var overlay=document.createElement('div');
+    overlay.id='payment-confirm-overlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(3,24,52,.58);z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;';
+    var box=document.createElement('div');
+    box.style.cssText='width:min(460px,96vw);background:#fff;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.30);font-family:Nunito,Arial,sans-serif;color:#0d2f55;';
+    var h=document.createElement('div');
+    h.textContent=title;
+    h.style.cssText='font-family:Georgia,serif;font-size:23px;font-weight:800;margin-bottom:12px;';
+    var body=document.createElement('div');
+    body.style.cssText='font-size:15px;line-height:1.55;margin-bottom:18px;white-space:pre-line;';
+    body.textContent=(lines||[]).join('\n');
+    var row=document.createElement('div');
+    row.style.cssText='display:grid;grid-template-columns:1fr 1.3fr;gap:10px;';
+    var cancel=document.createElement('button');
+    cancel.textContent='CANCEL';
+    cancel.style.cssText='border:1.5px solid #cbd8e8;background:#fff;color:#536c89;border-radius:11px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;';
+    var ok=document.createElement('button');
+    ok.textContent='CONFIRM PAYMENT';
+    ok.style.cssText='border:0;background:#1976d2;color:#fff;border-radius:11px;padding:12px;font-weight:900;font-size:14px;cursor:pointer;';
+    function done(v){ if(overlay.parentNode) overlay.remove(); resolve(v); }
+    cancel.onclick=function(){done(false);};
+    ok.onclick=function(){done(true);};
+    overlay.onclick=function(e){if(e.target===overlay)done(false);};
+    row.appendChild(cancel);row.appendChild(ok);box.appendChild(h);box.appendChild(body);box.appendChild(row);overlay.appendChild(box);document.body.appendChild(overlay);
+    setTimeout(function(){try{ok.focus();}catch(e){}},0);
+  });
+}
+
 /* ═══════════════════ PAYMENT ═══════════════════ */
 async function processPayment(method){
-  if(!order.length){showToast('No items in order!','error');return;}
+  if(!order.length){showToast('No items in order!','error');return false;}
+  if(_paymentFlowBusy||_paymentBusy){showToast('Payment is already processing.','warning');return false;}
   var totals=getTotals();
   var label=String(method||'PAYMENT').toUpperCase();
-  if(!window.confirm('Confirm '+label+' payment?\n\nTotal: ₱'+Number(totals.tot||0).toFixed(2)+'\n\nPress OK to submit this transaction to SalesLog.')) return false;
+  var yes=await showPaymentConfirmation('Confirm '+label+' Payment',[ 'Total: ₱'+Number(totals.tot||0).toFixed(2), 'This will write the transaction to SalesLog.' ]);
+  if(!yes) return false;
   showToast('⏳ '+label+' payment submitted. Saving to SalesLog…','warning');
   return await finalizePayment(method,'','');
 }
@@ -3062,17 +3100,18 @@ async function openGCash(){
   document.getElementById('gcash-num').value=''; document.getElementById('gcash-ref').value='';
   openModal('gcash-modal');
 }
-function confirmGCash(){
+async function confirmGCash(){
   const reference=document.getElementById('gcash-num').value.trim();
   const accountName=document.getElementById('gcash-ref').value.trim();
   if(!reference){showToast('Enter the GCash Reference Number.','error');return false;}
   if(!accountName){showToast('Enter the GCash Account Name.','error');return false;}
+  if(_paymentFlowBusy||_paymentBusy){showToast('Payment is already processing.','warning');return false;}
   var totals=getTotals();
-  if(!window.confirm('Confirm GCASH payment?\n\nReference: '+reference+'\nAccount: '+accountName+'\nTotal: ₱'+Number(totals.tot||0).toFixed(2)+'\n\nPress OK to submit this transaction to SalesLog.')) return false;
-  // Keep the modal open until validation + confirmation pass, then submit.
+  var yes=await showPaymentConfirmation('Confirm GCASH Payment',[ 'Reference: '+reference, 'Account: '+accountName, 'Total: ₱'+Number(totals.tot||0).toFixed(2), 'This will write the transaction to SalesLog.' ]);
+  if(!yes) return false;
   closeModal('gcash-modal');
   showToast('⏳ GCASH payment submitted. Saving to SalesLog…','warning');
-  return finalizePayment('GCash',reference,accountName);
+  return await finalizePayment('GCash',reference,accountName);
 }
 async function finalizePayment(method,gcashNum,gcashRef){
   if(_paymentBusy){showToast('Payment is already processing. Please do not tap again.','warning');return false;}
