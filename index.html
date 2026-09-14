@@ -1671,7 +1671,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbzARJyRY-a-625i7VDy7F0yQCRtb96zxF2zRyoc2v8UuSMDwnqBQguCPfYxTbCpuOCyZQ/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbz-kSN5eGdW_VwDcxn7g7frNR5gt5FB49mst0M0n4vwd9HI45zYrUM5khr6LDCunpQ0ig/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -2042,11 +2042,34 @@ async function _call(url, action, data){
       return null;
     }
   }
+
+  // HOLD contains the whole order payload. Sending that payload through JSONP puts
+  // all items into the URL and becomes noticeably slow on tablets. Save HOLD by
+  // POST first. The same Held ID is reused for the fallback, and the backend upserts
+  // by Held ID, so a retry cannot create a second held row.
+  if(action==='saveHeldOrder'){
+    try{
+      var holdPost=await _postTransport(url,action,data||{});
+      if(holdPost!==null && holdPost!==undefined) return holdPost;
+      throw new Error('Empty POST response.');
+    }catch(holdPostErr){
+      try{
+        var holdJsonp=await _jsonpAction(url,action,data||{});
+        if(holdJsonp!==null && holdJsonp!==undefined) return holdJsonp;
+        throw new Error('Empty JSONP response.');
+      }catch(holdJsonpErr){
+        _setCallError('SAVEHELDORDER FAILED — POST: '+(holdPostErr.message||holdPostErr)+
+          ' | JSONP: '+(holdJsonpErr.message||holdJsonpErr));
+        return null;
+      }
+    }
+  }
+
   var jsonpFirst=[
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
     'getSales','salesStatus','getEOD','logEOD',
     'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
-    'getHeldOrders','saveHeldOrder','deleteHeldOrder','completeHeldOrder','logout'
+    'getHeldOrders','deleteHeldOrder','completeHeldOrder','logout'
   ].indexOf(action)>=0;
 
   if(jsonpFirst){
@@ -2902,6 +2925,7 @@ function confirmGCash(){
   closeModal('gcash-modal'); return finalizePayment('GCash',num,ref||'N/A');
 }
 async function finalizePayment(method,gcashNum,gcashRef){
+  if(typeof _holdBusy!=='undefined' && _holdBusy){showToast('HOLD is still saving. Please wait for HOLD to finish before payment.','warning');return false;}
   if(_paymentBusy){showToast('Payment is already processing. Please do not tap again.','warning');return false;}
   if(!order.length){showToast('No items in order!','error');return false;}
   _setPaymentBusy(true);
@@ -4508,10 +4532,9 @@ async function holdOrder(){
       cashier:activeCashier||(googleUser&&googleUser.name)||'—',
       heldAt:_salesTimestamp(),
       transactionId:_pendingTransactionId||'',
+      // Send each large structure once. The backend accepts items + discountState.
       items:JSON.parse(JSON.stringify(order)),
-      order:JSON.parse(JSON.stringify(order)),
       discountState:JSON.parse(JSON.stringify(disc)),
-      disc:JSON.parse(JSON.stringify(disc)),
       subtotal:Number((totals.sub||0).toFixed(2)),
       discount:Number((totals.da||0).toFixed(2)),
       discountLabel:(totals.da>0?discLabel():'None'),
