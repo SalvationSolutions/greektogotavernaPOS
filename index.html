@@ -370,7 +370,7 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .toast.show{transform:translateY(0);opacity:1;}
 .toast.success{border-left:4px solid var(--success);}
 .toast.error{border-left:4px solid var(--danger);}
-.toast.warning{border-left:4px solid #C9A84C;background:rgba(201,168,76,.12);color:#C9A84C;}
+.toast.warning{border-left:4px solid #F5A623;background:#F5A623;color:#142B46;}
 .toast.info{border-left:4px solid var(--blue-accent);}
 .toast.grab-toast{border-left:4px solid var(--grab);}
 
@@ -828,6 +828,66 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important;}
 }
 
+
+/* ═══════════════════ HIGH-VISIBILITY SALESLOG PAYMENT STATUS ═══════════════════ */
+#saleslog-status-banner{
+  position:fixed;
+  top:78px;
+  left:50%;
+  transform:translate(-50%,-18px);
+  width:min(760px,calc(100vw - 28px));
+  z-index:100500;
+  display:none;
+  align-items:center;
+  gap:16px;
+  padding:16px 20px;
+  border-radius:16px;
+  box-shadow:0 14px 44px rgba(0,0,0,.34);
+  color:#fff;
+  opacity:0;
+  transition:opacity .18s ease,transform .18s ease;
+  border:2px solid rgba(255,255,255,.32);
+  font-family:'Nunito',sans-serif;
+}
+#saleslog-status-banner.show{display:flex;opacity:1;transform:translate(-50%,0);}
+#saleslog-status-banner.posting{background:#0B4B8A;}
+#saleslog-status-banner.verifying{background:#F5A623;color:#142B46;border-color:#D98B00;}
+#saleslog-status-banner.success{background:#138A42;}
+#saleslog-status-banner.error{background:#C62828;}
+.saleslog-status-icon{
+  width:50px;height:50px;min-width:50px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.18);font-size:28px;font-weight:900;
+}
+.saleslog-status-copy{min-width:0;flex:1;}
+.saleslog-status-title{font-size:18px;font-weight:1000;letter-spacing:.2px;line-height:1.1;}
+.saleslog-status-detail{font-size:13px;font-weight:800;margin-top:5px;line-height:1.4;white-space:pre-line;}
+.saleslog-status-id{font-size:11px;font-weight:700;margin-top:3px;opacity:.92;overflow-wrap:anywhere;}
+.saleslog-spinner{
+  width:28px;height:28px;border:4px solid rgba(255,255,255,.35);
+  border-top-color:#fff;border-radius:50%;animation:saleslogSpin .75s linear infinite;
+}
+#saleslog-status-banner.verifying .saleslog-spinner{border-color:rgba(11,37,69,.22);border-top-color:#0B2545;}
+@keyframes saleslogSpin{to{transform:rotate(360deg)}}
+.pay-btn.payment-posting{
+  filter:none!important;transform:none!important;opacity:1!important;
+  background:#1167D8!important;color:#fff!important;
+}
+.pay-btn.payment-saved{
+  filter:none!important;transform:none!important;opacity:1!important;
+  background:#138A42!important;color:#fff!important;
+}
+.pay-btn.payment-error{
+  filter:none!important;transform:none!important;opacity:1!important;
+  background:#C62828!important;color:#fff!important;
+}
+@media(max-width:768px){
+  #saleslog-status-banner{top:68px;padding:13px 14px;gap:11px;}
+  .saleslog-status-icon{width:42px;height:42px;min-width:42px;font-size:23px;}
+  .saleslog-status-title{font-size:15px;}
+  .saleslog-status-detail{font-size:12px;}
+}
+
 </style>
 
 <style id="gtg-real-qr-print-fix">
@@ -854,6 +914,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 </head>
 <body>
+
+<div id="saleslog-status-banner" role="status" aria-live="assertive" aria-atomic="true">
+  <div class="saleslog-status-icon" id="saleslog-status-icon">↻</div>
+  <div class="saleslog-status-copy">
+    <div class="saleslog-status-title" id="saleslog-status-title">POSTING TRANSACTION TO SALESLOG</div>
+    <div class="saleslog-status-detail" id="saleslog-status-detail"></div>
+    <div class="saleslog-status-id" id="saleslog-status-id"></div>
+  </div>
+</div>
+
 
 <!-- ══════════ LOGIN SCREEN ══════════ -->
 
@@ -1039,9 +1109,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <button onclick="printReceipt()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--blue-pale);background:#fff;color:var(--blue-deep);font-family:Nunito,sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px;">🖨️ Print Receipt</button>
       <div class="pay-label">💳 Payment Method</div>
       <div class="pay-grid">
-        <button class="pay-btn cash"  onclick="processPayment('Cash')">💵 Cash</button>
-        <button class="pay-btn gcash" onclick="openGCash()">📱 GCash</button>
-        <button class="pay-btn free-meal" onclick="processFreeMeal()" style="grid-column:1/-1;background:#C9A84C;color:#0B2545;">🎁 FREE MEAL</button>
+        <button id="cash-pay-btn" class="pay-btn cash" onclick="processPayment('Cash')">💵 Cash</button>
+        <button id="gcash-pay-btn" class="pay-btn gcash" onclick="openGCash()">📱 GCash</button>
+        <button id="free-pay-btn" class="pay-btn free-meal" onclick="processFreeMeal()" style="grid-column:1/-1;background:#C9A84C;color:#0B2545;">🎁 FREE MEAL</button>
       </div>
       <button class="clear-btn" onclick="clearOrder()">🗑 Clear Order</button>
     </div>
@@ -2354,9 +2424,14 @@ async function pushSaleToSheets(s){
   var res=await sheetsCall('logSale',{sale:s});
 
   if(!res && s && s.transactionId){
-    showToast('⏳ Payment received. Verifying SalesLog…','warning');
+    showSalesLogStatus('verifying',{
+      method:s.method||s.payment||'PAYMENT',
+      orderNum:s.orderNum||'',
+      total:s.total,
+      reference:s.gcashReference||s.gcashRef||'',
+      transactionId:s.transactionId
+    });
     res=await _verifySaleWritten(s.transactionId);
-    if(res) showToast('✅ Payment confirmed in SalesLog.','success');
   }
 
   if(!res || !res.ok || res.saved===false){
@@ -3106,12 +3181,15 @@ async function processPayment(method){
   var label=String(method||'PAYMENT').toUpperCase();
   var yes=await showPaymentConfirmation('Confirm '+label+' Payment',[ 'Total: ₱'+Number(totals.tot||0).toFixed(2), 'This will write the transaction to SalesLog.' ]);
   if(!yes) return false;
-  showToast('⏳ '+label+' payment submitted. Saving to SalesLog…','warning');
+  setPaymentButtonStatus(method,'posting');
+  showSalesLogStatus('posting',{method:method,orderNum:String(orderCount).padStart(4,'0'),total:totals.tot,transactionId:_pendingTransactionId||''});
   return await finalizePayment(method,'','');
 }
 async function processFreeMeal(){
   if(!order.length){showToast('No items in order!','error');return;}
   if(!confirm('Mark this whole order as FREE MEAL?\n\nIt will be saved to SalesLog with ₱0.00 total and inventory will still be deducted.')) return false;
+  setPaymentButtonStatus('FREE MEAL','posting');
+  showSalesLogStatus('posting',{method:'FREE MEAL',orderNum:String(orderCount).padStart(4,'0'),total:0,transactionId:_pendingTransactionId||''});
   return await finalizePayment('FREE MEAL','','');
 }
 async function openGCash(){
@@ -3130,7 +3208,8 @@ async function confirmGCash(){
   var yes=await showPaymentConfirmation('Confirm GCASH Payment',[ 'Reference: '+reference, 'Account: '+accountName, 'Total: ₱'+Number(totals.tot||0).toFixed(2), 'This will write the transaction to SalesLog.' ]);
   if(!yes) return false;
   closeModal('gcash-modal');
-  showToast('⏳ GCASH payment submitted. Saving to SalesLog…','warning');
+  setPaymentButtonStatus('GCash','posting');
+  showSalesLogStatus('posting',{method:'GCash',orderNum:String(orderCount).padStart(4,'0'),total:totals.tot,reference:reference,transactionId:_pendingTransactionId||''});
   return await finalizePayment('GCash',reference,accountName);
 }
 async function finalizePayment(method,gcashNum,gcashRef){
@@ -3151,6 +3230,7 @@ async function finalizePayment(method,gcashNum,gcashRef){
     // Keep ONE Transaction ID for this open transaction until it is either
     // successfully saved or explicitly deleted. A retry must reuse this ID.
     if(!_pendingTransactionId) _pendingTransactionId=_makeTransactionId(ordNum);
+    showSalesLogStatus('posting',{method:method,orderNum:ordNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId});
 
     var salePayload={
       orderNum:'#'+ordNum,
@@ -3181,13 +3261,21 @@ async function finalizePayment(method,gcashNum,gcashRef){
     // Transaction ID before appending a SalesLog row.
     var saveResult=await pushSaleToSheets(salePayload);
     if(saveResult && saveResult.duplicate){
+      setPaymentButtonStatus(method,'error');
+      showSalesLogStatus('error',{method:method,orderNum:ordNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId,message:'Duplicate Transaction ID detected.'});
+      resetPaymentButtonSoon(method,4200);
       showDuplicateTransaction(saveResult,salePayload);
       return false;
     }
     if(!saveResult || !saveResult.ok || saveResult.saved===false){
-      showToast('Transaction is still open. Fix SalesLog connection and try payment again.','error');
+      setPaymentButtonStatus(method,'error');
+      showSalesLogStatus('error',{method:method,orderNum:ordNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId,message:((saveResult&&(saveResult.message||saveResult.error))||_lastCallError||'SalesLog did not confirm the transaction.')});
+      resetPaymentButtonSoon(method,5000);
       return false;
     }
+    setPaymentButtonStatus(method,'saved');
+    showSalesLogStatus('success',{method:method,orderNum:ordNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId});
+    resetPaymentButtonSoon(method,2400);
 
     // Only deduct menu stock after SalesLog confirms a NEW sale.
     order.forEach(function(o){
@@ -3736,6 +3824,89 @@ function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 document.querySelectorAll('.modal-overlay').forEach(o=>{ o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('show'); }); });
 let _tt;
+
+var _salesLogStatusTimer=null;
+var _paymentButtonResetTimer=null;
+
+function _paymentButtonFor(method){
+  var m=String(method||'').toUpperCase();
+  if(m==='CASH') return document.getElementById('cash-pay-btn');
+  if(m==='GCASH') return document.getElementById('gcash-pay-btn');
+  if(m==='FREE MEAL') return document.getElementById('free-pay-btn');
+  return null;
+}
+function _paymentButtonNormalText(method){
+  var m=String(method||'').toUpperCase();
+  if(m==='CASH') return '💵 Cash';
+  if(m==='GCASH') return '📱 GCash';
+  if(m==='FREE MEAL') return '🎁 FREE MEAL';
+  return m||'PAYMENT';
+}
+function setPaymentButtonStatus(method,state){
+  var btn=_paymentButtonFor(method);
+  if(!btn) return;
+  btn.classList.remove('payment-posting','payment-saved','payment-error');
+  if(state==='posting'){
+    btn.classList.add('payment-posting');
+    btn.innerHTML='↻ POSTING...';
+  }else if(state==='saved'){
+    btn.classList.add('payment-saved');
+    btn.innerHTML='✓ SAVED';
+  }else if(state==='error'){
+    btn.classList.add('payment-error');
+    btn.innerHTML='⚠ CHECK';
+  }else{
+    btn.innerHTML=_paymentButtonNormalText(method);
+  }
+}
+function resetPaymentButtonSoon(method,delay){
+  clearTimeout(_paymentButtonResetTimer);
+  _paymentButtonResetTimer=setTimeout(function(){setPaymentButtonStatus(method,'normal');},delay||2200);
+}
+function showSalesLogStatus(state,opts){
+  opts=opts||{};
+  var b=document.getElementById('saleslog-status-banner');
+  var icon=document.getElementById('saleslog-status-icon');
+  var title=document.getElementById('saleslog-status-title');
+  var detail=document.getElementById('saleslog-status-detail');
+  var tid=document.getElementById('saleslog-status-id');
+  if(!b||!icon||!title||!detail||!tid) return;
+  clearTimeout(_salesLogStatusTimer);
+  b.className='show '+state;
+
+  var method=String(opts.method||'PAYMENT').toUpperCase();
+  var orderNo=String(opts.orderNum||'').replace(/^#/,'');
+  var amount=(opts.total!==undefined&&opts.total!==null)?('₱'+Number(opts.total||0).toFixed(2)):'';
+  var meta=[method,orderNo?('Order #'+orderNo):'',amount].filter(Boolean).join(' • ');
+
+  if(state==='posting'){
+    icon.innerHTML='<span class="saleslog-spinner"></span>';
+    title.textContent='POSTING TRANSACTION TO SALESLOG';
+    detail.textContent=meta+(meta?'\n':'')+'Please wait — do not press payment again.';
+  }else if(state==='verifying'){
+    icon.innerHTML='<span class="saleslog-spinner"></span>';
+    title.textContent='VERIFYING SALESLOG';
+    detail.textContent=meta+(meta?'\n':'')+'Payment was submitted. Checking Transaction ID…\nDo not retry payment.';
+  }else if(state==='success'){
+    icon.textContent='✓';
+    title.textContent=(method==='GCASH'?'GCASH SAVED TO SALESLOG':'TRANSACTION SAVED TO SALESLOG');
+    detail.textContent=meta+(opts.reference?'\nReference No: '+opts.reference:'');
+    _salesLogStatusTimer=setTimeout(hideSalesLogStatus,3200);
+  }else{
+    icon.textContent='!';
+    title.textContent='FAILED TO CONFIRM SALESLOG';
+    detail.textContent=meta+(opts.message?'\n'+opts.message:'')+'\nDo not keep pressing payment. Check the transaction status first.';
+    _salesLogStatusTimer=setTimeout(hideSalesLogStatus,6500);
+  }
+  tid.textContent=opts.transactionId?('Transaction ID: '+opts.transactionId):'';
+}
+function hideSalesLogStatus(){
+  var b=document.getElementById('saleslog-status-banner');
+  if(!b) return;
+  b.classList.remove('show');
+  setTimeout(function(){if(!b.classList.contains('show')) b.style.display='none';},190);
+}
+
 function showToast(msg,type='success'){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className=`toast show ${type}`;
