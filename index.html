@@ -1599,9 +1599,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="gcash-sub">Mobile Wallet Payment</div>
       <div class="gcash-amt" id="gcash-disp">₱0.00</div>
     </div>
-    <div class="mf"><label>GCash Number</label><input class="gcash-numbox" type="tel" id="gcash-num" placeholder="09XX XXX XXXX" maxlength="11"></div>
+    <div class="mf"><label>GCash Reference Number</label><input class="gcash-numbox" type="text" id="gcash-num" placeholder="Enter GCash reference number" autocomplete="off"></div>
     <div class="mf"><label>Account / Reference Name</label>
-      <input type="text" id="gcash-ref" placeholder="GCash registered name" style="width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:9px 12px;font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
+      <input type="text" id="gcash-ref" placeholder="GCash account name" style="width:100%;border:1.5px solid var(--blue-pale);border-radius:10px;padding:9px 12px;font-family:'Nunito',sans-serif;font-size:13px;outline:none;">
     </div>
     <button class="gcash-confirm" onclick="confirmGCash()">✅ Confirm GCash Payment</button>
     <p class="gcash-note">⚠️ Verify on merchant GCash app before confirming.</p>
@@ -2919,10 +2919,14 @@ async function openGCash(){
   openModal('gcash-modal');
 }
 function confirmGCash(){
-  const num=document.getElementById('gcash-num').value.trim();
-  const ref=document.getElementById('gcash-ref').value.trim();
-  if(!num||num.length<10){showToast('Enter valid GCash number!','error');return;}
-  closeModal('gcash-modal'); return finalizePayment('GCash',num,ref||'N/A');
+  const reference=document.getElementById('gcash-num').value.trim();
+  const accountName=document.getElementById('gcash-ref').value.trim();
+  if(!reference){showToast('Enter the GCash Reference Number.','error');return false;}
+  if(!accountName){showToast('Enter the GCash Account Name.','error');return false;}
+  // Keep the modal open until validation has passed, then hand the values to
+  // the normal authoritative SalesLog payment flow.
+  closeModal('gcash-modal');
+  return finalizePayment('GCash',reference,accountName);
 }
 async function finalizePayment(method,gcashNum,gcashRef){
   if(typeof _holdBusy!=='undefined' && _holdBusy){showToast('HOLD is still saving. Please wait for HOLD to finish before payment.','warning');return false;}
@@ -2953,6 +2957,11 @@ async function finalizePayment(method,gcashNum,gcashRef){
       cashier:activeCashier||(googleUser&&googleUser.name)||'—',
       method:method,
       payment:method,
+      gcashReference:String(method==='GCash'?(gcashNum||''):'') ,
+      gcashRef:String(method==='GCash'?(gcashNum||''):'') ,
+      referenceNumber:String(method==='GCash'?(gcashNum||''):'') ,
+      gcashAccountName:String(method==='GCash'?(gcashRef||''):'') ,
+      accountName:String(method==='GCash'?(gcashRef||''):'') ,
       items:order.map(function(o){
         return {qty:Number(o.qty)||0,name:String(o.name||''),price:isFreeMeal?0:(Number(o.price)||0),cat:String(o.cat||'Other')};
       }),
@@ -2995,10 +3004,10 @@ async function finalizePayment(method,gcashNum,gcashRef){
     } else if(da>0){
       rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;
     } else rdr.style.display='none';
-    let ml=method+' — '+cust; if(method==='GCash') ml+=` | ${gcashNum}`;
+    let ml=method+' — '+cust; if(method==='GCash') ml+=` | Ref: ${gcashNum}`;
     document.getElementById('r-method').textContent=ml;
     const gref=document.getElementById('r-gcash-ref');
-    if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Name: ${gcashRef}`;}
+    if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Account: ${gcashRef}`;}
     else gref.style.display='none';
     document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
     document.getElementById('r-ordnum').textContent='#'+ordNum;
@@ -4417,27 +4426,54 @@ document.addEventListener('visibilitychange',function(){
 
 /* ── Upgrade finalizePayment to include table, notes, stock deduct ── */
 var _origFinalizePayment = finalizePayment;
+var _paymentFlowBusy = false;
 finalizePayment = async function(method, gcashNum, gcashRef){
-  if(!(await _eodReadyForNewSale(true))) return false;
+  // Lock the COMPLETE payment flow before any network/EOD request. The base
+  // _paymentBusy flag starts later, so without this guard a second CASH tap
+  // during a slow pre-payment check could start another SalesLog request.
+  if(_paymentFlowBusy){
+    showToast('Payment is already processing. Please do not tap again.','warning');
+    return false;
+  }
 
-  var tableEl=document.getElementById('table-num');
-  var notesEl=document.getElementById('order-notes');
+  // A recalled HELD order must be explicitly confirmed BEFORE any Apps Script
+  // call. CANCEL leaves the recalled order open and writes nothing to SalesLog.
+  var payingHeldOrder = !!_activeHeldOrderId;
+  if(payingHeldOrder){
+    var totalsForConfirm=getTotals();
+    var heldMethod=String(method||'PAYMENT').toUpperCase();
+    var heldTotal=Number((totalsForConfirm&&totalsForConfirm.tot)||0).toFixed(2);
+    if(!window.confirm('Confirm payment for this recalled HELD order?\n\nPayment: '+heldMethod+'\nTotal: ₱'+heldTotal+'\n\nPress OK to write this transaction to SalesLog.')){
+      showToast('Payment cancelled. Held order remains open and was not sent to SalesLog.','warning');
+      return false;
+    }
+  }
 
-  var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
-  if(!ok) return false;
+  _paymentFlowBusy=true;
+  try{
+    if(!(await _eodReadyForNewSale(true))) return false;
 
-  // A recalled held order remains in Google Sheets until its payment is confirmed.
-  _completeActiveHeldOrder();
+    var tableEl=document.getElementById('table-num');
+    var notesEl=document.getElementById('order-notes');
 
-  // Refresh reports after the payment UI completes; never make the cashier
-  // wait for a second full SalesLog download.
-  setTimeout(function(){
-    refreshSalesFromSheets(true).then(function(){ renderReports(); });
-  },0);
+    var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
+    if(!ok) return false;
 
-  if(tableEl) tableEl.value='';
-  if(notesEl) notesEl.value='';
-  return true;
+    // A recalled held order remains in Google Sheets until its payment is confirmed.
+    _completeActiveHeldOrder();
+
+    // Refresh reports after the payment UI completes; never make the cashier
+    // wait for a second full SalesLog download.
+    setTimeout(function(){
+      refreshSalesFromSheets(true).then(function(){ renderReports(); });
+    },0);
+
+    if(tableEl) tableEl.value='';
+    if(notesEl) notesEl.value='';
+    return true;
+  } finally {
+    _paymentFlowBusy=false;
+  }
 };
 
 /* ── Table # + Notes in receipt ──────────────────────────── */
