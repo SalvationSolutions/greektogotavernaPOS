@@ -1676,7 +1676,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbz-kSN5eGdW_VwDcxn7g7frNR5gt5FB49mst0M0n4vwd9HI45zYrUM5khr6LDCunpQ0ig/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyrUpLkcueqex-agxKaOQAPlja8Hc8UFz3asmSDF_-xWOd7IfKai8UXZ21U_tdaUL2d/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -1925,6 +1925,8 @@ let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
 const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
+const SALE_WRITE_TIMEOUT_MS = 7000; // SalesLog write should answer quickly; read-back verifies uncertain writes
+const SALE_VERIFY_TIMEOUT_MS = 5000;
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
 
 // ── Offline queue ────────────────────────────────────────────────────────────
@@ -1947,7 +1949,7 @@ function _setCallError(msg){
   try{ console.warn('[G2G Sheets]', _lastCallError); }catch(e){}
 }
 
-function _jsonp(fullUrl){
+function _jsonp(fullUrl, timeoutMs){
   return new Promise(function(resolve,reject){
     var cb='_gtgcb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
     var script=document.createElement('script');
@@ -1956,7 +1958,7 @@ function _jsonp(fullUrl){
       if(finished) return;
       finished=true; cleanup();
       reject(new Error('Google Apps Script JSONP timed out.'));
-    }, CALL_TIMEOUT_MS);
+    }, Number(timeoutMs)||CALL_TIMEOUT_MS);
 
     function cleanup(){
       try{ delete window[cb]; }catch(e){ window[cb]=undefined; }
@@ -1989,12 +1991,12 @@ function _jsonp(fullUrl){
 }
 
 
-async function _jsonpAction(url,action,data){
+async function _jsonpAction(url,action,data,timeoutMs){
   var payload=Object.assign({},data||{});
   if(_authSession && action!=='login' && action!=='ping') payload.sessionToken=_authSession;
   var full=url+(url.indexOf('?')>-1?'&':'?')+'action='+encodeURIComponent(action)
     +'&payload='+encodeURIComponent(JSON.stringify(payload));
-  return await _jsonp(full);
+  return await _jsonp(full,timeoutMs);
 }
 
 async function _fetchTransport(fullUrl){
@@ -2043,7 +2045,7 @@ async function _call(url, action, data){
   // append through a POST fallback. The cashier can retry safely after a read-back.
   if(action==='logSale'){
     try{
-      var saleResult=await _jsonpAction(url,action,data||{});
+      var saleResult=await _jsonpAction(url,action,data||{},SALE_WRITE_TIMEOUT_MS);
       return (saleResult!==null && saleResult!==undefined) ? saleResult : null;
     }catch(saleErr){
       _setCallError('LOGSALE FAILED — '+(saleErr.message||saleErr));
@@ -2053,7 +2055,7 @@ async function _call(url, action, data){
 
   var jsonpFirst=[
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
-    'getSales','salesStatus','getEOD','logEOD',
+    'getSales','findSaleByTransactionId','salesStatus','getEOD','logEOD',
     'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
     'logout'
   ].indexOf(action)>=0;
@@ -2337,16 +2339,16 @@ async function pushSaleToSheets(s){
   // response. Never resend an uncertain sale. Read SalesLog back and verify the
   // SAME Transaction ID first; this is safe for CASH and GCash.
   if(!res && s && s.transactionId){
-    var verify=await sheetsCall('getSales',{limit:5000});
-    if(verify && verify.ok && Array.isArray(verify.items)){
-      var wanted=String(s.transactionId);
-      var found=verify.items.some(function(row){
-        return String(row.transactionId||row.TransactionID||row.transactionID||row.saleId||'')===wanted;
-      });
-      if(found){
-        res={ok:true,saved:true,verified:true,transactionId:wanted};
-        showToast('✅ Sale verified in SalesLog.','success');
-      }
+    // Fast exact lookup: never download the whole SalesLog just to verify one sale.
+    // The backend uses TextFinder on the TransactionID column.
+    var wanted=String(s.transactionId);
+    var verify=null;
+    try{
+      verify=await _jsonpAction(SHEETS_URL,'findSaleByTransactionId',{transactionId:wanted},SALE_VERIFY_TIMEOUT_MS);
+    }catch(e){ verify=null; }
+    if(verify && verify.ok && verify.found){
+      res={ok:true,saved:true,verified:true,transactionId:wanted,row:verify.row};
+      showToast('✅ Sale verified in SalesLog.','success');
     }
   }
 
@@ -3043,6 +3045,10 @@ function deleteDuplicateTransaction(){
 /* ═══════════════════ PAYMENT ═══════════════════ */
 async function processPayment(method){
   if(!order.length){showToast('No items in order!','error');return;}
+  var totals=getTotals();
+  var label=String(method||'PAYMENT').toUpperCase();
+  if(!window.confirm('Confirm '+label+' payment?\n\nTotal: ₱'+Number(totals.tot||0).toFixed(2)+'\n\nPress OK to submit this transaction to SalesLog.')) return false;
+  showToast('⏳ '+label+' payment submitted. Saving to SalesLog…','warning');
   return await finalizePayment(method,'','');
 }
 async function processFreeMeal(){
@@ -3061,9 +3067,11 @@ function confirmGCash(){
   const accountName=document.getElementById('gcash-ref').value.trim();
   if(!reference){showToast('Enter the GCash Reference Number.','error');return false;}
   if(!accountName){showToast('Enter the GCash Account Name.','error');return false;}
-  // Keep the modal open until validation has passed, then hand the values to
-  // the normal authoritative SalesLog payment flow.
+  var totals=getTotals();
+  if(!window.confirm('Confirm GCASH payment?\n\nReference: '+reference+'\nAccount: '+accountName+'\nTotal: ₱'+Number(totals.tot||0).toFixed(2)+'\n\nPress OK to submit this transaction to SalesLog.')) return false;
+  // Keep the modal open until validation + confirmation pass, then submit.
   closeModal('gcash-modal');
+  showToast('⏳ GCASH payment submitted. Saving to SalesLog…','warning');
   return finalizePayment('GCash',reference,accountName);
 }
 async function finalizePayment(method,gcashNum,gcashRef){
