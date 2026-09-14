@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="REAL-QR-BROWSER-FIX-2026-09-13">
+<meta name="gtg-receipt-build" content="XP58IID-58MM-ESCPOS-FIX-2026-09-14">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2847,6 +2847,28 @@ async function finalizePayment(method,gcashNum,gcashRef){
   else gref.style.display='none';
   document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
   document.getElementById('r-ordnum').textContent='#'+ordNum;
+
+  // Keep an exact snapshot of the PAID transaction for the physical 58mm receipt.
+  // This prevents RawBT from accidentally printing the next order number after
+  // orderCount increments below.
+  window._lastReceiptData={
+    orderNum:ordNum,
+    date:dateStr,
+    customer:cust,
+    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+    method:method,
+    gcashNum:gcashNum||'',
+    gcashRef:gcashRef||'',
+    table:((document.getElementById('table-num')||{}).value||''),
+    notes:((document.getElementById('order-notes')||{}).value||''),
+    items:order.map(function(o){return {name:String(o.name||''),qty:Number(o.qty)||0,price:isFreeMeal?0:(Number(o.price)||0)};}),
+    subtotal:Number(saleSub||0),
+    discount:Number(saleDisc||0),
+    discountLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():''),
+    total:Number(saleTot||0),
+    isFreeMeal:isFreeMeal
+  };
+
   orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
   openModal('receipt-modal'); renderMenu();
   if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
@@ -3948,61 +3970,154 @@ async function printViaXprinterApp(){
   }
 }
 
-// ── Print via RawBT (Android + XP-58IID Classic Bluetooth) ──────────────────
+// ── XP-58IID 58mm receipt via RawBT + real ESC/POS bytes ─────────────────────
+// IMPORTANT: this is the PHYSICAL receipt path. It does not print the browser
+// receipt card. RawBT receives actual ESC/POS bytes through rawbt:base64.
+function _xp58Ascii(v){
+  return String(v==null?'':v)
+    .replace(/₱/g,'P').replace(/[–—]/g,'-')
+    .replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
+    .replace(/[^\x20-\x7E]/g,' ');
+}
+function _xp58Fit(v,w){
+  var s=_xp58Ascii(v);
+  return s.length>w?s.slice(0,w):s;
+}
+function _xp58Pair(left,right,width){
+  left=_xp58Ascii(left); right=_xp58Ascii(right);
+  if(right.length>=width) return right.slice(0,width);
+  var maxLeft=Math.max(0,width-right.length-1);
+  left=left.slice(0,maxLeft);
+  return left+' '.repeat(Math.max(1,width-left.length-right.length))+right;
+}
+function _xp58Text(bytes,s){
+  s=_xp58Ascii(s);
+  for(var i=0;i<s.length;i++) bytes.push(s.charCodeAt(i)&255);
+}
+function _xp58Line(bytes,s){ _xp58Text(bytes,s||''); bytes.push(10); }
+function _xp58QR(bytes,data){
+  // ESC/POS QR Code Model 2. XP-58IID units with QR-capable firmware print this natively.
+  var d=_xp58Ascii(data), payload=[];
+  for(var i=0;i<d.length;i++) payload.push(d.charCodeAt(i)&255);
+  bytes.push(29,40,107,4,0,49,65,50,0); // model 2
+  bytes.push(29,40,107,3,0,49,67,5);    // module size
+  bytes.push(29,40,107,3,0,49,69,49);   // error correction M
+  var n=payload.length+3;
+  bytes.push(29,40,107,n&255,(n>>8)&255,49,80,48);
+  Array.prototype.push.apply(bytes,payload);
+  bytes.push(29,40,107,3,0,49,81,48);
+}
+function _xp58Base64(bytes){
+  var out='',step=0x8000;
+  for(var i=0;i<bytes.length;i+=step){
+    out+=String.fromCharCode.apply(null,bytes.slice(i,i+step));
+  }
+  return btoa(out);
+}
+function _xp58Send(bytes){
+  var a=document.createElement('a');
+  a.href='rawbt:base64,'+_xp58Base64(bytes);
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){try{document.body.removeChild(a);}catch(e){}},1200);
+}
+function _xp58CurrentReceipt(){
+  if(window._lastReceiptData && window._lastReceiptData.items && window._lastReceiptData.items.length){
+    return window._lastReceiptData;
+  }
+  var totals=getTotals();
+  return {
+    orderNum:String(orderCount).padStart(4,'0'),
+    date:new Date().toLocaleString('en-PH'),
+    customer:(document.getElementById('cust-name')||{}).value||'Walk-in',
+    cashier:(typeof activeCashier!=='undefined'&&activeCashier)?activeCashier:((typeof googleUser!=='undefined'&&googleUser&&googleUser.name)?googleUser.name:'—'),
+    method:'', gcashNum:'', gcashRef:'',
+    table:(document.getElementById('table-num')||{}).value||'',
+    notes:(document.getElementById('order-notes')||{}).value||'',
+    items:order.map(function(o){return {name:String(o.name||''),qty:Number(o.qty)||0,price:Number(o.price)||0};}),
+    subtotal:Number(totals.sub||0),discount:Number(totals.da||0),discountLabel:(totals.da>0?discLabel():''),total:Number(totals.tot||0),isFreeMeal:false
+  };
+}
 function printViaRawBT(){
-  var totals  = getTotals();
-  var orderNum= String(orderCount).padStart(4,'0');
-  var tableVal= (document.getElementById('table-num')||{}).value||'';
-  var custVal = (document.getElementById('cust-name')||{}).value||'';
-  var notesVal= (document.getElementById('order-notes')||{}).value||'';
-  var cashier = typeof activeCashier!=='undefined' ? activeCashier : '';
-  var lines   = [];
-  var rawWidth=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
-  var rawLine='='.repeat(rawWidth);
-  var rawDash='-'.repeat(rawWidth);
-  lines.push(rawLine);
-  lines.push('GREEK TO GO TAVERNA'.padStart(Math.floor((rawWidth+19)/2)).slice(0,rawWidth));
-  lines.push(rawLine);
-  lines.push('Order #: ' + orderNum);
-  lines.push(new Date().toLocaleString('en-PH'));
-  if(tableVal)  lines.push('Table:    ' + tableVal);
-  if(custVal)   lines.push('Customer: ' + custVal);
-  if(cashier)   lines.push('Cashier:  ' + cashier);
-  lines.push(rawDash);
-  lines.push('Item / Qty / Amount');
-  lines.push(rawDash);
-  order.forEach(function(o){
-    var nm = (o.name||'').slice(0,20).padEnd(20);
-    var qty= ('x'+o.qty).padStart(4);
-    var amt= ('P'+parseFloat(o.price*o.qty).toFixed(2)).padStart(9);
-    lines.push(nm+qty+amt);
-  });
-  lines.push('--------------------------------');
-  lines.push(('Subtotal:').padEnd(22) + ('P'+totals.sub.toFixed(2)).padStart(10));
-  if(totals.da>0) lines.push(('Discount:').padEnd(22) + ('-P'+totals.da.toFixed(2)).padStart(10));
-  lines.push(('TOTAL:').padEnd(22) + ('P'+totals.tot.toFixed(2)).padStart(10));
-  if(notesVal){ lines.push('--------------------------------'); lines.push('Note: '+notesVal); }
-  lines.push('================================');
-  lines.push('================================');
-  lines.push('  Thank you! Come again!');
-  lines.push(''); lines.push(''); lines.push('');
-  var text = lines.join("\n");
+  var r=_xp58CurrentReceipt();
+  if(!r.items || !r.items.length){showToast('No receipt items to print.','error');return;}
 
-
-  // Send to RawBT via URL scheme
   try{
-    var a = document.createElement('a');
-    a.href = 'rawbt:' + encodeURIComponent(text);
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} }, 1000);
-    showToast('🖨️ Sending to XP-58IID via RawBT…','success');
-  } catch(e){
-    showToast('❌ RawBT not installed. Download from Play Store.','error');
+    var W=32, dash='-'.repeat(W), bytes=[];
+    var regUrl='https://salvationsolutions.github.io/GreekToGoTaverna-RegistrationForm/';
+
+    // Initialize printer, center, bold + double size restaurant name.
+    bytes.push(27,64,27,97,1,27,69,1,29,33,17);
+    _xp58Line(bytes,'GREEK TO GO');
+    _xp58Line(bytes,'TAVERNA');
+    bytes.push(29,33,0,27,69,0);
+    _xp58Line(bytes,'');
+
+    // Transaction metadata.
+    bytes.push(27,97,0);
+    _xp58Line(bytes,'Date: '+_xp58Fit(r.date,26));
+    _xp58Line(bytes,'Order #: '+_xp58Fit(r.orderNum,21));
+    _xp58Line(bytes,'Cashier: '+_xp58Fit(r.cashier,23));
+    if(String(r.customer||'').toLowerCase()==='walk-in') _xp58Line(bytes,'Type: Walk-in');
+    else if(r.customer) _xp58Line(bytes,'Customer: '+_xp58Fit(r.customer,22));
+    if(r.table) _xp58Line(bytes,'Table: '+_xp58Fit(r.table,25));
+    _xp58Line(bytes,dash);
+
+    // Items.
+    r.items.forEach(function(o){
+      var qty=Math.max(1,Number(o.qty)||1);
+      var amount='P'+(Number(o.price||0)*qty).toFixed(2);
+      _xp58Line(bytes,_xp58Pair(qty+'x '+_xp58Fit(o.name||'Item',21),amount,W));
+    });
+
+    _xp58Line(bytes,dash);
+    _xp58Line(bytes,_xp58Pair('Subtotal','P'+Number(r.subtotal||0).toFixed(2),W));
+    if(Number(r.discount||0)>0){
+      _xp58Line(bytes,_xp58Pair(r.discountLabel||'Discount','-P'+Number(r.discount||0).toFixed(2),W));
+    }
+
+    // Bold double-width TOTAL.
+    bytes.push(27,69,1,29,33,16);
+    _xp58Line(bytes,_xp58Pair('TOTAL','P'+Number(r.total||0).toFixed(2),16));
+    bytes.push(29,33,0,27,69,0);
+    _xp58Line(bytes,dash);
+
+    if(r.method){
+      _xp58Line(bytes,'Payment Method: '+_xp58Fit(r.method,16));
+      if(String(r.method).toLowerCase()==='gcash'){
+        if(r.gcashRef && r.gcashRef!=='N/A') _xp58Line(bytes,'Reference: '+_xp58Fit(r.gcashRef,21));
+      }
+    }
+    if(r.notes){ _xp58Line(bytes,'Note: '+_xp58Fit(r.notes,26)); }
+
+    // Loyalty QR section. No address, telephone, or tagline text.
+    _xp58Line(bytes,'');
+    bytes.push(27,97,1,27,69,1);
+    _xp58Line(bytes,'SCAN TO REGISTER');
+    bytes.push(27,69,0);
+    _xp58Line(bytes,'AND JOIN OUR LOYALTY PROGRAM');
+    _xp58Line(bytes,'');
+    _xp58QR(bytes,regUrl);
+    _xp58Line(bytes,'');
+    _xp58Line(bytes,'Greek To Go Taverna');
+    _xp58Line(bytes,'');
+    bytes.push(27,69,1);
+    _xp58Line(bytes,'THANK YOU!');
+    bytes.push(27,69,0);
+    _xp58Line(bytes,'SEE YOU AGAIN!');
+    _xp58Line(bytes,'');
+    _xp58Line(bytes,'');
+
+    // Feed enough paper for a clean tear. XP-58IID generally has no auto-cutter.
+    bytes.push(27,100,4);
+    _xp58Send(bytes);
+    showToast('🖨️ XP-58IID 58mm receipt sent to RawBT.','success');
+  }catch(e){
+    console.error('XP-58IID receipt error',e);
+    showToast('❌ Receipt print failed: '+(e.message||e),'error');
   }
 }
-
 async function shareReceipt(){
   closeModal('bt-printer-modal');
   var totals  = getTotals();
@@ -5102,23 +5217,23 @@ function savePrinterSettings(){
 }
 
 function testRawBTPrinter(){
-  var width=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
-  var line='='.repeat(width);
-  var text=[
-    line,
-    'GREEK TO GO TAVERNA',
-    'XP-58IID / RAWBT TEST',
-    line,
-    'Paper: 58mm',
-    'ESC/POS thermal printer',
-    'If this prints, RawBT is ready.',
-    line,'','',''
-  ].join('\\n');
   try{
-    window.location.href='rawbt:'+encodeURIComponent(text);
-    showToast('🖨️ Opening RawBT test print…','info');
+    var bytes=[27,64,27,97,1,27,69,1,29,33,17];
+    _xp58Line(bytes,'GREEK TO GO');
+    _xp58Line(bytes,'TAVERNA');
+    bytes.push(29,33,0,27,69,0);
+    _xp58Line(bytes,'XP-58IID 58MM TEST');
+    _xp58Line(bytes,'ESC/POS + RawBT OK');
+    _xp58Line(bytes,'');
+    _xp58QR(bytes,'https://salvationsolutions.github.io/GreekToGoTaverna-RegistrationForm/');
+    _xp58Line(bytes,'');
+    _xp58Line(bytes,'QR VISIBLE = READY');
+    _xp58Line(bytes,'');
+    bytes.push(27,100,4);
+    _xp58Send(bytes);
+    showToast('🧪 XP-58IID test receipt sent.','success');
   }catch(e){
-    showToast('RawBT could not be opened. Install/configure RawBT on this Android device.','error');
+    showToast('❌ RawBT test failed: '+(e.message||e),'error');
   }
 }
 
