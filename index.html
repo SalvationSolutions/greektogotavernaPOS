@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="REAL-QR-BROWSER-FIX-2026-09-13">
+<meta name="gtg-receipt-build" content="FINAL-SALESLOG-CASH-GCASH-FIX-2026-09-15">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1746,7 +1746,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbykyn7GcgiiFm6vaF4UEaYYFHWMx1SyC7EVhCI9aDvfNeFMpEEwCt83jWjSYKDebS5x2Q/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyKt4u9WGBZ8EjB7BJi_eq0c3iZVtmiXp3ZtcxWZ_PObAvts-6lLFW1kVbOrnate0hlOA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -2423,7 +2423,11 @@ async function pushSaleToSheets(s){
 
   var res=await sheetsCall('logSale',{sale:s});
 
-  if(!res && s && s.transactionId){
+  // IMPORTANT: Apps Script can append the row successfully and then fail while
+  // preparing its acknowledgement.  That previously caused CASH to appear in
+  // SalesLog while the POS showed an error.  Verify the exact Transaction ID
+  // after ANY unconfirmed response before telling the cashier it failed.
+  if((!res || !res.ok || res.saved===false) && s && s.transactionId && !(res && res.duplicate)){
     showSalesLogStatus('verifying',{
       method:s.method||s.payment||'PAYMENT',
       orderNum:s.orderNum||'',
@@ -2431,7 +2435,8 @@ async function pushSaleToSheets(s){
       reference:s.gcashReference||s.gcashRef||'',
       transactionId:s.transactionId
     });
-    res=await _verifySaleWritten(s.transactionId);
+    var verifiedSale=await _verifySaleWritten(s.transactionId);
+    if(verifiedSale) res=verifiedSale;
   }
 
   if(!res || !res.ok || res.saved===false){
@@ -2453,7 +2458,7 @@ async function pushSaleToSheets(s){
       return res;
     }
     var why=(res&&((res.message||res.error)))||_lastCallError||'SalesLog did not confirm the transaction.';
-    showToast('⛔ SALE NOT CONFIRMED — '+why,'error');
+    showToast('⛔ SALE NOT CONFIRMED — '+why+' Do not retry until the status is checked.','error');
     return {ok:false,saved:false,message:why};
   }
 
