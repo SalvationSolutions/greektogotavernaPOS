@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="XP58IID-58MM-LOGO-LARGE-QR-2026-09-14">
+<meta name="gtg-receipt-build" content="REAL-QR-BROWSER-FIX-2026-09-13">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1610,6 +1610,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 </div>
 
 <!-- RECEIPT MODAL -->
+<div class="modal-overlay" id="duplicate-transaction-modal">
+  <div class="modal" style="max-width:460px">
+    <div style="font-size:42px;text-align:center;margin-bottom:8px">⚠️</div>
+    <h3 style="text-align:center;color:#E05050;margin-bottom:10px">DUPLICATE TRANSACTION DETECTED</h3>
+    <div style="background:#FFF7E6;border:1.5px solid #E8C97A;border-radius:12px;padding:14px 16px;line-height:1.55">
+      <div style="font-size:12px;color:#8DA4BF;font-weight:800;text-transform:uppercase">Transaction ID</div>
+      <div id="dup-txn-id" style="font-family:'Courier New',monospace;font-size:13px;font-weight:900;color:#0B2545;word-break:break-all;margin:3px 0 10px">—</div>
+      <div id="dup-detail" style="font-size:13px;font-weight:700;color:#0B2545">This transaction has already been recorded in SalesLog.</div>
+      <div style="font-size:12px;color:#8DA4BF;margin-top:8px">This transaction cannot be submitted again.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="m-cancel" onclick="cancelDuplicateTransaction()">CANCEL</button>
+      <button class="m-save" style="background:#E05050" onclick="deleteDuplicateTransaction()">DELETE</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="receipt-modal">
   <div class="modal" style="width:420px">
     <div class="receipt">
@@ -1633,7 +1650,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <hr class="r-div">
       <div id="receipt-loyalty-qr" style="text-align:center;padding-top:4px;">
         <img src="data:image/png;base64,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" alt="Guest Self Registration QR code"
-             style="width:230px;max-width:82%;height:auto;display:block;margin:0 auto 7px;background:#fff;image-rendering:pixelated;">
+             style="width:190px;max-width:82%;height:auto;display:block;margin:0 auto 7px;background:#fff;image-rendering:pixelated;">
         <div style="font-size:10px;line-height:1.35;color:#000;font-weight:700;">
           Scan the QR code to register and join the<br>
           Greek To Go Taverna Loyalty Program.
@@ -1654,7 +1671,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbx5Ww07JIrUlzhcNFNlqTOh0PxmBCNI5u5BDUMhJlkTWVP9HOSB_JTiC-EYDnGgyz3edg/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.comacros/s/AKfycbzARJyRY-a-625i7VDy7F0yQCRtb96zxF2zRyoc2v8UuSMDwnqBQguCPfYxTbCpuOCyZQ/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -1790,6 +1807,51 @@ let grabOrders  = JSON.parse(localStorage.getItem('greektogo_grab_orders')  || '
 /* ═══════════════════ CLOCK ═══════════════════ */
 setInterval(()=>{ document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-PH'); }, 1000);
 document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-PH');
+
+/* ═══════════════════ INACTIVITY AUTO-LOGOUT ═══════════════════
+   30 minutes of real user inactivity. Active/current or held orders protect
+   the cashier from being logged out until those orders are resolved. */
+var AUTO_LOGOUT_IDLE_MS = 30 * 60 * 1000;
+var _lastUserActivityAt = Date.now();
+var _idleWarningShown = false;
+
+function _markUserActivity(){
+  _lastUserActivityAt=Date.now();
+  _idleWarningShown=false;
+}
+['pointerdown','keydown','touchstart','mousedown'].forEach(function(evt){
+  document.addEventListener(evt,_markUserActivity,{passive:true});
+});
+
+function _hasProtectedOrder(){
+  return (typeof order!=='undefined'&&order&&order.length>0) ||
+         (typeof heldOrders!=='undefined'&&heldOrders&&heldOrders.length>0) ||
+         (typeof _activeHeldOrderId!=='undefined'&&!!_activeHeldOrderId);
+}
+function _performAutoLogout(){
+  _syncDone=false;
+  if(_authSession)_call(SHEETS_URL,'logout',{});
+  _clearSecureSession();
+  activeCashier=null;
+  googleUser=null;
+  var btn=document.getElementById('logout-btn');if(btn)btn.style.display='none';
+  var chip=document.getElementById('g-user-chip');if(chip)chip.style.display='none';
+  var ac=document.getElementById('active-cashier');if(ac)ac.innerHTML='👤 No Cashier';
+  var ls=document.getElementById('login-screen');if(ls)ls.style.display='flex';
+  showToast('Session locked after 30 minutes of inactivity. Please sign in again.','warning');
+}
+setInterval(function(){
+  if(!_authSession)return;
+  if(Date.now()-_lastUserActivityAt < AUTO_LOGOUT_IDLE_MS)return;
+  if(_hasProtectedOrder()){
+    if(!_idleWarningShown){
+      _idleWarningShown=true;
+      showToast('Auto logout postponed — active or held order is protected.','warning');
+    }
+    return;
+  }
+  _performAutoLogout();
+},30000);
 
 // Set datetime-local defaults to now
 function setNow(id){
@@ -1983,7 +2045,8 @@ async function _call(url, action, data){
   var jsonpFirst=[
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
     'getSales','salesStatus','getEOD','logEOD',
-    'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder','logout'
+    'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
+    'getHeldOrders','saveHeldOrder','deleteHeldOrder','logout'
   ].indexOf(action)>=0;
 
   if(jsonpFirst){
@@ -2257,21 +2320,28 @@ function _salesTimestamp(){
 async function pushSaleToSheets(s){
   if(!SHEETS_URL){
     showToast('⛔ SALE NOT SAVED — Google Sheets URL is missing.','error');
-    return false;
+    return {ok:false,saved:false,message:'Google Sheets URL is missing.'};
   }
   var res=await sheetsCall('logSale',{sale:s});
   if(!res || !res.ok || res.saved===false){
+    // A duplicate is an intentional server-side refusal, not a connection failure.
+    if(res && res.duplicate){
+      _sheetsOnline=true;
+      setDBStatus('connected','Google Sheets ✓');
+      return res;
+    }
     var why=(res&&((res.message||res.error)))||_lastCallError||'Unknown SalesLog error';
     // Do not place uncertain sale writes in the generic retry queue; a prior
     // request may have reached Sheets even when its response was lost.
     showToast('⛔ SALE NOT SAVED TO SALESLOG — '+why,'error');
-    return false;
+    return {ok:false,saved:false,message:why};
   }
   _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
-  showToast(res.duplicate ? '✅ Existing sale recognized — no duplicate added.' : '✅ Sale saved to SalesLog.','success');
+  if(res.duplicate) return res;
+  showToast('✅ Sale saved to SalesLog.','success');
   // Reports refresh in the background after the receipt is displayed.
-  return true;
+  return res;
 }
 async function pushShiftToSheets(e){ if(SHEETS_URL) await sheetsCall('logShift',{entry:e}); }
 
@@ -2761,6 +2831,57 @@ function clearOrder(){
   if(window.innerWidth<=900) toggleMobileOrder(false);
 }
 
+var _pendingTransactionId='';
+var _paymentBusy=false;
+var _duplicateTransactionInfo=null;
+
+function _makeTransactionId(ordNum){
+  var stamp=_salesTimestamp().replace(/[^0-9]/g,'');
+  return 'G2G-'+String(ordNum||'').replace(/^#/,'')+'-'+stamp+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
+}
+function _setPaymentBusy(busy){
+  _paymentBusy=!!busy;
+  document.querySelectorAll('.pay-btn,.gcash-confirm').forEach(function(btn){
+    btn.disabled=_paymentBusy;
+    btn.style.opacity=_paymentBusy?'0.55':'';
+    btn.style.pointerEvents=_paymentBusy?'none':'';
+  });
+}
+function showDuplicateTransaction(res,sale){
+  _duplicateTransactionInfo={response:res||{},sale:sale||{}};
+  var ui=(res&&res.duplicateUi)||{};
+  var existing=(res&&res.existing)||{};
+  var id=ui.transactionId||(res&&res.transactionId)||(sale&&sale.transactionId)||'—';
+  var orderNo=ui.orderNum||existing.orderNum||(res&&res.orderNum)||(sale&&sale.orderNum)||'';
+  var method=ui.method||existing.method||existing.payment||(res&&res.method)||(sale&&sale.method)||'';
+
+  var idEl=document.getElementById('dup-txn-id');
+  if(idEl) idEl.textContent=id;
+
+  var detail=document.getElementById('dup-detail');
+  if(detail){
+    var normalizedOrder=String(orderNo||'');
+    if(normalizedOrder && normalizedOrder.charAt(0)!=='#') normalizedOrder='#'+normalizedOrder;
+    detail.textContent=
+      'Transaction ID '+id+' has already been recorded.'+
+      ((normalizedOrder||method)?'\nOrder '+normalizedOrder+(method?' — '+method:''):'');
+    detail.style.whiteSpace='pre-line';
+  }
+  openModal('duplicate-transaction-modal');
+}
+function cancelDuplicateTransaction(){
+  closeModal('duplicate-transaction-modal');
+  showToast('Duplicate transaction cancelled. Current order was kept open.','warning');
+}
+function deleteDuplicateTransaction(){
+  if(!confirm('Delete this current duplicate order?\n\nThis will clear the current order from the POS and will NOT add another SalesLog entry.')) return;
+  closeModal('duplicate-transaction-modal');
+  _pendingTransactionId='';
+  _duplicateTransactionInfo=null;
+  clearOrder();
+  showToast('Duplicate order deleted. No new SalesLog entry was created.','success');
+}
+
 /* ═══════════════════ PAYMENT ═══════════════════ */
 async function processPayment(method){
   if(!order.length){showToast('No items in order!','error');return;}
@@ -2784,100 +2905,102 @@ function confirmGCash(){
   closeModal('gcash-modal'); return finalizePayment('GCash',num,ref||'N/A');
 }
 async function finalizePayment(method,gcashNum,gcashRef){
-  const{sub,da,vat,tot}=getTotals();
-  const isFreeMeal=String(method||'').toUpperCase()==='FREE MEAL';
-  const saleSub=isFreeMeal?0:sub;
-  const saleDisc=isFreeMeal?0:da;
-  const saleVat=isFreeMeal?0:vat;
-  const saleTot=isFreeMeal?0:tot;
-  const cust=document.getElementById('cust-name').value||'Walk-in';
-  const ordNum=String(orderCount).padStart(4,'0');
-  const dateStr=_salesTimestamp();
+  if(_paymentBusy){showToast('Payment is already processing. Please do not tap again.','warning');return false;}
+  if(!order.length){showToast('No items in order!','error');return false;}
+  _setPaymentBusy(true);
+  try{
+    const{sub,da,vat,tot}=getTotals();
+    const isFreeMeal=String(method||'').toUpperCase()==='FREE MEAL';
+    const saleSub=isFreeMeal?0:sub;
+    const saleDisc=isFreeMeal?0:da;
+    const saleVat=isFreeMeal?0:vat;
+    const saleTot=isFreeMeal?0:tot;
+    const cust=document.getElementById('cust-name').value||'Walk-in';
+    const ordNum=String(orderCount).padStart(4,'0');
+    const dateStr=_salesTimestamp();
 
-  var salePayload={
-    orderNum:'#'+ordNum,
-    transactionId:'G2G-'+ordNum+'-'+dateStr.replace(/[^0-9]/g,''),
-    date:dateStr,
-    time:dateStr,
-    customer:cust,
-    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
-    method:method,
-    payment:method,
-    items:order.map(function(o){
-      return {qty:Number(o.qty)||0,name:String(o.name||''),price:isFreeMeal?0:(Number(o.price)||0),cat:String(o.cat||'Other')};
-    }),
-    subtotal:Number(saleSub.toFixed(2)),
-    discount:Number(saleDisc.toFixed(2)),
-    discountLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
-    discLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
-    vat:Number((saleVat||0).toFixed(2)),
-    total:Number(saleTot.toFixed(2))
-  };
+    // Keep ONE Transaction ID for this open transaction until it is either
+    // successfully saved or explicitly deleted. A retry must reuse this ID.
+    if(!_pendingTransactionId) _pendingTransactionId=_makeTransactionId(ordNum);
 
-  // CRITICAL: do not finish the transaction unless Google Sheets confirms the row.
-  var saved=await pushSaleToSheets(salePayload);
-  if(!saved){
-    showToast('Transaction is still open. Fix SalesLog connection and try payment again.','error');
-    return false;
+    var salePayload={
+      orderNum:'#'+ordNum,
+      transactionId:_pendingTransactionId,
+      date:dateStr,
+      time:dateStr,
+      customer:cust,
+      cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+      method:method,
+      payment:method,
+      items:order.map(function(o){
+        return {qty:Number(o.qty)||0,name:String(o.name||''),price:isFreeMeal?0:(Number(o.price)||0),cat:String(o.cat||'Other')};
+      }),
+      subtotal:Number(saleSub.toFixed(2)),
+      discount:Number(saleDisc.toFixed(2)),
+      discountLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
+      discLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():'None'),
+      vat:Number((saleVat||0).toFixed(2)),
+      total:Number(saleTot.toFixed(2))
+    };
+
+    // Google Apps Script is the final authority. It atomically checks the
+    // Transaction ID before appending a SalesLog row.
+    var saveResult=await pushSaleToSheets(salePayload);
+    if(saveResult && saveResult.duplicate){
+      showDuplicateTransaction(saveResult,salePayload);
+      return false;
+    }
+    if(!saveResult || !saveResult.ok || saveResult.saved===false){
+      showToast('Transaction is still open. Fix SalesLog connection and try payment again.','error');
+      return false;
+    }
+
+    // Only deduct menu stock after SalesLog confirms a NEW sale.
+    order.forEach(function(o){
+      const it=menuItems.find(function(i){return i.id===o.id;});
+      if(it) it.stock-=o.qty;
+    });
+    _saveMenuLocally();
+
+    document.getElementById('r-date').textContent=dateStr;
+    document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(isFreeMeal?0:(parseFloat(o.price)*o.qty)).toFixed(2)}</span></div>`).join("");
+    document.getElementById('r-sub').textContent=`₱${saleSub.toFixed(2)}`;
+    document.getElementById('r-total').textContent=`₱${saleTot.toFixed(2)}`;
+    const rdr=document.getElementById('r-disc-row');
+    if(isFreeMeal){
+      rdr.style.display='flex';
+      document.getElementById('r-disc-lbl').textContent='FREE MEAL';
+      document.getElementById('r-disc-val').textContent='₱0.00';
+    } else if(da>0){
+      rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;
+    } else rdr.style.display='none';
+    let ml=method+' — '+cust; if(method==='GCash') ml+=` | ${gcashNum}`;
+    document.getElementById('r-method').textContent=ml;
+    const gref=document.getElementById('r-gcash-ref');
+    if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Name: ${gcashRef}`;}
+    else gref.style.display='none';
+    document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
+    document.getElementById('r-ordnum').textContent='#'+ordNum;
+    orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
+    _pendingTransactionId='';
+    _duplicateTransactionInfo=null;
+    openModal('receipt-modal'); renderMenu();
+    if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
+      setTimeout(function(){ try{ printViaRawBT(); }catch(e){} },300);
+    }
+    return true;
+  } finally {
+    _setPaymentBusy(false);
   }
-
-  // Only deduct menu stock after SalesLog confirms the sale.
-  order.forEach(function(o){
-    const it=menuItems.find(function(i){return i.id===o.id;});
-    if(it) it.stock-=o.qty;
-  });
-  _saveMenuLocally();
-
-  document.getElementById('r-date').textContent=dateStr;
-  document.getElementById('r-items').innerHTML=order.map(o=>`<div class="r-line"><span>${o.qty}x ${o.name}</span><span>₱${(isFreeMeal?0:(parseFloat(o.price)*o.qty)).toFixed(2)}</span></div>`).join("");
-  document.getElementById('r-sub').textContent=`₱${saleSub.toFixed(2)}`;
-  document.getElementById('r-total').textContent=`₱${saleTot.toFixed(2)}`;
-  const rdr=document.getElementById('r-disc-row');
-  if(isFreeMeal){
-    rdr.style.display='flex';
-    document.getElementById('r-disc-lbl').textContent='FREE MEAL';
-    document.getElementById('r-disc-val').textContent='₱0.00';
-  } else if(da>0){
-    rdr.style.display='flex';document.getElementById('r-disc-lbl').textContent=discLabel();document.getElementById('r-disc-val').textContent=`-₱${da.toFixed(2)}`;
-  } else rdr.style.display='none';
-  let ml=method+' — '+cust; if(method==='GCash') ml+=` | ${gcashNum}`;
-  document.getElementById('r-method').textContent=ml;
-  const gref=document.getElementById('r-gcash-ref');
-  if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Name: ${gcashRef}`;}
-  else gref.style.display='none';
-  document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
-  document.getElementById('r-ordnum').textContent='#'+ordNum;
-
-  // Keep an exact snapshot of the PAID transaction for the physical 58mm receipt.
-  // This prevents RawBT from accidentally printing the next order number after
-  // orderCount increments below.
-  window._lastReceiptData={
-    orderNum:ordNum,
-    date:dateStr,
-    customer:cust,
-    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
-    method:method,
-    gcashNum:gcashNum||'',
-    gcashRef:gcashRef||'',
-    table:((document.getElementById('table-num')||{}).value||''),
-    notes:((document.getElementById('order-notes')||{}).value||''),
-    items:order.map(function(o){return {name:String(o.name||''),qty:Number(o.qty)||0,price:isFreeMeal?0:(Number(o.price)||0)};}),
-    subtotal:Number(saleSub||0),
-    discount:Number(saleDisc||0),
-    discountLabel:isFreeMeal?'FREE MEAL':(da>0?discLabel():''),
-    total:Number(saleTot||0),
-    isFreeMeal:isFreeMeal
-  };
-
-  orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
-  openModal('receipt-modal'); renderMenu();
-  if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
-    setTimeout(function(){ try{ printViaRawBT(); }catch(e){} },300);
-  }
-  return true;
 }
 function newOrder(){
+  _pendingTransactionId='';
+  _duplicateTransactionInfo=null;
+  // If a recalled HOLD is abandoned, do not delete it from Google Sheets.
+  // It will be available again after the next held-order refresh.
+  _activeHeldOrderId='';
   clearOrder();
+  if(_authSession) setTimeout(function(){loadHeldOrdersFromSheets(true);},0);
   document.getElementById('order-num').textContent=`Order #${String(orderCount).padStart(4,'0')}`;
 var _rptDateInit=document.getElementById('rpt-date'); if(_rptDateInit&&!_rptDateInit.value)_rptDateInit.value=_todayKey();
   // Keep the current authenticated connection state between orders.
@@ -3396,6 +3519,7 @@ function showSheetsSetupOnLogin() {
 }
 
 function onSignedIn() {
+  _markUserActivity();
   document.getElementById('login-screen').style.display = 'none';
   if(googleUser && googleUser.name) activeCashier = googleUser.name;
   var chip = document.getElementById('g-user-chip');
@@ -3477,7 +3601,10 @@ async function _initialSync(){
     renderCashierRoster();
   }
 
-  // Step 5: Shared sales history for cross-device reports and analytics
+  // Step 5: Restore HOLD / HELD orders from Google Sheets.
+  await loadHeldOrdersFromSheets(true);
+
+  // Step 6: Shared sales history for cross-device reports and analytics
   var salesOK = await refreshSalesFromSheets(true);
   if(!salesOK){
     _syncDone=false;
@@ -3970,168 +4097,61 @@ async function printViaXprinterApp(){
   }
 }
 
-// ── XP-58IID 58mm receipt via RawBT + real ESC/POS bytes ─────────────────────
-// IMPORTANT: this is the PHYSICAL receipt path. It does not print the browser
-// receipt card. RawBT receives actual ESC/POS bytes through rawbt:base64.
-function _xp58Ascii(v){
-  return String(v==null?'':v)
-    .replace(/₱/g,'P').replace(/[–—]/g,'-')
-    .replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
-    .replace(/[^\x20-\x7E]/g,' ');
-}
-function _xp58Fit(v,w){
-  var s=_xp58Ascii(v);
-  return s.length>w?s.slice(0,w):s;
-}
-function _xp58Pair(left,right,width){
-  left=_xp58Ascii(left); right=_xp58Ascii(right);
-  if(right.length>=width) return right.slice(0,width);
-  var maxLeft=Math.max(0,width-right.length-1);
-  left=left.slice(0,maxLeft);
-  return left+' '.repeat(Math.max(1,width-left.length-right.length))+right;
-}
-function _xp58Text(bytes,s){
-  s=_xp58Ascii(s);
-  for(var i=0;i<s.length;i++) bytes.push(s.charCodeAt(i)&255);
-}
-function _xp58Line(bytes,s){ _xp58Text(bytes,s||''); bytes.push(10); }
-function _xp58QR(bytes,data){
-  // ESC/POS QR Code Model 2. XP-58IID units with QR-capable firmware print this natively.
-  var d=_xp58Ascii(data), payload=[];
-  for(var i=0;i<d.length;i++) payload.push(d.charCodeAt(i)&255);
-  bytes.push(29,40,107,4,0,49,65,50,0); // model 2
-  bytes.push(29,40,107,3,0,49,67,7);    // module size
-  bytes.push(29,40,107,3,0,49,69,49);   // error correction M
-  var n=payload.length+3;
-  bytes.push(29,40,107,n&255,(n>>8)&255,49,80,48);
-  Array.prototype.push.apply(bytes,payload);
-  bytes.push(29,40,107,3,0,49,81,48);
-}
-
-// Original Greek To Go Taverna logo converted to a monochrome ESC/POS raster
-// for the XP-58IID 58mm printer. Embedded so no network image is required.
-var _XP58_LOGO_B64='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYAAAAAAAAAH58AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfwB/H////////4AADf/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD+Af//////////gAB//4AAH//+AAB+AAAAAAAAAAAAAAAAAAAAAAAAPgH//////////8AAf//AAD///wAA///AH//4AAAAAAAAAAAAAAAAAA4B///////////gAP//wAA///8AAP//4B///AHwAAPwAAAAAAAADAAHAf//////////8AD//+AAP///AAD//+A///wD8AAH+AAAAAAAAA4AAQHh//////////AA///AAD///wAB///wP//+A/gAB/gAAAAAAAAfAAABwf/////////4AP4AAAA///+AAf//8D///AP4AA/4AAAAAAAAH8AAAMD/////////+AD8AAAAP///gAH//+A///wH+AAP8AAAAAAAAB/gAADAf/////////gA/AAAAD///4AB///AP//4B/gAH/AAAAAAAAAf/gAAgH/////////4APwAAAA/wH/AAf8AAD/wAAf4AB/gAAAAAAAAH/4AAIB//////////AD8AAAAP4A/wAH+AAA/wAAH+AA/4AAAAAAAAB/4AAAAP/////////wA/AAAAD+AP8AB/gAAP8AAB/gAP+AAAAAAAAAf+AAAAD/////////8APwAAAA/gD/AAf4AAD/AAAf4AH/AAAAAAAAAH/gAAAA//////////AD8AAAAP4A/wAH+AAA/wAAH+AB/wAAAAAAAAB/4AAAAP/////////wA/AAAAD+AH8AB/gAAP8AAB/gAf4AAAAAAAAAf+AAAAD/////////8APwAAAA/gB/AAf4AAD/AAAf4AP+AAAAAAAAAH/gACAB7/////////AD8AAAAP4AfwAH+AAA/wAAH/AH/gAAAAAAAAB//ABwAcP////////wA/AAAAD+AH8AB/gAAP8AAB/4B/wAAAAAAAAAf//z+AGB////////8APwAAAA/gB/gAf4AAD/AAAf/Af8AAAAAAAAAH////wBgf////////AD8AAAAP4Af4AH+AAA/wAAH/8P+AAAAAAAAAB////+A4D////////wA/AAAAD+AH+AB/gAAP8AAB////gAAAAAAAAAf////wOA////////8APwAAAA/gA/gAf4AAD/AAAf///4AAAAAAAAAH///4ADAP////////AD8AAAAP4AP8AH+AAA/wAAH///8AAAAAAAAAB///+AAwD////////wA/AAAAD+AD/AB/gAAP8AAB///+AAAAAAAAAAf///gAEA////////8APwAAAA/gA/wAf4AAD/AAAf///gAAAAAAAAAH///4AAAP////////AD8AAAAP4Af8AH+AAA/wAAH///4AAAAAAAAAB//g+AAAH////////wA/AAAAD+AP/AB/gBAP8AAB////AAAAAAAAAAf/gHwAAB////////8APwAAAA/gH/wAf4B4D/APAf8//4AAAAAAAAAH/wA+AAAf////////AD8AB+AP4D/8AH+B+A/wPwH+D//gAAAAAAAAB/8APwAAP////////wA/AA/wD+D//AB/g/gP8H8B/gP/8AAAAAAAAAf/AB8AADz///////8APwAP+A/z//AAf4/4D/n/Af4B//wAAAAAAAACfwAfAABwf///////AD8AD/gP///gAH//+A///wH+AH/+AAAAAAAAAD8AHwAAYDh//////wA/AA/4D///gAB///gP//8B/gA//gAAAAAAAAAfAB+AAEA4P/////8APwAH+A///wAAf//4D///Af4AD/8AAAAAAAAAHgAfgADAOB//////AD8AA/gP//8AAH//8A///gH+AAP/AAAAAAAAAB4AP4AAADgf/////wA/AAH4D///AAB//+AP//wB/gAB/wAAAAAAAAAMAD/AAAB4D/////8APwAB/A///wAAf/+AD//4Af4AAP8AAAAAAAAACAB/4AAAeA//////AD8AAfwP//+AAH//AA//4AH+AAB/AAAAAAAAAAA5//gAAPgH/////wA/AAP8D///gAB//AAP/4AB/gAAfwAAAAAAAAAAP//4AAD8B/////8APwAH/A/8f8AAf/AAD/8AAf4AAH8AAAAAAAAAAAPg+AAB/Af/////AD8AH/wP8D/AAH/gAA/8AAH+AAB/AAAAAAAAAAABgHwAAfwH/////wA/AH/4D/A/4AB/gAAP+AAB/gAAfwAAAAAAAAIAAAA8AAP+B/////8AP4H/8A/gH/AAf4AAD/AAAf4AAH8AAAAAAAADAAAAHAAH8Af/////AD+H/8AP4B/wAH+AAA/wAAH+AAB/AAAAAAAAAwAAAB4AD/AHj////wA/3/8AD+AP8AB/gAAP8AAB/gAAfwAAAAAAAAMAAAAeAA/wBw////8AP//+AA/gB/gAf4AAD/AAAf4AAH8AAAAAAAACAAYAHwAMACcH////AD//+AAP4Af8AH+AAA/wAAH+AAB/AAAAAAAAAAB8AB+ACBAGB////wA//+AAD+AD/AB/4wAP/AAB/gAAfwAAAAAAAAAH+AAfEAAQBgf///8AP//AAA/gA/4Af//wD//+Af4AAH8AAAAAAAAAD+AAPgwAGAQH////AD//AAAP4AH+AH//+A///wH+AAB/AAAAAAAAAA/AADwGABgAD////wA//AAAD+AA/wB///gP//8B/gAAfwAAAAAAAAAPwHh8AgAYAA////8AP/AAAA/gAP8Af//4D///Af4AAH8AAAAAAAACB4D//AAAEAAf////AD/AAAAP4AB/gH//+A///wH+AAB/AAAAAAAAAgcAf/wAACAAP////wAfAAAAD8AAf4A///gP//8B/gAAfwAAAAAAAAIAAB/8AAAgAH////8AAAAAAAAAAB+AP//wB//+APwAAH4AAAAAAAADAAAP/gAAcAD/////AAAAAAAAAAAAAAAAAAH//AB4AAB8AAAAAAAAA4AAB/4AAPAD/////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf+AAHwA/////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH/AAH8Af/////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwD/gAD/gHh////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfv/4AA94Bgf///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB//+AAIHAQH////AAAAAAAAAAAAAAAA///gAAAP//8AAAAAAAAAAAAP//gAABwAB////wAAAAAAAAAAAAAAAf//8AAAf///wAAAAAAAAAAAB//4AAAeAA////8AAAAAAAAAAAAAAAH///AAAf////gAAAAAAAAAAAf/+AAAHgAf////AAAAAAAAAAAAAAAB///4AAP////8AAAAAAAAAAAH/+wAAB4Af////wAAAAAAAAAAAAAAAf//+AAH/////gAAAAAAAAAAA//GAAAGA/////8AAAAAAAAAAAAAAAH///gAB/////4AAAAAAAAAAAP/wgAAhg//////AAAAAAAAAAAAAAAB///4AAf////+AAAAAAAAAAAD/4MAA4Af/////wAAAAAAAAAAAAAAAf//8AAH/////gAAAAAAAAAAA/+BgAeAH/////8AH////AAP/gAAAAH/AAAAB/4///4AAAAAAAAAAQP/gcAPAHgf////AD////4Af//AAAAB/gAAAAf8AAP+AAAAAAAAAAGDh4DAGwAAH////wA////+Af//8AAAAf4AAAAH+AAB/gAAAAAAAAAAgAeA4AEAAB////8AP////gP///AAAAH+AAAAB/gAAf4AAAAAAAAAAMADAMAAAAAf////AD////4D///4AAAB/gAAAAf4AAH+AAAAAAAAAAAAAABAAIAAP////wAf///+A///+AAAAf4AAAAH+AAB/gAAAAAAAAAAAAAAAACAAH////8AAP//+AP///gAAAH+AAAAB/gAAf4AAAAAAAAAAAAAAAABAAH/////AAAP+AAD/A/4AAAB/gAAAAf4AAH+AAAAAAAAAIAAAAAAAwD//////wAAB/gAB/gD+AAAAf4AAAAH+AAB/gAAAAAAAAHAAAAgAAYD//////8AAAfwAAfwA/gAAAH+AAAAB/gAAf4AAAAAAAAB4AAAcAAMD///////AAAH8AAH8AP4AAAB/gAAAAf4AAH+AAAAAAAAA+AAwHAAeBgH/////wAAB/AAB/AD+AAAAf4AAAAH+AAB/gAAAAAAAAPwD8BwD/AAA/////8AAAfwAAPwA/gAAAH+AAAAB/gAAf4AAAAAAAAD8B/gIB/gAAP/////AAAH8AAD8AP4AAAB/gAAAAf4AAH+AAAAAAAAA+A/4CA/gAAD/////wAAB/AAA/AD+AAAAf4AAAAH+AAB/gAAAAAAAAPAB+AAfwAAB/////8AAAfwAAfwA/gAAAH+AAAAB/gAAf4AAAAAAAADgAHgAP4AgB//////AAAH8AAH8AP4AAAB/gAAAAf4AAH+AAAAAAAAAwAA4AHwAP///////wAAB/AAB/AD+AAAAf4AAAAH+AAB/gAAAAAAAAAAAPADwAAf//////8AAAfwAAfwA/gAAAH+AAAAB/gAAf4AAAAAAAAAAADgBwAAB///////AAAH8AAH8AP4AAAB/gAAAAf4AAH+AAAAAAAAAAABwAAAAAP//////wAAB/AAB/AD+AAAAf4AAAAH+AAB/gAAAAAAAAAPB4AAAAAD//////8AAAfwAAfwA/gAAAH+AAAAB/gAAf4AAAAAAAAAP/4AAAAAA///////AAAH8AAH8AP4AAAB/gAAAAf4AAH+AAAAAAAAAD/4AAAAAAP//////wAAB/AAB/AD+AAAAf4AAAAH+AAB/gAAAAAAAAB/4AAAB+AP//////8AAAfwAAfwA/gAAAH+AA/4B/gAAf4AAAAAAAAAf4AAAAP/////////AAAH8AAH8AP4AAAB/gAP/Af4AAH+AAAAAAAAAP4AAAAAf////////wAAB/AAB/AD+AAAAf4AH/wH+AAB/gAAAAAAAAH4AAAAAB////////8AAAfwAAfwA/gAAAH+AB/8B/gAAf4AAAAAAAAB4AAAAAAP////////AAAH8AAH+AP4AAAB/gAf/gf4AAH+AAAAAAAAAcAAAAAAD////////wAAB/AAB/wP+AAAAf4AH/4H+AAB/gAAAAAAAAAAAAeAAA////////8AAAfwAAf///gAAAH+AA/+B/gAAf4AAAAAAAAAAAD/+AAf////////AAAH8AAH///4AAAB/gAH/gf4AAH+AAAAAAAAAAAP//wAP////////wAAB/AAB///+AAAAf4AA/4H+AAB/gAAAAAAAAAA//////////////8AAAfwAAP///gAAAH+AAH+B/gAAf4AAAAAAAAAAf//////////////AAAH8AAD///wAAAB/gAB/wf4AAH+AAAAAAAAAA///////////////wAAB/AAAf//4AAAAf4AAf8H+AAB/gAAAAAAAAAf//////////////8AAAfwAAB//4AAAAH+AAP/B/gAA/4AAAAAAAAAP///////////////AAAH8AAAA3AAAAAB/gAH/wf4AAP+AAAAAAAAAD///////////////wAAB/AAAAAAAAAAAf4AH/8H+AAD/gAAAAAAAAD///////////////8AAAfwAAAAAAAAAAH+AH//B/gAA/4AAAAAAAAB////////////////AAAH8AAAAAAAAAAB/gH//gf4AAP+AAAAAAAAAf///////////////wAAB/AAAAAAAAAAAf4D//wH+AAD/gAAAAAAAAH///////////////8AAAfwAAD//8AAAAH+H//wB/gAA/4AAAAAAAAA////////////////AAAH8AAB///gAAAB/z//wAf4AAP+AAAAAAAAAP///////////////wAAB/AAAf//4AAAAf///wAH+AAD/gAAAAAAAAD///////////////8AAAfwAAH///AAAAH///4AB/gAA/4AAAAAAAAA////////////////AAAH8AAB///gAAAD///4AAf8AAf+AAAAAAAAAP///////////////wAAA+AAAP//4AAAA///4AAH/////gAAAAAAAAD///////////////8AAAAAAAB//8AAAAP//4AAB/////4AAAAAAAAA////////////////AAAAAAAAAAAAAAAD//8AAAf////+AAAAAAAAAP///////////////wAAAAAAAAAAAAAAAf/8AAAH/////AAAAAAAAAB///////////////8AAAAAAAAAAAAAAAH/8AAAB/////wAAAAAAAAAf///////////////AAAAAAAAAAAAAAAB/8AAAAP////4AAAAAAAAAH///////////////wAAAAAAAAAAAAAAAf8AAAAA////8AAAAAAAAAB///////////////8AAAAAAAAAAAAAAAD8AAAAAD///8AAAAAAAAAAf///////////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH///////////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB///////////////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf///////////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///////////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA///////////////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///////////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB///////////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf//////////////8AH/AAAwAAAAAAD/AAHAAAAAAAAAAAAAAAAAAAH///////////////AA/gAAeAABgMAB/4AH/wAHAIAAOAAAAAAAAAAB///////////////wAHwAAHgAAcHAA/8AB/8AB4GAADgAAAAAAAAAAf//////////////8AA4AAB8AAHBwAP8AAf/gAfBgAB8AAAAAAAAAAH//////////////+AAOAAA/gAA44AD/AAH/4AH4cAA/AAAAAAAAAAB///////////////gABgAAf4AAPOAA/wAB/+AD/HAAP4AAAAAAAAAAf//////////////wAAYAAH/AAD/AAP8AAf/AA//wAD+AAAAAAAAAAP//////////////4AAGAAB/wAAfwAD8AAH/gAPP8AB/wAAAAAAAAAB//////////////8AABAAA/+AAH4AA+AAB54ADh/AA/8AAAAAAAAAAH/////////////+AAAQAAOHgAA+AAP4AAePAAYPwAP/gAAAAAAAAAAAAAAf////////+AAAEAAAA4AAPAAD/wAHBwAGB4ADj4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAABwAAf+ABwcABgeAAwOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwAAAAAAABgAABgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-function _xp58Logo(bytes){
-  var bin=atob(_XP58_LOGO_B64), xBytes=40, yDots=212;
-  bytes.push(29,118,48,0,xBytes&255,(xBytes>>8)&255,yDots&255,(yDots>>8)&255);
-  for(var i=0;i<bin.length;i++) bytes.push(bin.charCodeAt(i)&255);
-}
-
-function _xp58Base64(bytes){
-  var out='',step=0x8000;
-  for(var i=0;i<bytes.length;i+=step){
-    out+=String.fromCharCode.apply(null,bytes.slice(i,i+step));
-  }
-  return btoa(out);
-}
-function _xp58Send(bytes){
-  var a=document.createElement('a');
-  a.href='rawbt:base64,'+_xp58Base64(bytes);
-  a.style.display='none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){try{document.body.removeChild(a);}catch(e){}},1200);
-}
-function _xp58CurrentReceipt(){
-  if(window._lastReceiptData && window._lastReceiptData.items && window._lastReceiptData.items.length){
-    return window._lastReceiptData;
-  }
-  var totals=getTotals();
-  return {
-    orderNum:String(orderCount).padStart(4,'0'),
-    date:new Date().toLocaleString('en-PH'),
-    customer:(document.getElementById('cust-name')||{}).value||'Walk-in',
-    cashier:(typeof activeCashier!=='undefined'&&activeCashier)?activeCashier:((typeof googleUser!=='undefined'&&googleUser&&googleUser.name)?googleUser.name:'—'),
-    method:'', gcashNum:'', gcashRef:'',
-    table:(document.getElementById('table-num')||{}).value||'',
-    notes:(document.getElementById('order-notes')||{}).value||'',
-    items:order.map(function(o){return {name:String(o.name||''),qty:Number(o.qty)||0,price:Number(o.price)||0};}),
-    subtotal:Number(totals.sub||0),discount:Number(totals.da||0),discountLabel:(totals.da>0?discLabel():''),total:Number(totals.tot||0),isFreeMeal:false
-  };
-}
+// ── Print via RawBT (Android + XP-58IID Classic Bluetooth) ──────────────────
 function printViaRawBT(){
-  var r=_xp58CurrentReceipt();
-  if(!r.items || !r.items.length){showToast('No receipt items to print.','error');return;}
+  var totals  = getTotals();
+  var orderNum= String(orderCount).padStart(4,'0');
+  var tableVal= (document.getElementById('table-num')||{}).value||'';
+  var custVal = (document.getElementById('cust-name')||{}).value||'';
+  var notesVal= (document.getElementById('order-notes')||{}).value||'';
+  var cashier = typeof activeCashier!=='undefined' ? activeCashier : '';
+  var lines   = [];
+  var rawWidth=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
+  var rawLine='='.repeat(rawWidth);
+  var rawDash='-'.repeat(rawWidth);
+  lines.push(rawLine);
+  lines.push('GREEK TO GO TAVERNA'.padStart(Math.floor((rawWidth+19)/2)).slice(0,rawWidth));
+  lines.push(rawLine);
+  lines.push('Order #: ' + orderNum);
+  lines.push(new Date().toLocaleString('en-PH'));
+  if(tableVal)  lines.push('Table:    ' + tableVal);
+  if(custVal)   lines.push('Customer: ' + custVal);
+  if(cashier)   lines.push('Cashier:  ' + cashier);
+  lines.push(rawDash);
+  lines.push('Item / Qty / Amount');
+  lines.push(rawDash);
+  order.forEach(function(o){
+    var nm = (o.name||'').slice(0,20).padEnd(20);
+    var qty= ('x'+o.qty).padStart(4);
+    var amt= ('P'+parseFloat(o.price*o.qty).toFixed(2)).padStart(9);
+    lines.push(nm+qty+amt);
+  });
+  lines.push('--------------------------------');
+  lines.push(('Subtotal:').padEnd(22) + ('P'+totals.sub.toFixed(2)).padStart(10));
+  if(totals.da>0) lines.push(('Discount:').padEnd(22) + ('-P'+totals.da.toFixed(2)).padStart(10));
+  lines.push(('TOTAL:').padEnd(22) + ('P'+totals.tot.toFixed(2)).padStart(10));
+  if(notesVal){ lines.push('--------------------------------'); lines.push('Note: '+notesVal); }
+  lines.push('================================');
+  lines.push('================================');
+  lines.push('  Thank you! Come again!');
+  lines.push(''); lines.push(''); lines.push('');
+  var text = lines.join("\n");
 
+
+  // Send to RawBT via URL scheme
   try{
-    var W=32, dash='-'.repeat(W), bytes=[];
-    var regUrl='https://salvationsolutions.github.io/GreekToGoTaverna-RegistrationForm/';
-
-    // Initialize printer and print the ORIGINAL Greek To Go Taverna logo.
-    // The logo is embedded as ESC/POS raster data so RawBT/XP-58IID can print it.
-    bytes.push(27,64,27,97,1);
-    _xp58Logo(bytes);
-    _xp58Line(bytes,'');
-    // Keep a small text brand line below the logo as a fallback/readable header.
-    bytes.push(27,69,1);
-    _xp58Line(bytes,'GREEK TO GO TAVERNA');
-    bytes.push(27,69,0);
-    _xp58Line(bytes,'');
-
-    // Transaction metadata.
-    bytes.push(27,97,0);
-    _xp58Line(bytes,'Date: '+_xp58Fit(r.date,26));
-    _xp58Line(bytes,'Order #: '+_xp58Fit(r.orderNum,21));
-    _xp58Line(bytes,'Cashier: '+_xp58Fit(r.cashier,23));
-    if(String(r.customer||'').toLowerCase()==='walk-in') _xp58Line(bytes,'Type: Walk-in');
-    else if(r.customer) _xp58Line(bytes,'Customer: '+_xp58Fit(r.customer,22));
-    if(r.table) _xp58Line(bytes,'Table: '+_xp58Fit(r.table,25));
-    _xp58Line(bytes,dash);
-
-    // Items.
-    r.items.forEach(function(o){
-      var qty=Math.max(1,Number(o.qty)||1);
-      var amount='P'+(Number(o.price||0)*qty).toFixed(2);
-      _xp58Line(bytes,_xp58Pair(qty+'x '+_xp58Fit(o.name||'Item',21),amount,W));
-    });
-
-    _xp58Line(bytes,dash);
-    _xp58Line(bytes,_xp58Pair('Subtotal','P'+Number(r.subtotal||0).toFixed(2),W));
-    if(Number(r.discount||0)>0){
-      _xp58Line(bytes,_xp58Pair(r.discountLabel||'Discount','-P'+Number(r.discount||0).toFixed(2),W));
-    }
-
-    // Bold double-width TOTAL.
-    bytes.push(27,69,1,29,33,16);
-    _xp58Line(bytes,_xp58Pair('TOTAL','P'+Number(r.total||0).toFixed(2),16));
-    bytes.push(29,33,0,27,69,0);
-    _xp58Line(bytes,dash);
-
-    if(r.method){
-      _xp58Line(bytes,'Payment Method: '+_xp58Fit(r.method,16));
-      if(String(r.method).toLowerCase()==='gcash'){
-        if(r.gcashRef && r.gcashRef!=='N/A') _xp58Line(bytes,'Reference: '+_xp58Fit(r.gcashRef,21));
-      }
-    }
-    if(r.notes){ _xp58Line(bytes,'Note: '+_xp58Fit(r.notes,26)); }
-
-    // Loyalty QR section. No address, telephone, or tagline text.
-    _xp58Line(bytes,'');
-    bytes.push(27,97,1,27,69,1);
-    _xp58Line(bytes,'SCAN TO REGISTER');
-    bytes.push(27,69,0);
-    _xp58Line(bytes,'AND JOIN OUR LOYALTY PROGRAM');
-    _xp58Line(bytes,'');
-    _xp58QR(bytes,regUrl);
-    _xp58Line(bytes,'');
-    _xp58Line(bytes,'Greek To Go Taverna');
-    _xp58Line(bytes,'');
-    bytes.push(27,69,1);
-    _xp58Line(bytes,'THANK YOU!');
-    bytes.push(27,69,0);
-    _xp58Line(bytes,'SEE YOU AGAIN!');
-    _xp58Line(bytes,'');
-    _xp58Line(bytes,'');
-
-    // Feed enough paper for a clean tear. XP-58IID generally has no auto-cutter.
-    bytes.push(27,100,4);
-    _xp58Send(bytes);
-    showToast('🖨️ XP-58IID 58mm receipt sent to RawBT.','success');
-  }catch(e){
-    console.error('XP-58IID receipt error',e);
-    showToast('❌ Receipt print failed: '+(e.message||e),'error');
+    var a = document.createElement('a');
+    a.href = 'rawbt:' + encodeURIComponent(text);
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} }, 1000);
+    showToast('🖨️ Sending to XP-58IID via RawBT…','success');
+  } catch(e){
+    showToast('❌ RawBT not installed. Download from Play Store.','error');
   }
 }
+
 async function shareReceipt(){
   closeModal('bt-printer-modal');
   var totals  = getTotals();
@@ -4385,6 +4405,9 @@ finalizePayment = async function(method, gcashNum, gcashRef){
   var ok=await _origFinalizePayment.call(this,method,gcashNum,gcashRef);
   if(!ok) return false;
 
+  // A recalled held order remains in Google Sheets until its payment is confirmed.
+  await _completeActiveHeldOrder();
+
   // Refresh reports after the payment UI completes; never make the cashier
   // wait for a second full SalesLog download.
   setTimeout(function(){
@@ -4408,73 +4431,187 @@ renderOrder = function(){
   }
 };
 
-/* ── HOLD ORDER ───────────────────────────────────────────── */
+/* ── HOLD ORDER — Google Sheets is authoritative ───────────────── */
 var heldOrders = [];
-function holdOrder(){
+var _activeHeldOrderId = '';
+var _heldSyncBusy = false;
+
+function _heldId(){
+  return 'HOLD-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
+}
+function _normaliseHeld(h){
+  h=h||{};
+  var ord=h.order||h.items||[];
+  var ds=h.disc||h.discountState||{type:'pct',value:0,applied:false};
+  if(typeof ord==='string'){try{ord=JSON.parse(ord);}catch(e){ord=[];}}
+  if(typeof ds==='string'){try{ds=JSON.parse(ds);}catch(e){ds={type:'pct',value:0,applied:false};}}
+  if(!Array.isArray(ord))ord=[];
+  if(!ds || typeof ds!=='object' || Array.isArray(ds)) ds={type:'pct',value:0,applied:false};
+  return {
+    id:String(h.id||h.heldId||h.holdId||h['Held ID']||''),
+    label:String(h.label||h.Label||'Held Order'),
+    orderNum:String(h.orderNum||h['Order#']||''),
+    table:String(h.table||h.Table||''),
+    customer:String(h.customer||h.Customer||''),
+    notes:String(h.notes||h.Notes||''),
+    cashier:String(h.cashier||h.Cashier||''),
+    heldAt:String(h.heldAt||h['Held At']||''),
+    transactionId:String(h.transactionId||h.TransactionID||''),
+    order:ord,
+    disc:ds,
+    status:String(h.status||'HELD')
+  };
+}
+async function loadHeldOrdersFromSheets(silent){
+  if(!_authSession||!SHEETS_URL) return false;
+  if(_heldSyncBusy) return false;
+  _heldSyncBusy=true;
+  try{
+    var res=await sheetsCall('getHeldOrders',{status:'HELD'});
+    if(!res||!res.ok||!Array.isArray(res.items)){
+      if(!silent) showToast('Unable to load held orders from Google Sheets.','warning');
+      return false;
+    }
+    heldOrders=res.items.map(_normaliseHeld).filter(function(h){
+      return h.id && h.id!==String(_activeHeldOrderId||'');
+    });
+    _updateHeldBtn();
+    return true;
+  } finally {
+    _heldSyncBusy=false;
+  }
+}
+async function holdOrder(){
   if(!order.length){ showToast('No items to hold!','error'); return; }
-  var tableEl = document.getElementById('table-num');
-  var custEl  = document.getElementById('cust-name');
-  var notesEl = document.getElementById('order-notes');
-  heldOrders.push({
-    id:       Date.now(),
-    label:    (tableEl&&tableEl.value ? tableEl.value : 'Order')+ ' — ' + (custEl&&custEl.value ? custEl.value : '#'+(heldOrders.length+1)),
-    table:    tableEl ? tableEl.value : '',
-    customer: custEl  ? custEl.value  : '',
-    notes:    notesEl ? notesEl.value : '',
-    order:    JSON.parse(JSON.stringify(order)),
-    disc:     JSON.parse(JSON.stringify(disc))
-  });
+  if(!_authSession||!SHEETS_URL){ showToast('Cannot HOLD while Google Sheets is disconnected.','error'); return; }
+
+  var tableEl=document.getElementById('table-num');
+  var custEl=document.getElementById('cust-name');
+  var notesEl=document.getElementById('order-notes');
+  var holdId=_activeHeldOrderId||_heldId();
+  var totals=getTotals();
+  var ordNum='#'+String(orderCount).padStart(4,'0');
+
+  var held={
+    heldId:holdId,
+    id:holdId,
+    orderNum:ordNum,
+    label:(tableEl&&tableEl.value ? tableEl.value : 'Order')+' — '+(custEl&&custEl.value ? custEl.value : ordNum),
+    table:tableEl?tableEl.value:'',
+    customer:custEl?custEl.value:'Walk-in',
+    notes:notesEl?notesEl.value:'',
+    cashier:activeCashier||(googleUser&&googleUser.name)||'—',
+    heldAt:_salesTimestamp(),
+    transactionId:_pendingTransactionId||'',
+    items:JSON.parse(JSON.stringify(order)),
+    order:JSON.parse(JSON.stringify(order)),
+    discountState:JSON.parse(JSON.stringify(disc)),
+    disc:JSON.parse(JSON.stringify(disc)),
+    subtotal:Number((totals.sub||0).toFixed(2)),
+    discount:Number((totals.da||0).toFixed(2)),
+    discountLabel:(totals.da>0?discLabel():'None'),
+    discLabel:(totals.da>0?discLabel():'None'),
+    vat:Number((totals.vat||0).toFixed(2)),
+    total:Number((totals.tot||0).toFixed(2))
+  };
+
+  var res=await sheetsCall('saveHeldOrder',{order:held});
+  if(!res||!res.ok||res.saved===false){
+    showToast('⛔ HOLD failed — order kept open. '+((res&&(res.message||res.error))||_lastCallError||''),'error');
+    return;
+  }
+
+  _activeHeldOrderId='';
+  _pendingTransactionId='';
+  var normalized=_normaliseHeld(held);
+  var idx=heldOrders.findIndex(function(x){return String(x.id)===String(holdId);});
+  if(idx>=0) heldOrders[idx]=normalized; else heldOrders.push(normalized);
   _updateHeldBtn();
   clearOrder();
-  showToast('Order held! Start a new order.','success');
+  showToast('✅ Order held and saved to Google Sheets.','success');
 }
 function _updateHeldBtn(){
-  var btn = document.getElementById('held-orders-btn');
-  var cnt = document.getElementById('held-count');
-  if(btn){ btn.style.display = heldOrders.length ? 'inline-flex' : 'none'; }
-  if(cnt){ cnt.textContent = heldOrders.length; }
+  var btn=document.getElementById('held-orders-btn');
+  var cnt=document.getElementById('held-count');
+  if(btn){btn.style.display=heldOrders.length?'inline-flex':'none';}
+  if(cnt){cnt.textContent=heldOrders.length;}
 }
-function showHeldOrders(){
-  var el = document.getElementById('held-list');
-  if(!heldOrders.length){ el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>'; }
-  else {
-    el.innerHTML = heldOrders.map(function(h){
-      var sub = h.order.reduce(function(s,o){ return s+parseFloat(o.price)*o.qty; },0);
+async function showHeldOrders(){
+  await loadHeldOrdersFromSheets(true);
+  var el=document.getElementById('held-list');
+  if(!heldOrders.length){
+    el.innerHTML='<div style="text-align:center;color:var(--gray-soft);padding:20px">No held orders.</div>';
+  }else{
+    el.innerHTML=heldOrders.map(function(h){
+      var sub=(h.order||[]).reduce(function(s,o){return s+(parseFloat(o.price)||0)*(Number(o.qty)||0);},0);
       return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:8px;">'
-        +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||'Held Order')+'</div>'
-        +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order.length)+' item(s) · ₱'+sub.toFixed(2)+'</div>'
+        +'<div style="font-weight:800;color:var(--blue-deep)">'+(h.label||h.orderNum||'Held Order')+'</div>'
+        +'<div style="font-size:12px;color:var(--gray-soft)">'+(h.order||[]).length+' item(s) · ₱'+sub.toFixed(2)+'</div>'
+        +(h.heldAt?'<div style="font-size:10px;color:var(--gray-soft);margin-top:2px">Held: '+h.heldAt+'</div>':'')
         +(h.notes?'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px">📝 '+h.notes+'</div>':'')
         +'<div style="display:flex;gap:6px;margin-top:8px">'
-        +'<button class="m-save" style="flex:1;padding:7px" onclick="recallOrder('+h.id+')">Recall</button>'
-        +'<button class="m-cancel" style="padding:7px" onclick="discardHeld('+h.id+')">Discard</button>'
+        +'<button class="m-save" style="flex:1;padding:7px" onclick="recallOrder('+JSON.stringify(String(h.id))+')">Recall</button>'
+        +'<button class="m-cancel" style="padding:7px" onclick="discardHeld('+JSON.stringify(String(h.id))+')">Discard</button>'
         +'</div></div>';
-    }).join("");
+    }).join('');
   }
   openModal('held-modal');
 }
-function recallOrder(id){
-  var h = heldOrders.find(function(o){ return o.id===id; });
-  if(!h) return;
-  if(order.length && !confirm('Current order will be cleared. Recall held order?')) return;
-  order = JSON.parse(JSON.stringify(h.order));
-  disc  = JSON.parse(JSON.stringify(h.disc));
-  var tableEl = document.getElementById('table-num');
-  var custEl  = document.getElementById('cust-name');
-  var notesEl = document.getElementById('order-notes');
-  if(tableEl) tableEl.value = h.table||'';
-  if(custEl)  custEl.value  = h.customer||'';
-  if(notesEl) notesEl.value = h.notes||'';
-  heldOrders = heldOrders.filter(function(o){ return o.id!==id; });
+async function recallOrder(id){
+  var h=heldOrders.find(function(o){return String(o.id)===String(id);});
+  if(!h)return;
+  if(order.length&&!confirm('Current order will be cleared. Recall held order?'))return;
+
+  var res=await sheetsCall('recallHeldOrder',{id:String(id)});
+  if(!res||!res.ok){
+    showToast('Could not recall held order from Google Sheets.','error');
+    await loadHeldOrdersFromSheets(true);
+    return;
+  }
+
+  order=JSON.parse(JSON.stringify(h.order||[]));
+  disc=JSON.parse(JSON.stringify(h.disc||{type:'pct',value:0,applied:false}));
+  _activeHeldOrderId=String(h.id);
+  _pendingTransactionId=String(h.transactionId||'');
+
+  var tableEl=document.getElementById('table-num');
+  var custEl=document.getElementById('cust-name');
+  var notesEl=document.getElementById('order-notes');
+  if(tableEl)tableEl.value=h.table||'';
+  if(custEl)custEl.value=h.customer||'';
+  if(notesEl)notesEl.value=h.notes||'';
+
+  heldOrders=heldOrders.filter(function(o){return String(o.id)!==String(id);});
   _updateHeldBtn();
   closeModal('held-modal');
   renderOrder();
-  if(window.innerWidth<=900) toggleMobileOrder(true);
-  showToast('Order recalled!','success');
+  if(window.innerWidth<=900)toggleMobileOrder(true);
+  showToast('Order recalled from Google Sheets.','success');
 }
-function discardHeld(id){
-  heldOrders = heldOrders.filter(function(o){ return o.id!==id; });
+async function discardHeld(id){
+  if(!confirm('Discard this held order permanently?'))return;
+  var res=await sheetsCall('deleteHeldOrder',{id:String(id)});
+  if(!res||!res.ok){
+    showToast('Could not discard held order from Google Sheets.','error');
+    return;
+  }
+  heldOrders=heldOrders.filter(function(o){return String(o.id)!==String(id);});
+  if(String(_activeHeldOrderId)===String(id))_activeHeldOrderId='';
   _updateHeldBtn();
-  showHeldOrders(); // refresh list
+  await showHeldOrders();
+}
+async function _completeActiveHeldOrder(){
+  if(!_activeHeldOrderId)return true;
+  var id=String(_activeHeldOrderId);
+  var res=await sheetsCall('completeHeldOrder',{id:id});
+  if(res&&res.ok){
+    _activeHeldOrderId='';
+    heldOrders=heldOrders.filter(function(o){return String(o.id)!==id;});
+    _updateHeldBtn();
+    return true;
+  }
+  showToast('⚠️ Sale completed, but held-order cleanup needs retry.','warning');
+  return false;
 }
 
 /* ── SPLIT BILL ───────────────────────────────────────────── */
@@ -5231,25 +5368,23 @@ function savePrinterSettings(){
 }
 
 function testRawBTPrinter(){
+  var width=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
+  var line='='.repeat(width);
+  var text=[
+    line,
+    'GREEK TO GO TAVERNA',
+    'XP-58IID / RAWBT TEST',
+    line,
+    'Paper: 58mm',
+    'ESC/POS thermal printer',
+    'If this prints, RawBT is ready.',
+    line,'','',''
+  ].join('\\n');
   try{
-    var bytes=[27,64,27,97,1];
-    _xp58Logo(bytes);
-    _xp58Line(bytes,'');
-    bytes.push(27,69,1);
-    _xp58Line(bytes,'GREEK TO GO TAVERNA');
-    bytes.push(27,69,0);
-    _xp58Line(bytes,'XP-58IID 58MM TEST');
-    _xp58Line(bytes,'ESC/POS + RawBT OK');
-    _xp58Line(bytes,'');
-    _xp58QR(bytes,'https://salvationsolutions.github.io/GreekToGoTaverna-RegistrationForm/');
-    _xp58Line(bytes,'');
-    _xp58Line(bytes,'QR VISIBLE = READY');
-    _xp58Line(bytes,'');
-    bytes.push(27,100,4);
-    _xp58Send(bytes);
-    showToast('🧪 XP-58IID test receipt sent.','success');
+    window.location.href='rawbt:'+encodeURIComponent(text);
+    showToast('🖨️ Opening RawBT test print…','info');
   }catch(e){
-    showToast('❌ RawBT test failed: '+(e.message||e),'error');
+    showToast('RawBT could not be opened. Install/configure RawBT on this Android device.','error');
   }
 }
 
