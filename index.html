@@ -2363,6 +2363,18 @@ async function pushSaleToSheets(s){
     if(res && res.duplicate){
       _sheetsOnline=true;
       setDBStatus('connected','Google Sheets ✓');
+
+      // A retry after a lost Apps Script response can legitimately come back as
+      // DUPLICATE because the FIRST request already reached SalesLog.  If the
+      // backend duplicate is for the exact same Transaction ID that is still
+      // pending in this POS, treat it as confirmation of the original payment
+      // instead of forcing the cashier to keep retrying.  No second row is added.
+      var dupId=String(res.transactionId || (res.existing&&res.existing.transactionId) || '').trim();
+      var sentId=String((s&&s.transactionId)||'').trim();
+      if(sentId && (!dupId || dupId===sentId)){
+        showToast('✅ Payment already confirmed in SalesLog. Completing order…','success');
+        return {ok:true,saved:true,verified:true,alreadySaved:true,transactionId:sentId};
+      }
       return res;
     }
     var why=(res&&((res.message||res.error)))||_lastCallError||'SalesLog did not confirm the transaction.';
@@ -2372,7 +2384,15 @@ async function pushSaleToSheets(s){
 
   _sheetsOnline=true;
   setDBStatus('connected','Google Sheets ✓');
-  if(res.duplicate) return res;
+  if(res.duplicate){
+    var dupId2=String(res.transactionId || (res.existing&&res.existing.transactionId) || '').trim();
+    var sentId2=String((s&&s.transactionId)||'').trim();
+    if(sentId2 && (!dupId2 || dupId2===sentId2)){
+      showToast('✅ Payment already confirmed in SalesLog. Completing order…','success');
+      return {ok:true,saved:true,verified:true,alreadySaved:true,transactionId:sentId2};
+    }
+    return res;
+  }
   if(!res.verified) showToast('✅ Payment confirmed in SalesLog.','success');
   return res;
 }
@@ -3198,6 +3218,12 @@ async function finalizePayment(method,gcashNum,gcashRef){
     orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
     _pendingTransactionId='';
     _duplicateTransactionInfo=null;
+
+    // Payment is confirmed. The receipt fields above already contain a snapshot
+    // of the paid transaction, so immediately clear the CURRENT ORDER panel.
+    // This prevents a paid CASH/GCash order from remaining on screen and being
+    // accidentally paid/retried again.
+    clearOrder();
     openModal('receipt-modal'); renderMenu();
     if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
       setTimeout(function(){ try{ printViaRawBT(); }catch(e){} },300);
