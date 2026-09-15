@@ -1995,7 +1995,7 @@ let _heartbeatTimer   = null;
 let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
-const CALL_TIMEOUT_MS = 12000;      // 12s per individual request
+const CALL_TIMEOUT_MS = 8000;      // 12s per individual request
 const SALE_WRITE_TIMEOUT_MS = 4500; // never make cashier wait long for a lost write response
 const SALE_VERIFY_TIMEOUT_MS = 2200; // each exact Transaction ID verification attempt
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
@@ -2106,7 +2106,7 @@ async function _call(url, action, data){
   // Backend doGet() must allow action=login and call login_(body).
   if(action==='login'){
     try{
-      return await _jsonpAction(url,'login',data||{},CALL_TIMEOUT_MS);
+      return await _jsonpAction(url,'login',data||{},5000);
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
