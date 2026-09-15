@@ -1747,7 +1747,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbyKt4u9WGBZ8EjB7BJi_eq0c3iZVtmiXp3ZtcxWZ_PObAvts-6lLFW1kVbOrnate0hlOA/exec';
+const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbwMt7uo8TrMshH6SSfQkf_wx6sEK4xCgvo7BMw2xU_7M3myAmLy-xhjLN5P8zDgwtrD2Q/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = sessionStorage.getItem('gtg_auth_session') || '';
 
@@ -2101,11 +2101,12 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // Backend v9.0 explicitly requires LOGIN by POST. doGet(login) returns POST_REQUIRED.
-  // Keep the PIN out of the URL and send the exact JSON body expected by login_(b).
+  // GitHub Pages -> Apps Script: use JSONP for login too.
+  // This avoids the cross-origin POST redirect/CORS failure on mobile/hosted browsers.
+  // Backend doGet() must allow action=login and call login_(body).
   if(action==='login'){
     try{
-      return await _postTransport(url,'login',data||{});
+      return await _jsonpAction(url,'login',data||{},CALL_TIMEOUT_MS);
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
