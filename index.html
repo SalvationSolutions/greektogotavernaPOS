@@ -4662,21 +4662,30 @@ async function _sendESCPOS(char){
 
   async function raw(a){await _btWriteBytes(char,new Uint8Array(a));}
   async function txt(v){await _btWriteBytes(char,enc.encode(String(v)+'\n'));}
-  function money(v){return 'P'+Number(v||0).toFixed(2);}
+  function money(v){
+    var n=Number(v||0);
+    return 'P'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
   function lr(left,right,width){
     left=String(left);right=String(right);
-    var gap=Math.max(1,width-left.length-right.length);
-    if(left.length+right.length+gap>width)left=left.slice(0,Math.max(1,width-right.length-1));
+    if(left.length+right.length>=width) left=left.slice(0,Math.max(1,width-right.length-1));
     return left+' '.repeat(Math.max(1,width-left.length-right.length))+right;
   }
+  function getVal(ids){
+    for(var i=0;i<ids.length;i++){
+      var el=document.getElementById(ids[i]);
+      if(el && String(el.value||el.textContent||'').trim()) return String(el.value||el.textContent||'').trim();
+    }
+    return '';
+  }
 
-  // Initialize; Font B = compact 58mm layout (~42 columns on common 203dpi units).
+  // Native thermal printers are monochrome. Use compact Font B for a 58mm receipt.
   await raw([ESC,0x40,ESC,0x4D,0x01,ESC,0x32]);
   await raw([ESC,0x61,0x01]);
 
-  // 30mm logo equivalent: 240 dots at 203dpi. This is the real raster image.
+  // Target mockup uses a wide, shallow logo. Keep it centered and smaller vertically.
   try{
-    var logoRaster=await _escposRasterFromDataURL(LOGO_DATA,240,185);
+    var logoRaster=await _escposRasterFromDataURL(LOGO_DATA,270,200);
     await _btWriteBytes(char,logoRaster);
     await txt('');
   }catch(e){
@@ -4685,50 +4694,78 @@ async function _sendESCPOS(char){
 
   await raw([ESC,0x61,0x00]);
   await txt('------------------------------------------');
-  await txt('Order #'+String(orderCount).padStart(4,'0'));
-  await txt(new Date().toLocaleString('en-PH'));
-  if(typeof googleUser!=='undefined'&&googleUser) await txt('Cashier: '+googleUser.name);
-  else if(typeof activeCashier!=='undefined'&&activeCashier) await txt('Cashier: '+activeCashier);
-  var cn=document.getElementById('cust-name');
-  if(cn&&cn.value) await txt('Customer: '+cn.value);
-  var tn=document.getElementById('table-num');
-  if(tn&&tn.value) await txt('Table: '+tn.value);
+
+  var orderNo=String(orderCount).padStart(4,'0');
+  var dateText=new Date().toLocaleString('en-PH');
+  var table=getVal(['table-num','tableNum','table']);
+  var customer=getVal(['cust-name','customer-name','customer']);
+  var cashier=(typeof googleUser!=='undefined'&&googleUser)?googleUser.name:
+              ((typeof activeCashier!=='undefined'&&activeCashier)?activeCashier:'');
+
+  await txt(lr('Order','#'+orderNo,42));
+  await txt(lr('Date',dateText,42));
+  if(table) await txt(lr('Table',table,42));
+  if(customer) await txt(lr('Customer',customer,42));
+  if(cashier) await txt(lr('Cashier',cashier,42));
+
   await txt('------------------------------------------');
 
-  // Full product names wrap; price stays on its own aligned row when necessary.
+  // Target layout: menu item + qty on left, amount flush right.
   for(var oi=0;oi<order.length;oi++){
     var o=order[oi];
-    var amount=money(parseFloat(o.price||0)*parseFloat(o.qty||0));
-    var prefix='x'+o.qty+' ';
-    var nameWidth=Math.max(16,42-prefix.length-amount.length-1);
-    var lines=_wrapNative58(o.name||'',nameWidth);
-    for(var li=0;li<lines.length;li++){
-      if(li===0) await txt(lr(lines[li]+' '+prefix,amount,42));
-      else await txt('  '+lines[li]);
-    }
+    var amount=money(Number(o.price||0)*Number(o.qty||0));
+    var label=String(o.name||'')+' x'+String(o.qty||1);
+    var maxLeft=Math.max(14,42-amount.length-1);
+    var lines=_wrapNative58(label,maxLeft);
+    await txt(lr(lines[0],amount,42));
+    for(var li=1;li<lines.length;li++) await txt(lines[li]);
   }
 
   await txt('------------------------------------------');
   await txt(lr('Subtotal:',money(totals.sub),42));
   if(totals.da>0) await txt(lr('Discount:','-'+money(totals.da),42));
-  await raw([ESC,0x45,1]);
+
+  await raw([ESC,0x45,1,ESC,0x21,0x08]);
   await txt(lr('TOTAL:',money(totals.tot),42));
-  await raw([ESC,0x45,0]);
+  await raw([ESC,0x21,0x00,ESC,0x4D,0x01,ESC,0x45,0]);
+
   await txt('------------------------------------------');
 
-  // Real loyalty-registration QR image: ~21mm = 168 dots at 203dpi.
+  // Payment section: print values when the POS has them available.
+  var method=getVal(['payment-method','paymentMethod','selected-payment-method','pay-method']);
+  if(!method && typeof selectedPaymentMethod!=='undefined') method=String(selectedPaymentMethod||'');
+  if(!method && typeof paymentMethod!=='undefined') method=String(paymentMethod||'');
+
+  var tenderText=getVal(['amount-tendered','amountTendered','cash-tendered','cashTendered','cash-received','cashReceived']);
+  var changeText=getVal(['change-amount','changeAmount','cash-change','cashChange']);
+
+  if(method) await txt(lr('Payment Method:',method.toUpperCase(),42));
+  if(tenderText){
+    var tenderNum=parseFloat(String(tenderText).replace(/[^0-9.-]/g,''));
+    await txt(lr('Amount Tendered:',isNaN(tenderNum)?tenderText:money(tenderNum),42));
+  }
+  if(changeText){
+    var changeNum=parseFloat(String(changeText).replace(/[^0-9.-]/g,''));
+    await txt(lr('Change:',isNaN(changeNum)?changeText:money(changeNum),42));
+  }
+  if(method||tenderText||changeText) await txt('------------------------------------------');
+
+  // Target QR size and spacing.
   await raw([ESC,0x61,0x01]);
   try{
-    var qrRaster=await _escposRasterFromDataURL(QR_DATA,168,190);
+    var qrRaster=await _escposRasterFromDataURL(QR_DATA,150,185);
     await _btWriteBytes(char,qrRaster);
     await txt('');
+    await raw([ESC,0x45,1]);
     await txt('SCAN TO REGISTER');
     await txt('AND JOIN OUR LOYALTY PROGRAM');
+    await raw([ESC,0x45,0]);
   }catch(e){
     await txt('[ QR IMAGE ERROR ]');
   }
 
   await txt('');
+  await txt('------------------------------------------');
   await txt('Thank you! Please come again.');
   await txt('\n\n');
   await raw([GS,0x56,0x41,0x03]);
