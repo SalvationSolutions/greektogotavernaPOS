@@ -2101,12 +2101,11 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // Apps Script web apps redirect cross-origin POST requests, which can make
-  // login fail from GitHub Pages / Android WebView even when credentials are valid.
-  // Use the same JSONP bridge as the other POS actions so login works reliably.
+  // Backend v9.0 explicitly requires LOGIN by POST. doGet(login) returns POST_REQUIRED.
+  // Keep the PIN out of the URL and send the exact JSON body expected by login_(b).
   if(action==='login'){
     try{
-      return await _jsonpAction(url,action,data||{},CALL_TIMEOUT_MS);
+      return await _postTransport(url,'login',data||{});
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
@@ -4232,7 +4231,11 @@ async function loginPinSubmit() {
   const msgEl = document.getElementById('lpin-msg');
   const result = await _call(SHEETS_URL,'login',{username:_loginPinTarget.name,pin:entered});
   if (!result || !result.ok) {
-    msgEl.textContent = '❌ Incorrect PIN. Try again.';
+    var loginError = result && result.error ? String(result.error) : '';
+    if (loginError === 'TOO_MANY_ATTEMPTS') msgEl.textContent = '❌ Login temporarily locked. Please wait 15 minutes and try again.';
+    else if (loginError === 'NO_SPREADSHEET') msgEl.textContent = '❌ Database connection error.';
+    else if (loginError === 'INVALID_CREDENTIALS') msgEl.textContent = '❌ Incorrect PIN. Try again.';
+    else msgEl.textContent = '❌ Login connection failed. ' + (_lastCallError || loginError || 'Please try again.');
     msgEl.className = 'c-pin-msg err';
     _loginPinEntry = '';
     _renderLoginPinDots();
