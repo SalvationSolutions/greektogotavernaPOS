@@ -4420,6 +4420,7 @@ function printReceipt(){
     var isAndroid = /Android/i.test(navigator.userAgent);
     if(isAndroid){
       /* ── Android + XP-58IID via RawBT ── */
+      if(hasBT) html += '<button class="m-save" style="background:#0B2545;font-size:15px;padding:14px" onclick="printBluetooth()">🔵 Bluetooth Native — XP-58IID</button>';
       html += '<button class="m-save" style="background:#E65100;font-size:15px;padding:14px" onclick="closeModal(\'bt-printer-modal\');printViaRawBT()">🖨️ Print via RawBT (XP-58IID)</button>';
       html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="closeModal(\'bt-printer-modal\');printReceiptBrowser()">📄 Save as PDF</button>';
       if(hasShare) html += '<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>';
@@ -4430,7 +4431,7 @@ function printReceipt(){
       hintLines.push('Step 4: Tap <b>Print via RawBT</b> → prints instantly ✅');
     } else if(hasBT){
       /* ── Chrome/Edge Desktop: Web Bluetooth ── */
-      html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="closeModal(\'bt-printer-modal\');printReceiptBrowser()">🖨️ Print Receipt</button>';
+      html += '<button class="m-save" style="background:#0B2545;font-size:15px;padding:14px" onclick="printBluetooth()">🔵 Bluetooth Native — XP-58IID</button>';
       html += '<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>';
       if(hasShare) html += '<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>';
       hintLines.push('Pair your ESC/POS thermal printer in device Bluetooth Settings first');
@@ -4595,8 +4596,43 @@ async function printBluetooth(){
 }
 
 async function _sendESCPOS(char){
-  // FINAL: prevent the legacy text-only ESC/POS receipt from bypassing logo/QR layout.
-  return printReceiptBrowser();
+  var ESC=27,GS=29,enc=new TextEncoder(),totals=getTotals(),parts=[];
+  function p(a){parts=parts.concat(Array.from(a));}
+  function t(s){p(enc.encode(s+'\n'));}
+  p([ESC,0x40]);
+  p([ESC,0x61,0x01]);
+  t('GREEK TO GO TAVERNA');
+  t('================================');
+  p([ESC,0x61,0x00]);
+  t('Order #'+String(orderCount).padStart(4,'0'));
+  t(new Date().toLocaleString('en-PH'));
+  if(typeof googleUser!=='undefined'&&googleUser) t('Cashier: '+googleUser.name);
+  else if(typeof activeCashier!=='undefined'&&activeCashier) t('Cashier: '+activeCashier);
+  var cn=document.getElementById('cust-name');
+  if(cn&&cn.value) t('Customer: '+cn.value);
+  var tn=document.getElementById('table-num');
+  if(tn&&tn.value) t('Table: '+tn.value);
+  t('--------------------------------');
+  order.forEach(function(o){
+    var itemName=(o.name||'').slice(0,18).padEnd(18,' ');
+    var qty=('x'+o.qty).padStart(3);
+    var amount=('P'+parseFloat(o.price*o.qty).toFixed(2)).padStart(10);
+    t(itemName+' '+qty+amount);
+  });
+  t('--------------------------------');
+  t(('Subtotal:').padEnd(22)+('P'+totals.sub.toFixed(2)).padStart(10));
+  if(totals.da>0) t(('Discount:').padEnd(22)+('-P'+totals.da.toFixed(2)).padStart(10));
+  p([ESC,0x45,1]);
+  t(('TOTAL:').padEnd(22)+('P'+totals.tot.toFixed(2)).padStart(10));
+  p([ESC,0x45,0]);
+  t('================================');
+  p([ESC,0x61,0x01]);
+  t('Thank you! Please come again.\n\n');
+  p([GS,0x56,0x41,0x03]);
+  for(var i=0;i<parts.length;i+=100){
+    await char.writeValue(new Uint8Array(parts.slice(i,i+100)));
+    await new Promise(function(r){setTimeout(r,20);});
+  }
 }
 function printBrowser(){
   // Force every browser/native receipt request through the
