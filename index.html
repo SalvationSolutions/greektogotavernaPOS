@@ -4200,7 +4200,7 @@ function _renderLoginPinDots() {
   const len = 4;
   document.getElementById('lpin-dots').innerHTML =
     Array.from({length:len},(_,i)=>
-      `<div class="pin-circle${i<_loginPinEntry.length?' filled':''}""></div>`).join("");
+      `<div class="pin-circle${i<_loginPinEntry.length?' filled':''}"></div>`).join("");
 }
 
 function _renderLoginKeypad() {
@@ -4430,7 +4430,7 @@ function printReceipt(){
       hintLines.push('Step 4: Tap <b>Print via RawBT</b> → prints instantly ✅');
     } else if(hasBT){
       /* ── Chrome/Edge Desktop: Web Bluetooth ── */
-      html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="closeModal('bt-printer-modal');printReceiptBrowser()">🖨️ Print Receipt</button>';
+      html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="closeModal(\'bt-printer-modal\');printReceiptBrowser()">🖨️ Print Receipt</button>';
       html += '<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>';
       if(hasShare) html += '<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>';
       hintLines.push('Pair your ESC/POS thermal printer in device Bluetooth Settings first');
