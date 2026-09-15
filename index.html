@@ -912,6 +912,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 </style>
 
+<!-- FINAL XP-58IID ONE RECEIPT PATH BUILD: 2026-09-15 -->
 </head>
 <body>
 
@@ -1770,7 +1771,7 @@ var _printerConfig = (function(){
 function _savePrinterConfig(){ localStorage.setItem('gtg_printer_config', JSON.stringify(_printerConfig)); }
 
 // Receipt printer: XP-58IID via RawBT on Android, or browser print.
-var RECEIPT_PRINTER_TYPE = _printerConfig.receiptType || 'rawbt';
+var RECEIPT_PRINTER_TYPE = 'browser'; // FINAL: single native/browser receipt path for XP-58IID
 var RECEIPT_PRINTER_IP   = _printerConfig.receiptIP   || '';
 var RAWBT_PAPER_MM       = Number(_printerConfig.rawbtPaperMM || 58);
 var RAWBT_CHARS_PER_LINE = Number(_printerConfig.rawbtChars || 32);
@@ -3318,8 +3319,8 @@ async function finalizePayment(method,gcashNum,gcashRef){
     // accidentally paid/retried again.
     clearOrder();
     openModal('receipt-modal'); renderMenu();
-    if(AUTO_RECEIPT_PRINT && RECEIPT_PRINTER_TYPE==='rawbt'){
-      setTimeout(function(){ try{ printViaRawBT(); }catch(e){} },300);
+    if(AUTO_RECEIPT_PRINT){
+      setTimeout(function(){ try{ printReceiptBrowser(); }catch(e){} },300);
     }
     return true;
   } finally {
@@ -4430,7 +4431,7 @@ function printReceipt(){
       hintLines.push('Step 4: Tap <b>Print via RawBT</b> → prints instantly ✅');
     } else if(hasBT){
       /* ── Chrome/Edge Desktop: Web Bluetooth ── */
-      html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="printBluetooth()">📶 Bluetooth Thermal Printer</button>';
+      html += '<button class="m-save" style="background:#27AE60;font-size:14px" onclick="closeModal('bt-printer-modal');printReceiptBrowser()">🖨️ Print Receipt</button>';
       html += '<button class="m-save" style="background:var(--blue-accent);font-size:14px" onclick="printReceiptBrowser()">🖥️ Print / Save as PDF</button>';
       if(hasShare) html += '<button class="m-save" style="background:#555;font-size:14px" onclick="shareReceipt()">📤 Share Receipt</button>';
       hintLines.push('Pair your ESC/POS thermal printer in device Bluetooth Settings first');
@@ -4508,57 +4509,8 @@ async function printViaXprinterApp(){
 
 // ── Print via RawBT (Android + XP-58IID Classic Bluetooth) ──────────────────
 function printViaRawBT(){
-  var totals  = getTotals();
-  var orderNum= String(orderCount).padStart(4,'0');
-  var tableVal= (document.getElementById('table-num')||{}).value||'';
-  var custVal = (document.getElementById('cust-name')||{}).value||'';
-  var notesVal= (document.getElementById('order-notes')||{}).value||'';
-  var cashier = typeof activeCashier!=='undefined' ? activeCashier : '';
-  var lines   = [];
-  var rawWidth=Math.max(24,Math.min(42,RAWBT_CHARS_PER_LINE||32));
-  var rawLine='='.repeat(rawWidth);
-  var rawDash='-'.repeat(rawWidth);
-  lines.push(rawLine);
-  lines.push('GREEK TO GO TAVERNA'.padStart(Math.floor((rawWidth+19)/2)).slice(0,rawWidth));
-  lines.push(rawLine);
-  lines.push('Order #: ' + orderNum);
-  lines.push(new Date().toLocaleString('en-PH'));
-  if(tableVal)  lines.push('Table:    ' + tableVal);
-  if(custVal)   lines.push('Customer: ' + custVal);
-  if(cashier)   lines.push('Cashier:  ' + cashier);
-  lines.push(rawDash);
-  lines.push('Item / Qty / Amount');
-  lines.push(rawDash);
-  order.forEach(function(o){
-    var nm = (o.name||'').slice(0,20).padEnd(20);
-    var qty= ('x'+o.qty).padStart(4);
-    var amt= ('P'+parseFloat(o.price*o.qty).toFixed(2)).padStart(9);
-    lines.push(nm+qty+amt);
-  });
-  lines.push('--------------------------------');
-  lines.push(('Subtotal:').padEnd(22) + ('P'+totals.sub.toFixed(2)).padStart(10));
-  if(totals.da>0) lines.push(('Discount:').padEnd(22) + ('-P'+totals.da.toFixed(2)).padStart(10));
-  lines.push(('TOTAL:').padEnd(22) + ('P'+totals.tot.toFixed(2)).padStart(10));
-  if(notesVal){ lines.push('--------------------------------'); lines.push('Note: '+notesVal); }
-  lines.push('================================');
-  lines.push('================================');
-  lines.push('  Thank you! Come again!');
-  lines.push(''); lines.push(''); lines.push('');
-  var text = lines.join("\n");
-
-
-  // Send to RawBT via URL scheme
-  try{
-    var a = document.createElement('a');
-    a.href = 'rawbt:' + encodeURIComponent(text);
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} }, 1000);
-    showToast('🖨️ Sending to XP-58IID via RawBT…','success');
-  } catch(e){
-    showToast('❌ RawBT not installed. Download from Play Store.','error');
-  }
+  // FINAL: RawBT receipt button intentionally uses the one approved 58mm graphical receipt.
+  return printReceiptBrowser();
 }
 
 async function shareReceipt(){
@@ -4644,38 +4596,8 @@ async function printBluetooth(){
 }
 
 async function _sendESCPOS(char){
-  var ESC=27,GS=29,enc=new TextEncoder(),totals=getTotals(),parts=[];
-  function p(a){parts=parts.concat(Array.from(a));}
-  function t(s){p(enc.encode(s+'\n'));}
-  p([ESC,0x40]);
-  p([ESC,0x61,0x01]);
-  t('GREEK TO GO TAVERNA');
-  t('================================');
-  p([ESC,0x61,0x00]);
-  t('Order #'+String(orderCount).padStart(4,'0'));
-  t(new Date().toLocaleString('en-PH'));
-  if(typeof googleUser!=='undefined'&&googleUser) t('Cashier: '+googleUser.name);
-  var cn=document.getElementById('cust-name');
-  if(cn&&cn.value) t('Customer: '+cn.value);
-  t('--------------------------------');
-  order.forEach(function(o){
-    t(o.name.slice(0,20).padEnd(20,' ')+'x'+o.qty+' P'+parseFloat(o.price*o.qty).toFixed(2));
-  });
-  t('--------------------------------');
-  t('Subtotal:     P'+totals.sub.toFixed(2));
-  if(totals.da>0) t('Discount:    -P'+totals.da.toFixed(2));
-
-  p([ESC,0x45,1]);
-  t('TOTAL:        P'+totals.tot.toFixed(2));
-  p([ESC,0x45,0]);
-  t('================================');
-  p([ESC,0x61,0x01]);
-  t('Thank you! Please come again.\n\n');
-  p([GS,0x56,0x41,0x03]);
-  for(var i=0;i<parts.length;i+=100){
-    await char.writeValue(new Uint8Array(parts.slice(i,i+100)));
-    await new Promise(function(r){setTimeout(r,20);});
-  }
+  // FINAL: prevent the legacy text-only ESC/POS receipt from bypassing logo/QR layout.
+  return printReceiptBrowser();
 }
 function printBrowser(){
   // Force every browser/native receipt request through the
@@ -5635,23 +5557,25 @@ function printReceiptBrowser(){
   var css=[
     '@page{margin:0;size:58mm auto}',
     '*{box-sizing:border-box}',
-    'html,body{margin:0!important;padding:0!important;background:#fff!important;width:58mm!important;overflow:visible!important}',
-    'body{font-family:"Courier New",monospace;color:#000;width:48mm!important;max-width:48mm!important;margin:0 auto!important;padding:1mm 0!important;font-size:10.5px!important;line-height:1.22;overflow:visible!important}',
-    '.logo{text-align:center;margin:0 auto 2px}',
+    'html,body{margin:0!important;padding:0!important;background:#fff!important;width:58mm!important;overflow:hidden}',
+    'body{font-family:"Courier New",monospace;color:#000;width:48mm!important;max-width:48mm!important;margin:0 auto!important;padding:1.2mm 1mm!important;font-size:10px!important;line-height:1.2}',
+    '.logo{text-align:center;margin:0 auto 1.5px}',
     '.logo img{display:block;width:30mm;max-width:100%;max-height:14mm;object-fit:contain;margin:0 auto;filter:grayscale(1) contrast(2)}',
-    '.meta{font-size:10.5px;line-height:1.3;margin:1px 0;overflow-wrap:anywhere}',
-    'hr{border:0;border-top:1.5px dashed #000;margin:5px 0}',
-    'table{width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed}',
-    'td{padding:3px 0;vertical-align:top}',
-    '.item{width:66%;padding-right:2px;overflow-wrap:anywhere;word-break:break-word}',
-    '.amt{width:34%;text-align:right;white-space:nowrap;font-weight:700}',
-    '.sum{font-size:10.5px;line-height:1.4}',
+    '.service{text-align:center;font-size:9px;font-weight:700;white-space:nowrap;margin:2px 0 4px}',
+    '.meta{font-size:9.5px;line-height:1.25;margin:1px 0}',
+    'hr{border:0;border-top:1px dashed #000;margin:3px 0}',
+    'table{width:100%;border-collapse:collapse;font-size:9.5px;table-layout:fixed}',
+    'td{padding:2px 0;vertical-align:top}',
+    '.item{width:67%;padding-right:2px;overflow-wrap:anywhere}',
+    '.amt{width:33%;text-align:right;white-space:nowrap;font-weight:700}',
+    '.sum{font-size:10px;line-height:1.35}',
     '.sumrow{display:flex;justify-content:space-between;gap:4px}',
     '.total{font-size:13px;font-weight:900;margin-top:2px}',
-    '.qrwrap{text-align:center;margin-top:5px;page-break-inside:avoid;break-inside:avoid}',
-    '.qrwrap img{display:block;width:22mm;height:22mm;object-fit:contain;margin:0 auto 2px;image-rendering:pixelated;filter:grayscale(1) contrast(2)}',
-    '.loyalty{font-family:Arial,sans-serif;font-size:7.5px;font-weight:700;line-height:1.25;text-align:center;text-transform:uppercase}',
-    '.thanks{text-align:center;font-size:9.5px;margin-top:5px}',
+    '.qrwrap{text-align:center;margin-top:3px;page-break-inside:avoid;break-inside:avoid}',
+    '.qrwrap img{display:block;width:21mm;height:21mm;object-fit:contain;margin:0 auto 2px;image-rendering:pixelated;filter:grayscale(1) contrast(2)}',
+    '.loyalty{font-family:Arial,sans-serif;font-size:7px;font-weight:700;line-height:1.2;text-align:center;text-transform:uppercase}',
+    '.thanks{text-align:center;font-size:9px;margin-top:4px}',
+    '.opa{text-align:center;font-weight:700;font-size:10px;margin:4px 0 2px}'
   ].join('');
   var body=[
     '<div class="logo"><img src="'+logoData+'" alt="Greek To Go Taverna"></div>',
@@ -5731,23 +5655,25 @@ function printReceiptBrowser(){
   var css=[
     '@page{margin:0;size:58mm auto}',
     '*{box-sizing:border-box}',
-    'html,body{margin:0!important;padding:0!important;background:#fff!important;width:58mm!important;overflow:visible!important}',
-    'body{font-family:"Courier New",monospace;color:#000;width:48mm!important;max-width:48mm!important;margin:0 auto!important;padding:1mm 0!important;font-size:10.5px!important;line-height:1.22;overflow:visible!important}',
-    '.logo{text-align:center;margin:0 auto 2px}',
+    'html,body{margin:0!important;padding:0!important;background:#fff!important;width:58mm!important;overflow:hidden}',
+    'body{font-family:"Courier New",monospace;color:#000;width:48mm!important;max-width:48mm!important;margin:0 auto!important;padding:1.2mm 1mm!important;font-size:10px!important;line-height:1.2}',
+    '.logo{text-align:center;margin:0 auto 1.5px}',
     '.logo img{display:block;width:30mm;max-width:100%;max-height:14mm;object-fit:contain;margin:0 auto;filter:grayscale(1) contrast(2)}',
-    '.meta{font-size:10.5px;line-height:1.3;margin:1px 0;overflow-wrap:anywhere}',
-    'hr{border:0;border-top:1.5px dashed #000;margin:5px 0}',
-    'table{width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed}',
-    'td{padding:3px 0;vertical-align:top}',
-    '.item{width:66%;padding-right:2px;overflow-wrap:anywhere;word-break:break-word}',
-    '.amt{width:34%;text-align:right;white-space:nowrap;font-weight:700}',
-    '.sum{font-size:10.5px;line-height:1.4}',
+    '.service{text-align:center;font-size:9px;font-weight:700;white-space:nowrap;margin:2px 0 4px}',
+    '.meta{font-size:9.5px;line-height:1.25;margin:1px 0}',
+    'hr{border:0;border-top:1px dashed #000;margin:3px 0}',
+    'table{width:100%;border-collapse:collapse;font-size:9.5px;table-layout:fixed}',
+    'td{padding:2px 0;vertical-align:top}',
+    '.item{width:67%;padding-right:2px;overflow-wrap:anywhere}',
+    '.amt{width:33%;text-align:right;white-space:nowrap;font-weight:700}',
+    '.sum{font-size:10px;line-height:1.35}',
     '.sumrow{display:flex;justify-content:space-between;gap:4px}',
     '.total{font-size:13px;font-weight:900;margin-top:2px}',
-    '.qrwrap{text-align:center;margin-top:5px;page-break-inside:avoid;break-inside:avoid}',
-    '.qrwrap img{display:block;width:22mm;height:22mm;object-fit:contain;margin:0 auto 2px;image-rendering:pixelated;filter:grayscale(1) contrast(2)}',
-    '.loyalty{font-family:Arial,sans-serif;font-size:7.5px;font-weight:700;line-height:1.25;text-align:center;text-transform:uppercase}',
-    '.thanks{text-align:center;font-size:9.5px;margin-top:5px}',
+    '.qrwrap{text-align:center;margin-top:3px;page-break-inside:avoid;break-inside:avoid}',
+    '.qrwrap img{display:block;width:21mm;height:21mm;object-fit:contain;margin:0 auto 2px;image-rendering:pixelated;filter:grayscale(1) contrast(2)}',
+    '.loyalty{font-family:Arial,sans-serif;font-size:7px;font-weight:700;line-height:1.2;text-align:center;text-transform:uppercase}',
+    '.thanks{text-align:center;font-size:9px;margin-top:4px}',
+    '.opa{text-align:center;font-weight:700;font-size:10px;margin:4px 0 2px}'
   ].join('');
   var body=[
     '<div class="logo"><img src="'+logoData+'" alt="Greek To Go Taverna"></div>',
