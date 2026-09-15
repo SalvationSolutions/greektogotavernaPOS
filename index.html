@@ -4978,25 +4978,94 @@ function _receiptEsc(v){
   });
 }
 
+function _rawbtReprintText(sale){
+  var W=32;
+  function pad2(n){return String(n).padStart(2,'0');}
+  function money(v){return 'P'+Number(v||0).toFixed(2);}
+  function lr(l,r){
+    l=String(l||''); r=String(r||'');
+    if(l.length+r.length>=W) l=l.slice(0,Math.max(1,W-r.length-1));
+    return l+' '.repeat(Math.max(1,W-l.length-r.length))+r;
+  }
+  function wrap(t,w){
+    t=String(t||'').trim(); var a=[];
+    while(t.length>w){
+      var c=t.lastIndexOf(' ',w); if(c<8)c=w;
+      a.push(t.slice(0,c).trim()); t=t.slice(c).trim();
+    }
+    if(t)a.push(t); return a.length?a:[''];
+  }
+
+  var lines=[];
+  lines.push('       GREEKTOGO TAVERNA');
+  lines.push('--------------------------------');
+  lines.push('          *** REPRINT ***');
+  lines.push('Order: '+String(sale.orderNum||''));
+  lines.push('Date: '+String(sale.time||sale.date||''));
+  if(sale.customer) lines.push('Customer: '+String(sale.customer));
+  if(sale.cashier) lines.push('Cashier: '+String(sale.cashier));
+  lines.push('Payment: '+String(sale.method||''));
+  lines.push('--------------------------------');
+
+  (Array.isArray(sale.items)?sale.items:[]).forEach(function(i){
+    var amount=money(Number(i.price||0)*Number(i.qty||0));
+    var label=String(i.name||'')+' x'+String(i.qty||1);
+    var max=Math.max(12,W-amount.length-1);
+    var parts=wrap(label,max);
+    lines.push(lr(parts[0],amount));
+    for(var k=1;k<parts.length;k++) lines.push(parts[k]);
+  });
+
+  lines.push('--------------------------------');
+  lines.push(lr('Subtotal:',money(sale.subtotal)));
+  if(Number(sale.discount||0)>0) lines.push(lr('Discount:','-'+money(sale.discount)));
+  if(String(sale.method||'').toUpperCase()==='FREE MEAL') lines.push('FREE MEAL');
+  lines.push(lr('VAT:',money(sale.vat)));
+  lines.push(lr('TOTAL:',money(sale.total)));
+  lines.push('--------------------------------');
+  lines.push('Thank you! Please come again.');
+  lines.push('POWERED BY: SALVATION SOLUTIONS');
+  lines.push('');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function _sendReprintToRawBT(sale){
+  try{
+    var text=_rawbtReprintText(sale);
+    // RawBT Android intent. The app receives the receipt text directly.
+    var uri='rawbt:base64,'+btoa(unescape(encodeURIComponent(text)));
+    window.location.href=uri;
+    showToast('Opening RawBT reprint for '+(sale.orderNum||'transaction')+'…','success');
+    return true;
+  }catch(e){
+    console.error('RawBT reprint error',e);
+    showToast('RawBT reprint failed: '+(e.message||e),'error');
+    return false;
+  }
+}
+
 function reprintSalesTransaction(index){
   var sale=(Array.isArray(salesLog)&&salesLog[index])?salesLog[index]:null;
   if(!sale){showToast('Transaction not found. Refresh Sales Reports and try again.','error');return;}
 
+  // If receipt printer is RawBT, reprint directly through RawBT instead of window.print().
+  var configuredRawBT=(String(RECEIPT_PRINTER_TYPE||'').toLowerCase()==='rawbt');
+  if(configuredRawBT || /Android/i.test(navigator.userAgent)){
+    if(_sendReprintToRawBT(sale)) return;
+  }
+
   var items=Array.isArray(sale.items)?sale.items:[];
   var rows=items.map(function(i){
-    var q=Number(i.qty)||0,p=Number(i.price)||0;
-    return '<tr><td style="padding:3px 0">'+_receiptEsc(i.name||'Item')+'</td>'
-      +'<td style="text-align:center;padding:0 8px">x'+q+'</td>'
-      +'<td style="text-align:right">P'+(p*q).toFixed(2)+'</td></tr>';
+    return '<tr><td>'+_receiptEsc((Number(i.qty)||0)+'x '+(i.name||''))+'</td><td style="text-align:right">P'+Number((Number(i.price)||0)*(Number(i.qty)||0)).toFixed(2)+'</td></tr>';
   }).join('');
-
   var method=_receiptEsc(sale.method||'');
   var freeMeal=String(sale.method||'').toUpperCase()==='FREE MEAL';
   var body='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt '+_receiptEsc(sale.orderNum||'')+'</title>'
-    +'<style>@page{margin:0;size:80mm auto}*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:11px;width:72mm;margin:0 auto;padding:4mm;color:#000}'
-    +'h2{font-size:13px;text-align:center;margin:0 0 2px}.c{text-align:center}.i{margin:5px 0;font-size:10px}hr{border:none;border-top:1px dashed #000;margin:6px 0}'
-    +'table{width:100%;border-collapse:collapse;font-size:11px}.t{font-size:14px;font-weight:900}.f{text-align:center;font-size:10px;margin-top:8px}</style></head><body>'
-    +'<h2>GREEK TO GO TAVERNA</h2><div class="c">REPRINT TRANSACTION</div><hr>'
+    +'<style>@page{margin:0;size:58mm auto}*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:10px;width:48mm;margin:0 auto;padding:2mm;color:#000}'
+    +'h2{font-size:12px;text-align:center;margin:0 0 2px}.c{text-align:center}.i{margin:4px 0;font-size:9px}hr{border:none;border-top:1px dashed #000;margin:5px 0}'
+    +'table{width:100%;border-collapse:collapse;font-size:9px}.t{font-size:12px;font-weight:900}.f{text-align:center;font-size:8px;margin-top:7px}</style></head><body>'
+    +'<h2>GREEKTOGO TAVERNA</h2><div class="c">*** REPRINT ***</div><hr>'
     +'<div class="i">Order #: <b>'+_receiptEsc(sale.orderNum||'')+'</b></div>'
     +'<div class="i">Date: <b>'+_receiptEsc(sale.time||sale.date||'')+'</b></div>'
     +'<div class="i">Customer: <b>'+_receiptEsc(sale.customer||'Walk-in')+'</b></div>'
@@ -5008,12 +5077,12 @@ function reprintSalesTransaction(index){
     +(freeMeal?'<div><b>FREE MEAL</b></div>':'')
     +'<div>VAT: P'+Number(sale.vat||0).toFixed(2)+'</div>'
     +'<div class="t">TOTAL: P'+Number(sale.total||0).toFixed(2)+'</div></div>'
-    +'<hr><div class="f">*** REPRINT ***<br>Thank you! Please come again.</div>'
+    +'<hr><div class="f">Thank you! Please come again.<br><b>POWERED BY: SALVATION SOLUTIONS</b></div>'
     +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>'
     +'</body></html>';
 
   var w=window.open('','_blank','width=420,height=620');
-  if(w){w.document.write(body);w.document.close();showToast('🖨 Reprint opened for '+(sale.orderNum||'transaction')+'.','success');}
+  if(w){w.document.write(body);w.document.close();showToast('Reprint opened for '+(sale.orderNum||'transaction')+'.','success');}
   else showToast('Allow popups to reprint receipts.','error');
 }
 
