@@ -4683,16 +4683,10 @@ async function _sendESCPOS(char){
   await raw([ESC,0x40,ESC,0x4D,0x01,ESC,0x32]);
   await raw([ESC,0x61,0x01]);
 
-  // Target mockup uses a wide, shallow logo. Keep it centered and smaller vertically.
-  try{
-    var logoRaster=await _escposRasterFromDataURL(LOGO_DATA,270,200);
-    await _btWriteBytes(char,logoRaster);
-    await txt('');
-  }catch(e){
-    await raw([ESC,0x45,1]); await txt('GREEK TO GO TAVERNA'); await raw([ESC,0x45,0]);
-  }
-
-  await raw([ESC,0x61,0x00]);
+  // Compact 58mm text-only brand header for faster Bluetooth printing.
+  await raw([ESC,0x61,0x01,ESC,0x45,0x01]);
+  await txt('GREEKTOGO TAVERNA');
+  await raw([ESC,0x45,0x00,ESC,0x61,0x00]);
   await txt('------------------------------------------');
 
   var orderNo=String(orderCount).padStart(4,'0');
@@ -4767,6 +4761,9 @@ async function _sendESCPOS(char){
   await txt('');
   await txt('------------------------------------------');
   await txt('Thank you! Please come again.');
+  await raw([ESC,0x45,0x01]);
+  await txt('POWERED BY: SALVATION SOLUTIONS');
+  await raw([ESC,0x45,0x00]);
   await txt('\n\n');
   await raw([GS,0x56,0x41,0x03]);
 }
