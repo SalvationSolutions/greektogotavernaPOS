@@ -4822,18 +4822,19 @@ async function _sendESCPOS(char){
   }
   if(method||tenderText||changeText) await txt('------------------------------------------');
 
-  // Target QR size and spacing.
+  // SCANNABLE QR FIX (XP-58IID): print QR with the printer's native ESC/POS
+  // QR command instead of converting the QR image to a large raster bitmap.
+  // This avoids dropped/corrupted bitmap rows over Bluetooth.
   await raw([ESC,0x61,0x01]);
   try{
-    var qrRaster=await _escposRasterFromDataURL(QR_DATA,150,185);
-    await _btWriteBytes(char,qrRaster);
+    await _printNativeQRCode(char,'https://salvationsolutions.github.io/GreekToGoTaverna-RegistrationForm/');
     await txt('');
     await raw([ESC,0x45,1]);
     await txt('SCAN TO REGISTER');
     await txt('AND JOIN OUR LOYALTY PROGRAM');
     await raw([ESC,0x45,0]);
   }catch(e){
-    await txt('[ QR IMAGE ERROR ]');
+    await txt('[ QR PRINT ERROR ]');
   }
 
   await txt('');
