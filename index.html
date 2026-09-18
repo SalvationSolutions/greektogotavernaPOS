@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.4-EXPENSES-INSTANT-OPEN">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.5-EXPENSES-LIVE-READ">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2081,7 +2081,7 @@ var expensesData=[];
 
 (function primeExpensesCache(){
   try{
-    var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v934')||'[]');
+    var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v935')||'[]');
     if(Array.isArray(cached)) expensesData=cached;
   }catch(e){}
 })();
@@ -2098,48 +2098,32 @@ function expenseMoney(v){ return '₱'+Number(v||0).toLocaleString('en-PH',{mini
 
 async function refreshExpenses(){
   initExpenseDate();
-  var body=document.getElementById('expenses-table-body');
-
-  // v9.3.4: open Expenses immediately. Never leave the table in a Loading state.
   renderExpenses();
-
   var url=SHEETS_URL;
-  if(!url){
-    showToast('Expenses: Google Sheets URL is missing.','error');
-    return;
-  }
+  if(!url){showToast('Expenses: Google Sheets URL is missing.','error');return;}
 
-  // Login already proves POST works on this deployment. Use one read request only.
-  // A 6-second UI deadline guarantees the Expenses tab stays usable.
-  var timedOut=false;
-  var deadline=new Promise(function(resolve){
-    setTimeout(function(){timedOut=true;resolve(null);},6000);
+  var nonce=Date.now();
+  var data={_ts:nonce};
+  // READ ONLY: race POST and JSONP. This does not create/update any sheet row.
+  // It bypasses stale browser/server responses and uses whichever transport returns first.
+  var post=_expensePostTransport(url,'getExpenses',data).then(function(r){
+    if(r&&r.ok)return r; throw new Error((r&&r.error)||'POST failed');
   });
-
-  var request=_expensePostTransport(url,'getExpenses',{})
-    .then(function(r){return r;})
-    .catch(function(){return null;});
-
-  var res=null;
-  try{res=await Promise.race([request,deadline]);}catch(e){res=null;}
-
-  if(res && res.authRequired){
-    showToast('Your session expired. Please sign in again.','error');
-    return;
-  }
-
-  if(res && res.ok){
-    expensesData=Array.isArray(res.items)?res.items:[];
-    try{localStorage.setItem('gtg_expenses_cache_v934',JSON.stringify(expensesData));}catch(e){}
-    renderExpenses();
-    return;
-  }
-
-  // Keep last-known data on screen. Do not replace it with "Loading".
-  if(timedOut){
-    showToast('Expenses sync is taking too long. Showing last saved data.','error');
-  }else{
-    showToast('Expenses could not refresh. Showing last saved data.','error');
+  var jsonp=_jsonpAction(url,'getExpenses',data,10000).then(function(r){
+    if(r&&r.ok)return r; throw new Error((r&&r.error)||'JSONP failed');
+  });
+  var timeout=new Promise(function(_,reject){setTimeout(function(){reject(new Error('Expenses sync timed out'));},10500);});
+  try{
+    var res=await Promise.race([Promise.any([post,jsonp]),timeout]);
+    if(res&&res.ok){
+      expensesData=Array.isArray(res.items)?res.items:[];
+      try{localStorage.setItem('gtg_expenses_cache_v935',JSON.stringify(expensesData));}catch(e){}
+      renderExpenses();
+      showToast('✅ Expenses synced: '+expensesData.length+' record'+(expensesData.length===1?'':'s')+'.','success');
+      return;
+    }
+  }catch(e){
+    showToast('Expenses refresh failed: '+String(e&&e.message?e.message:e),'error');
   }
 }
 
@@ -2194,7 +2178,7 @@ async function saveExpense(){
     showToast('Expense saved to Google Sheets.','success');
     var saved=(res&&res.item)?res.item:{date:_expenseToday(),item:'',amount:0,status:'PAID',remarks:''};
     expensesData.push(saved);
-    try{localStorage.setItem('gtg_expenses_cache_v934',JSON.stringify(expensesData));}catch(e){}
+    try{localStorage.setItem('gtg_expenses_cache_v935',JSON.stringify(expensesData));}catch(e){}
     renderExpenses();
     
   }finally{
