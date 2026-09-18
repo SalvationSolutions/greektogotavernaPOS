@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2-GRABFOOD-DUPLICATE-FIX-0918">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2-FAST-LOGIN-FAST-SYNC-GRAB-DEDUPE-0918">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1997,7 +1997,7 @@ let _heartbeatTimer   = null;
 let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
-const CALL_TIMEOUT_MS = 18000;      // 12s per individual request
+const CALL_TIMEOUT_MS = 10000;      // fast read/sync timeout; sale writes use separate safe verification
 const SALE_WRITE_TIMEOUT_MS = 4500; // never make cashier wait long for a lost write response
 const SALE_VERIFY_TIMEOUT_MS = 2200; // each exact Transaction ID verification attempt
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
@@ -2103,14 +2103,73 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // GitHub Pages -> Apps Script: use JSONP for login too.
-  // This avoids the cross-origin POST redirect/CORS failure on mobile/hosted browsers.
-  // Backend doGet() must allow action=login and call login_(body).
+  // FAST LOGIN v9.2:
+  // Race POST and JSONP instead of waiting up to 18 seconds for JSONP first.
+  // Whichever valid response arrives first wins. This keeps Safari/iPhone JSONP
+  // compatibility while allowing browsers with working POST to sign in faster.
   if(action==='login'){
+    var loginData=data||{};
+    var LOGIN_FAST_TIMEOUT_MS=9000;
+
+    function validLoginResponse(r){
+      return r!==null && r!==undefined && typeof r==='object';
+    }
+
+    var postAttempt=_postTransport(url,'login',loginData)
+      .then(function(r){ if(validLoginResponse(r)) return r; throw new Error('Empty POST login response.'); });
+
+    var jsonpAttempt=_jsonpAction(url,'login',loginData,LOGIN_FAST_TIMEOUT_MS)
+      .then(function(r){ if(validLoginResponse(r)) return r; throw new Error('Empty JSONP login response.'); });
+
     try{
-      return await _jsonpAction(url,'login',data||{},18000);
+      // Promise.any resolves with the first successful transport and ignores the
+      // slower/failed one. Both requests use the same credentials; backend login
+      // remains authoritative.
+      if(typeof Promise.any==='function'){
+        return await Promise.any([postAttempt,jsonpAttempt]);
+      }
+
+      // Compatibility fallback for older browsers: JSONP remains reliable.
+      return await jsonpAttempt;
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
+      return null;
+    }
+  }
+
+  // FAST GOOGLE SYNC v9.2:
+  // Read-only actions are safe to race over POST + JSONP because they do not mutate
+  // Google Sheets. The first valid response wins, which reduces waiting on redirects
+  // or a slow transport. WRITE actions continue through the existing single-path
+  // logic below so they are never blindly duplicated.
+  var fastReadActions=[
+    'ping','salesStatus','getSales','findSaleByTransactionId',
+    'getInventory','getPosMenu','getCashiers','getShiftLog',
+    'getKitchenOrders','getHeldOrders','getEOD','getEODReports',
+    'getEODDetail','getSecurityAudit'
+  ];
+
+  if(fastReadActions.indexOf(action)>-1){
+    var readData=data||{};
+    var READ_FAST_TIMEOUT_MS=8000;
+
+    function validSyncResponse(r){
+      return r!==null && r!==undefined && typeof r==='object';
+    }
+
+    var readPost=_postTransport(url,action,readData)
+      .then(function(r){ if(validSyncResponse(r)) return r; throw new Error('Empty POST sync response.'); });
+
+    var readJsonp=_jsonpAction(url,action,readData,READ_FAST_TIMEOUT_MS)
+      .then(function(r){ if(validSyncResponse(r)) return r; throw new Error('Empty JSONP sync response.'); });
+
+    try{
+      if(typeof Promise.any==='function'){
+        return await Promise.any([readPost,readJsonp]);
+      }
+      return await readJsonp;
+    }catch(readErr){
+      _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(readErr.message||readErr));
       return null;
     }
   }
@@ -4398,7 +4457,11 @@ async function doLogin(){
 
   _loginBusy=true;
   var btn=document.querySelector('.login-btn');
-  if(btn) btn.disabled=true;
+  var originalBtnText=btn ? btn.textContent : '';
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='SIGNING IN…';
+  }
 
   try{
     var result=null;
@@ -4451,7 +4514,10 @@ async function doLogin(){
     if(errEl) errEl.textContent='Connection problem while signing in. Please try again.';
   }finally{
     _loginBusy=false;
-    if(btn) btn.disabled=false;
+    if(btn){
+      btn.disabled=false;
+      if(originalBtnText) btn.textContent=originalBtnText;
+    }
   }
 }
 
