@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-58MM-FINAL-COMPACT-0915">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2-GRABFOOD-DUPLICATE-FIX-0918">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1870,7 +1870,9 @@ function _normalizeAndSaveInventory(items){
 }
 
 let order = [];
-let orderCount = parseInt(localStorage.getItem('greektogo_order_count') || '1');
+// Display-only fallback. Google Sheets/Apps Script is the authority for order numbers.
+let orderCount = 1;
+try{ localStorage.removeItem('greektogo_order_count'); }catch(e){}
 let editingId = null;
 let shiftLog = [];
 let activeCashier = null;
@@ -1995,7 +1997,7 @@ let _heartbeatTimer   = null;
 let _isReconnecting   = false;      // prevent multiple concurrent loops
 const RETRY_DELAY_MS  = 20000;      // 15s between reconnect attempts
 const HEARTBEAT_MS    = 90000;      // ping every 60s when connected
-const CALL_TIMEOUT_MS = 8000;      // 12s per individual request
+const CALL_TIMEOUT_MS = 18000;      // 12s per individual request
 const SALE_WRITE_TIMEOUT_MS = 4500; // never make cashier wait long for a lost write response
 const SALE_VERIFY_TIMEOUT_MS = 2200; // each exact Transaction ID verification attempt
 const OFFLINE_QUEUE_KEY = 'gtg_offline_queue';
@@ -2106,7 +2108,7 @@ async function _call(url, action, data){
   // Backend doGet() must allow action=login and call login_(body).
   if(action==='login'){
     try{
-      return await _jsonpAction(url,'login',data||{},5000);
+      return await _jsonpAction(url,'login',data||{},18000);
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
@@ -3281,8 +3283,11 @@ async function finalizePayment(method,gcashNum,gcashRef){
       resetPaymentButtonSoon(method,5000);
       return false;
     }
+    // The backend may correct the order number if another device completed a sale first.
+    var canonicalOrdNum=String((saveResult&&saveResult.orderNum)||ordNum).replace(/^#/,'');
+    if(!/^\d+$/.test(canonicalOrdNum)) canonicalOrdNum=ordNum;
     setPaymentButtonStatus(method,'saved');
-    showSalesLogStatus('success',{method:method,orderNum:ordNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId});
+    showSalesLogStatus('success',{method:method,orderNum:canonicalOrdNum,total:saleTot,reference:(method==='GCash'?gcashNum:''),transactionId:_pendingTransactionId});
     resetPaymentButtonSoon(method,2400);
 
     // Only deduct menu stock after SalesLog confirms a NEW sale.
@@ -3310,8 +3315,8 @@ async function finalizePayment(method,gcashNum,gcashRef){
     if(method==='GCash'&&gcashRef&&gcashRef!=='N/A'){gref.style.display='block';gref.textContent=`GCash Account: ${gcashRef}`;}
     else gref.style.display='none';
     document.getElementById('r-cashier').textContent=activeCashier||(googleUser&&googleUser.name)||'—';
-    document.getElementById('r-ordnum').textContent='#'+ordNum;
-    orderCount++; localStorage.setItem('greektogo_order_count',orderCount);
+    document.getElementById('r-ordnum').textContent='#'+canonicalOrdNum;
+    orderCount=(parseInt(canonicalOrdNum,10)||0)+1;
     _pendingTransactionId='';
     _duplicateTransactionInfo=null;
 
@@ -3352,7 +3357,15 @@ function recalcGrabSummary(){
   document.getElementById('grab-s-rate').textContent=rate;
 }
 
-function logDeliveryOrder(platform){
+var _grabLogBusy=false;
+
+function _grabTransactionId(orderId){
+  // Grab's own Order ID is the permanent idempotency key.
+  // Same Grab Order ID = same SalesLog transaction, even after refresh/retry.
+  return 'GRAB-'+String(orderId||'').trim().toUpperCase().replace(/\s+/g,'');
+}
+
+async function logDeliveryOrder(platform){
   const pre='grab';
   const oid=document.getElementById(`${pre}-oid`).value.trim();
   const cust=document.getElementById(`${pre}-cust`).value.trim();
@@ -3361,29 +3374,84 @@ function logDeliveryOrder(platform){
   const dt=document.getElementById(`${pre}-dt`).value;
   const status=document.getElementById(`${pre}-status`).value;
   const rate=parseFloat(document.getElementById(`${pre}-rate`).value)||0;
-  if(!oid||!amt){showToast('Enter Order ID and Amount!','error');return;}
-  const comm=amt*(rate/100);
-  const net=amt-comm;
-  const dateStr=dt ? new Date(dt).toLocaleString('en-PH') : new Date().toLocaleString('en-PH');
-  const platformLabel='GrabFood';
-  const entry={id:Date.now(),oid,cust:cust||'Unknown',amt,items,dt,status,rate,comm,net,logged:new Date().toLocaleString('en-PH')};
+  if(!oid||!amt){showToast('Enter Order ID and Amount!','error');return false;}
+  if(_grabLogBusy){showToast('GrabFood order is already saving. Please wait.','warning');return false;}
 
-  // ── Push to Google Sheets SalesLog ──────────────────
-  pushSaleToSheets({
-    orderNum: oid,
-    date: dateStr,
-    customer: cust||'Unknown',
-    cashier: activeCashier||'—',
-    method: platformLabel,
-    items: items ? items.split(',').map(function(s){return {qty:'', name:s.trim()};}) : [],
-    subtotal: amt.toFixed(2),
-    discount: comm.toFixed(2),
-    discLabel: `${platformLabel} Commission (${rate}%)`,
-    vat: '0.00',  // VAT removed
-    total: net.toFixed(2)
+  const txnId=_grabTransactionId(oid);
+
+  // Immediate device-side duplicate guard.
+  const localDup=(Array.isArray(grabOrders)?grabOrders:[]).some(function(o){
+    return _grabTransactionId(o.oid)===txnId;
   });
+  if(localDup){
+    showToast('⛔ GrabFood Order '+oid+' is already recorded.','error');
+    return false;
+  }
 
-  if(platform==='grab'){
+  const btn=document.querySelector('.grab-log-btn');
+  const oldBtnText=btn?btn.textContent:'';
+  _grabLogBusy=true;
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='⏳ SAVING…';
+    btn.style.opacity='.6';
+    btn.style.pointerEvents='none';
+  }
+
+  try{
+    // Server-side pre-check. Never resend an already recorded Grab Order ID.
+    if(SHEETS_URL){
+      try{
+        const existing=await _jsonpAction(
+          SHEETS_URL,
+          'findSaleByTransactionId',
+          {transactionId:txnId},
+          SALE_VERIFY_TIMEOUT_MS
+        );
+        if(existing && existing.ok && existing.found){
+          showToast('⛔ GrabFood Order '+oid+' is already in SalesLog. No duplicate created.','error');
+          return false;
+        }
+      }catch(e){
+        // Do not fail only because the pre-check timed out.
+        // pushSaleToSheets + backend transactionId protection remains authoritative.
+      }
+    }
+
+    const comm=amt*(rate/100);
+    const net=amt-comm;
+    const dateStr=dt ? new Date(dt).toLocaleString('en-PH') : new Date().toLocaleString('en-PH');
+    const platformLabel='GrabFood';
+    const entry={
+      id:Date.now(),oid,cust:cust||'Unknown',amt,items,dt,status,rate,comm,net,
+      transactionId:txnId,logged:new Date().toLocaleString('en-PH')
+    };
+
+    const saveResult=await pushSaleToSheets({
+      transactionId: txnId,
+      orderNum: oid,
+      date: dateStr,
+      customer: cust||'Unknown',
+      cashier: activeCashier||'—',
+      method: platformLabel,
+      items: items ? items.split(',').map(function(s){return {qty:'', name:s.trim()};}) : [],
+      subtotal: amt.toFixed(2),
+      discount: comm.toFixed(2),
+      discLabel: `${platformLabel} Commission (${rate}%)`,
+      vat: '0.00',
+      total: net.toFixed(2)
+    });
+
+    if(!saveResult || !saveResult.ok || saveResult.saved===false){
+      if(saveResult && saveResult.duplicate){
+        showToast('⛔ GrabFood Order '+oid+' is already recorded. No duplicate created.','error');
+      }else{
+        showToast('⛔ GrabFood order was NOT confirmed. Form kept open — do not re-enter it.','error');
+      }
+      return false;
+    }
+
+    // Only add to local Grab history AFTER SalesLog confirms the write.
     grabOrders.unshift(entry);
     localStorage.setItem('greektogo_grab_orders',JSON.stringify(grabOrders));
     document.getElementById('grab-oid').value='';
@@ -3392,10 +3460,18 @@ function logDeliveryOrder(platform){
     document.getElementById('grab-items').value='';
     document.getElementById('grab-status').value='completed';
     recalcGrabSummary();
-    renderDeliveryStats('grab'); renderDeliveryTable('grab');
-    showToast('🟢 GrabFood order synced to Sheets!','grab-toast');
-  } else {
-    recalcPandaSummary();
+    renderDeliveryStats('grab');
+    renderDeliveryTable('grab');
+    showToast('🟢 GrabFood order confirmed in SalesLog!','grab-toast');
+    return true;
+  } finally {
+    _grabLogBusy=false;
+    if(btn){
+      btn.disabled=false;
+      btn.textContent=oldBtnText||'➕ Log GrabFood Order';
+      btn.style.opacity='';
+      btn.style.pointerEvents='';
+    }
   }
 }
 
@@ -3972,6 +4048,12 @@ async function _initialSync(){
     showToast('⚠️ SalesLog check unavailable; loading menu and inventory anyway.','warning');
   } else {
     _sheetsOnline = true;
+    // Apps Script is the permanent source of truth for the next order number.
+    if(Number(health.nextOrderNumber) > 0){
+      orderCount = Number(health.nextOrderNumber);
+      var orderNumEl = document.getElementById('order-num');
+      if(orderNumEl) orderNumEl.textContent = 'Order #'+String(orderCount).padStart(4,'0');
+    }
   }
 
   // Connected or partially available — fetch all data
@@ -5872,11 +5954,19 @@ setTimeout(_updateSyncBadge, 500);
 </div>
 
 <script>
+// Permanent anti-stale-build protection.
+// This POS is online-first; remove older service workers/caches that can keep a
+// tablet/laptop on an obsolete HTML/endpoint while another device has the new build.
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('sw.js')
-      .then(function(r){ console.log('SW ok'); })
-      .catch(function(e){ console.log('SW fail',e); });
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ try{ r.unregister(); }catch(e){} });
+    }).catch(function(){});
+    if(window.caches && caches.keys){
+      caches.keys().then(function(keys){
+        keys.forEach(function(k){ caches.delete(k); });
+      }).catch(function(){});
+    }
   });
 }
 
