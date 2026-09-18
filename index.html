@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.20-JSON-CONNECTIONS-REBUILT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.22-SYNC-QUEUE-MENU-RETRY">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -945,6 +945,26 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 </style>
 
 <!-- FINAL XP-58IID ONE RECEIPT PATH BUILD: 2026-09-15 -->
+<style id="gtg-v9321-responsive">
+html,body{max-width:100%;overflow-x:hidden}*{box-sizing:border-box}
+img,svg,canvas{max-width:100%} input,select,textarea,button{max-width:100%}
+@media(max-width:900px){
+.nav-tabs,.top-tabs,.tabs,.tab-bar{overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-wrap:nowrap!important}
+.nav-tabs::-webkit-scrollbar,.top-tabs::-webkit-scrollbar,.tabs::-webkit-scrollbar,.tab-bar::-webkit-scrollbar{display:none}
+.nav-tabs>*,.top-tabs>*,.tabs>*,.tab-bar>*{flex:0 0 auto!important}
+.table-wrap,.table-container,.sales-table-wrap,.inventory-table-wrap,.expenses-table-wrap{overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+}
+@media(max-width:600px){
+body{font-size:14px}.content,.main-content,.page-content,.tab-content{padding-left:12px!important;padding-right:12px!important}
+.card,.panel,.form-card,.expenses-form{border-radius:18px!important}
+input,select,textarea{font-size:16px!important;min-height:48px}button,.btn{min-height:44px;touch-action:manipulation}
+.login-box{width:calc(100vw - 28px)!important;max-width:520px!important;padding:26px 20px!important}
+.login-box h1{font-size:clamp(25px,7vw,38px)!important;white-space:normal!important;text-align:center}
+.expenses-form,.expense-form{width:100%!important}#expenses-table-body td{white-space:normal;overflow-wrap:anywhere}
+}
+@media(min-width:601px) and (max-width:1100px){.content,.main-content,.page-content,.tab-content{padding-left:18px!important;padding-right:18px!important}}
+@media(min-width:1400px){.content,.main-content,.page-content,.tab-content{max-width:1600px;margin-left:auto;margin-right:auto}}
+</style>
 </head>
 <body>
 
@@ -1836,7 +1856,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.20';
+const POS_BUILD = '9.3.22';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2276,8 +2296,13 @@ function _jsonp(fullUrl, timeoutMs){
 }
 
 
+function displayText(v){
+  var x=String(v == null ? '' : v);
+  if(/%[0-9A-Fa-f]{2}/.test(x)){try{x=decodeURIComponent(x);}catch(e){}}
+  return x;
+}
 function esc(v){
-  return String(v == null ? '' : v)
+  return displayText(v)
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
@@ -2424,6 +2449,7 @@ async function _call(url, action, data){
   ];
 
   if(fastReadActions.indexOf(action)>-1){
+    return _queueSheetRead(async function(){
     try{
       var readPayload=Object.assign({},data||{});
       if(_authSession && action!=='ping') readPayload.sessionToken=_authSession;
@@ -2456,6 +2482,7 @@ async function _call(url, action, data){
       _setCallError(String(action||'request').toUpperCase()+' FAILED — '+readMsg);
       return null;
     }
+    });
   }
 
   // INVENTORY FAST SAVE v9.2.3:
@@ -2551,7 +2578,14 @@ async function _call(url, action, data){
 }
 
 // ── Main sheetsCall ───────────────────────────────────────────────────────────
-async function sheetsCall(action, body){
+async // v9.3.22 — serialize authenticated Google Sheets reads to avoid simultaneous Apps Script contention.
+var _gtgReadQueue=Promise.resolve();
+function _queueSheetRead(task){
+  var run=_gtgReadQueue.then(task,task);
+  _gtgReadQueue=run.catch(function(){});
+  return run;
+}
+function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
   var result = await _call(SHEETS_URL, action, body||{});
   if(result && result.authRequired){
@@ -6449,7 +6483,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.20';
+  var BUILD='9.3.22';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
