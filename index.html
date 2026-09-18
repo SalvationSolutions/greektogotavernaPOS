@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.24-STABLE-NO-SYNC-QUEUE">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.25-UNIFIED-JSONP">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1856,7 +1856,7 @@ input,select,textarea{font-size:16px!important;min-height:48px}button,.btn{min-h
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.24';
+const POS_BUILD = '9.3.25';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2257,44 +2257,31 @@ function _setCallError(msg){
 
 function _jsonp(fullUrl, timeoutMs){
   return new Promise(function(resolve,reject){
-    var cb='_gtgcb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
+    var cb='gtgcb'+Date.now()+Math.floor(Math.random()*100000);
     var script=document.createElement('script');
-    var finished=false;
-    var timer=setTimeout(function(){
-      if(finished) return;
-      finished=true; cleanup();
-      reject(new Error('Google Apps Script JSONP timed out.'));
-    }, Number(timeoutMs)||CALL_TIMEOUT_MS);
-
+    var done=false;
     function cleanup(){
-      try{ delete window[cb]; }catch(e){ window[cb]=undefined; }
-      if(script && script.parentNode) script.parentNode.removeChild(script);
       clearTimeout(timer);
+      try{delete window[cb];}catch(e){window[cb]=undefined;}
+      try{script.remove();}catch(e){}
     }
-
     window[cb]=function(data){
-      if(finished) return;
-      finished=true; cleanup(); resolve(data);
+      if(done)return; done=true; cleanup(); resolve(data);
     };
-
     script.onerror=function(){
-      // Apps Script redirects can surface a transient script error in some browsers.
-      // Keep waiting for the callback/timeout instead of killing login immediately.
+      if(done)return; done=true; cleanup();
+      reject(new Error('Apps Script connection failed.'));
     };
-
-    script.onload=function(){
-      // Apps Script can redirect before the JSONP callback executes.
-      // Do not fail on load; allow the callback or normal timeout to decide.
-    };
-
-    var sep=fullUrl.indexOf('?')>-1?'&':'?';
-    script.src=fullUrl+sep+'callback='+encodeURIComponent(cb)+'&_gtgcbust='+Date.now();
+    var timer=setTimeout(function(){
+      if(done)return; done=true; cleanup();
+      reject(new Error('Apps Script did not respond in time.'));
+    },Number(timeoutMs)||30000);
     script.async=true;
-    script.referrerPolicy='no-referrer';
+    script.src=fullUrl+(fullUrl.indexOf('?')>-1?'&':'?')
+      +'callback='+encodeURIComponent(cb)+'&_='+Date.now();
     document.head.appendChild(script);
   });
 }
-
 
 function displayText(v){
   var x=String(v == null ? '' : v);
@@ -2311,26 +2298,12 @@ function esc(v){
 }
 
 async function _jsonpAction(url,action,data,timeoutMs){
-  // v9.3.20 compatibility wrapper: NO JSONP.
-  // Existing callers now use the verified direct GET + JSON response transport.
   var payload=Object.assign({},data||{});
   if(_authSession && action!=='login' && action!=='ping') payload.sessionToken=_authSession;
   var full=url+(url.indexOf('?')>-1?'&':'?')
     +'action='+encodeURIComponent(action)
-    +'&payload='+encodeURIComponent(JSON.stringify(payload))
-    +'&_gtg='+Date.now();
-  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-  var timer=ctrl?setTimeout(function(){try{ctrl.abort();}catch(e){}},Number(timeoutMs)||20000):null;
-  try{
-    var r=await fetch(full,{method:'GET',redirect:'follow',cache:'no-store',credentials:'omit',
-      signal:ctrl?ctrl.signal:undefined});
-    var t=await r.text();
-    if(!r.ok) throw new Error('HTTP '+r.status+' '+r.statusText);
-    try{return JSON.parse(t);}
-    catch(e){throw new Error('Apps Script returned non-JSON: '+String(t||'').slice(0,160));}
-  }finally{
-    if(timer)clearTimeout(timer);
-  }
+    +'&payload='+encodeURIComponent(JSON.stringify(payload));
+  return _jsonp(full,timeoutMs||30000);
 }
 
 async function _fetchTransport(fullUrl){
@@ -2390,36 +2363,10 @@ async function _call(url, action, data){
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
-    // v9.3.18: direct GET login.
-    // The verified Apps Script deployment returns normal JSON when no callback is supplied.
-    // This bypasses the JSONP callback path that timed out on the POS device.
     try{
-      var loginPayload=Object.assign({},data||{});
-      var loginUrl=url+(url.indexOf('?')>-1?'&':'?')
-        +'action=login&payload='+encodeURIComponent(JSON.stringify(loginPayload))
-        +'&_gtg='+Date.now();
-      var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-      var timer=ctrl?setTimeout(function(){try{ctrl.abort();}catch(e){}},20000):null;
-      try{
-        var resp=await fetch(loginUrl,{
-          method:'GET',
-          redirect:'follow',
-          cache:'no-store',
-          credentials:'omit',
-          signal:ctrl?ctrl.signal:undefined
-        });
-        var txt=await resp.text();
-        if(!resp.ok) throw new Error('HTTP '+resp.status);
-        var result=JSON.parse(txt);
-        return result;
-      }finally{
-        if(timer)clearTimeout(timer);
-      }
+      return await _jsonpAction(url,'login',data||{},30000);
     }catch(loginErr){
-      var msg=(loginErr&&loginErr.name==='AbortError')
-        ? 'Google Apps Script login took longer than 20 seconds.'
-        : ((loginErr&&loginErr.message)||String(loginErr));
-      _setCallError('LOGIN FAILED — '+msg);
+      _setCallError('LOGIN FAILED — '+((loginErr&&loginErr.message)||String(loginErr)));
       return null;
     }
   }
@@ -2450,35 +2397,9 @@ async function _call(url, action, data){
 
   if(fastReadActions.indexOf(action)>-1){
     try{
-      var readPayload=Object.assign({},data||{});
-      if(_authSession && action!=='ping') readPayload.sessionToken=_authSession;
-      var readUrl=url+(url.indexOf('?')>-1?'&':'?')
-        +'action='+encodeURIComponent(action)
-        +'&payload='+encodeURIComponent(JSON.stringify(readPayload))
-        +'&_gtg='+Date.now();
-
-      var readCtrl=(typeof AbortController!=='undefined')?new AbortController():null;
-      var readTimer=readCtrl?setTimeout(function(){try{readCtrl.abort();}catch(e){}},30000):null;
-      try{
-        var readResp=await fetch(readUrl,{
-          method:'GET',
-          redirect:'follow',
-          cache:'no-store',
-          credentials:'omit',
-          signal:readCtrl?readCtrl.signal:undefined
-        });
-        var readText=await readResp.text();
-        if(!readResp.ok) throw new Error('HTTP '+readResp.status);
-        var readResult=JSON.parse(readText);
-        return readResult;
-      }finally{
-        if(readTimer)clearTimeout(readTimer);
-      }
+      return await _jsonpAction(url,action,data||{},30000);
     }catch(readErr){
-      var readMsg=(readErr&&readErr.name==='AbortError')
-        ? 'Google Apps Script read took longer than 30 seconds.'
-        : ((readErr&&readErr.message)||String(readErr));
-      _setCallError(String(action||'request').toUpperCase()+' FAILED — '+readMsg);
+      _setCallError(String(action||'request').toUpperCase()+' FAILED — '+((readErr&&readErr.message)||String(readErr)));
       return null;
     }
   }
@@ -6475,7 +6396,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.24';
+  var BUILD='9.3.25';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
@@ -6814,11 +6735,15 @@ function printKitchenTicket(kitchenOrder){
   function warmAppsScript(){
     try{
       var u='https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
-      fetch(u+'?action=ping&_gtg='+Date.now(),{method:'GET',redirect:'follow',cache:'no-store',credentials:'omit'})
-        .catch(function(){});
+      var cb='gtgwarm'+Date.now();
+      var sc=document.createElement('script');
+      window[cb]=function(){try{delete window[cb];sc.remove();}catch(e){}};
+      sc.src=u+'?action=ping&callback='+cb+'&_='+Date.now();
+      sc.async=true; document.head.appendChild(sc);
+      setTimeout(function(){try{delete window[cb];sc.remove();}catch(e){}},12000);
     }catch(e){}
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',warmAppsScript,{once:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',warmAppsScript,{once:true});
   else warmAppsScript();
 })();
 </script>
