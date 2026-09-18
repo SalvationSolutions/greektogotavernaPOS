@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.2-EXPENSES-NO-STUCK-SYNC">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.4-EXPENSES-INSTANT-OPEN">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1288,7 +1288,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="expenses-table-wrap">
       <table class="expenses-table">
         <thead><tr><th>Date</th><th>ITEM</th><th class="amount">Amount</th><th>Status</th><th>Remarks</th></tr></thead>
-        <tbody id="expenses-table-body"><tr><td colspan="5" class="expenses-empty">Loading expenses…</td></tr></tbody>
+        <tbody id="expenses-table-body"><tr><td colspan="5" class="expenses-empty">No expense records loaded yet.</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -2081,7 +2081,7 @@ var expensesData=[];
 
 (function primeExpensesCache(){
   try{
-    var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v932')||'[]');
+    var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v934')||'[]');
     if(Array.isArray(cached)) expensesData=cached;
   }catch(e){}
 })();
@@ -2100,55 +2100,46 @@ async function refreshExpenses(){
   initExpenseDate();
   var body=document.getElementById('expenses-table-body');
 
-  // Never blank an already loaded table while refreshing.
-  if(expensesData.length){
-    renderExpenses();
-  }else if(body){
-    body.innerHTML='<tr><td colspan="5" class="expenses-empty">Loading expenses…</td></tr>';
-  }
+  // v9.3.4: open Expenses immediately. Never leave the table in a Loading state.
+  renderExpenses();
 
   var url=SHEETS_URL;
   if(!url){
-    if(body && !expensesData.length) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Google Sheets URL is missing.</td></tr>';
+    showToast('Expenses: Google Sheets URL is missing.','error');
     return;
   }
 
-  // getExpenses is READ-ONLY, so POST and JSONP may safely race.
-  // Whichever responds first wins. A hard deadline prevents a permanent Syncing state.
-  var post=_expensePostTransport(url,'getExpenses',{}).catch(function(){return null;});
-  var jsonp=_jsonpAction(url,'getExpenses',{},7000).catch(function(){return null;});
-  var deadline=new Promise(function(resolve){setTimeout(function(){resolve(null);},8000);});
+  // Login already proves POST works on this deployment. Use one read request only.
+  // A 6-second UI deadline guarantees the Expenses tab stays usable.
+  var timedOut=false;
+  var deadline=new Promise(function(resolve){
+    setTimeout(function(){timedOut=true;resolve(null);},6000);
+  });
+
+  var request=_expensePostTransport(url,'getExpenses',{})
+    .then(function(r){return r;})
+    .catch(function(){return null;});
 
   var res=null;
-  try{
-    res=await Promise.race([
-      Promise.any([
-        post.then(function(r){if(r&&typeof r==='object')return r;throw new Error('POST empty');}),
-        jsonp.then(function(r){if(r&&typeof r==='object')return r;throw new Error('JSONP empty');})
-      ]).catch(function(){return null;}),
-      deadline
-    ]);
-  }catch(e){res=null;}
+  try{res=await Promise.race([request,deadline]);}catch(e){res=null;}
 
   if(res && res.authRequired){
-    await sheetsCall('whoAmI',{}); // lets the normal session-expired handler run
+    showToast('Your session expired. Please sign in again.','error');
     return;
   }
 
   if(res && res.ok){
     expensesData=Array.isArray(res.items)?res.items:[];
-    try{localStorage.setItem('gtg_expenses_cache_v932',JSON.stringify(expensesData));}catch(e){}
+    try{localStorage.setItem('gtg_expenses_cache_v934',JSON.stringify(expensesData));}catch(e){}
     renderExpenses();
     return;
   }
 
-  // If network is slow, use the last successful Expenses snapshot instead of hanging.
-  if(!expensesData.length){
-    try{
-      var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v932')||'[]');
-      if(Array.isArray(cached) && cached.length){expensesData=cached;renderExpenses();return;}
-    }catch(e){}
-    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Expenses sync timed out. Tap Refresh to try again.</td></tr>';
+  // Keep last-known data on screen. Do not replace it with "Loading".
+  if(timedOut){
+    showToast('Expenses sync is taking too long. Showing last saved data.','error');
+  }else{
+    showToast('Expenses could not refresh. Showing last saved data.','error');
   }
 }
 
@@ -2203,7 +2194,7 @@ async function saveExpense(){
     showToast('Expense saved to Google Sheets.','success');
     var saved=(res&&res.item)?res.item:{date:_expenseToday(),item:'',amount:0,status:'PAID',remarks:''};
     expensesData.push(saved);
-    try{localStorage.setItem('gtg_expenses_cache_v932',JSON.stringify(expensesData));}catch(e){}
+    try{localStorage.setItem('gtg_expenses_cache_v934',JSON.stringify(expensesData));}catch(e){}
     renderExpenses();
     
   }finally{
@@ -4070,21 +4061,29 @@ async function saveItem(){
     return;
   }
   const record={itemCode,description,category,price,unit,uom,begBal,endingStock,supplier,lastUpdated:'',_touchLastUpdated:true,updatedDate:updatedDate};
-  const candidate=stockInventory.map(function(i){return {...i};});
-  if(editingId){
-    const idx=candidate.findIndex(i=>i.id===editingId);
-    if(idx>-1) candidate[idx]={...candidate[idx],...record};
-  } else {
-    const newId=candidate.length?Math.max(...candidate.map(i=>i.id||0))+1:1;
-    candidate.push({id:newId,...record});
-  }
   try{
-    const saved=await pushInventoryToSheets(false,candidate);
-    if(!saved) return;
-    if(!Array.isArray(saved.items)) stockInventory=candidate.map(_normalizeInvItem);
+    // v9.3.3: save ONLY the item being edited/added.
+    // This removes the old 90-row full Inventory rewrite on every Save Item click.
+    const payload={...record};
+    const res=await sheetsCall('saveInventoryItem',{item:payload});
+    if(!res || !res.ok){
+      _addSyncError('Inventory','saveInventoryItem','Google Sheets did not confirm the item save',{item:payload,response:res});
+      showToast('❌ Item was not saved. Please try again.','error');
+      return;
+    }
+
+    const savedItem=_normalizeInvItem(res.item||payload);
+    if(editingId){
+      const idx=stockInventory.findIndex(i=>i.id===editingId);
+      if(idx>-1) stockInventory[idx]={...stockInventory[idx],...savedItem,id:editingId};
+    }else{
+      const newId=stockInventory.length?Math.max(...stockInventory.map(i=>i.id||0))+1:1;
+      stockInventory.push({...savedItem,id:newId});
+    }
+    _saveStockLocally();
     closeModal('item-modal');
     renderInventory();
-    showToast(editingId?'Item updated.':'Item added.','success');
+    showToast(editingId?'✅ Item updated in Google Sheets.':'✅ Item added to Google Sheets.','success');
   }finally{
     _inventorySaveBusy=false;
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText||'Save Item';}
