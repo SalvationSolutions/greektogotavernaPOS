@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2-FAST-LOGIN-FAST-SYNC-GRAB-DEDUPE-0918">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2.1-STABLE-LOGIN-FAST-SYNC-GRAB-DEDUPE-0918">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2103,34 +2103,12 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // FAST LOGIN v9.2:
-  // Race POST and JSONP instead of waiting up to 18 seconds for JSONP first.
-  // Whichever valid response arrives first wins. This keeps Safari/iPhone JSONP
-  // compatibility while allowing browsers with working POST to sign in faster.
+  // STABLE LOGIN v9.2.1:
+  // Use ONE JSONP request only. Apps Script ContentService redirects can make
+  // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
-    var loginData=data||{};
-    var LOGIN_FAST_TIMEOUT_MS=9000;
-
-    function validLoginResponse(r){
-      return r!==null && r!==undefined && typeof r==='object';
-    }
-
-    var postAttempt=_postTransport(url,'login',loginData)
-      .then(function(r){ if(validLoginResponse(r)) return r; throw new Error('Empty POST login response.'); });
-
-    var jsonpAttempt=_jsonpAction(url,'login',loginData,LOGIN_FAST_TIMEOUT_MS)
-      .then(function(r){ if(validLoginResponse(r)) return r; throw new Error('Empty JSONP login response.'); });
-
     try{
-      // Promise.any resolves with the first successful transport and ignores the
-      // slower/failed one. Both requests use the same credentials; backend login
-      // remains authoritative.
-      if(typeof Promise.any==='function'){
-        return await Promise.any([postAttempt,jsonpAttempt]);
-      }
-
-      // Compatibility fallback for older browsers: JSONP remains reliable.
-      return await jsonpAttempt;
+      return await _jsonpAction(url,'login',data||{},10000);
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
