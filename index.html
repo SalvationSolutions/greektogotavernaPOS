@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.7-EXPENSES-ESC-FIX-NO-AUTO-LOGOUT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.9-INVENTORY-EXPENSES-POST-NO-AUTO-LOGOUT">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2112,9 +2112,31 @@ async function refreshExpenses(){
   if(btn){btn.disabled=true;btn.textContent='↻ Syncing…';}
 
   try{
-    // v9.3.6: one authenticated live read from the Expenses sheet.
-    // No POST/JSONP race and no stale Expenses data cache.
-    var res=await _jsonpAction(url,'getExpenses',{_ts:Date.now()},12000);
+    // v9.3.8: Expenses uses POST only.
+    // JSONP is intentionally NOT used here because the browser is timing out
+    // while loading the Apps Script callback script.
+    var controller=new AbortController();
+    var timer=setTimeout(function(){controller.abort();},15000);
+    var response;
+    try{
+      response=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({
+          action:'getExpenses',
+          sessionToken:_authSession,
+          _ts:Date.now()
+        }),
+        signal:controller.signal,
+        cache:'no-store',
+        redirect:'follow'
+      });
+    }finally{
+      clearTimeout(timer);
+    }
+
+    if(!response.ok) throw new Error('HTTP '+response.status);
+    var res=await response.json();
 
     if(res && res.authRequired){
       showToast('Expenses session needs reconnecting. Please sign in once.','error');
@@ -2128,10 +2150,13 @@ async function refreshExpenses(){
     renderExpenses();
     showToast('✅ Expenses synced: '+expensesData.length+' record'+(expensesData.length===1?'':'s')+'.','success');
   }catch(e){
+    var msg=(e && e.name==='AbortError')
+      ? 'Google Sheets took longer than 15 seconds.'
+      : String(e&&e.message?e.message:e);
     if(body && !expensesData.length){
       body.innerHTML='<tr><td colspan="5" class="expenses-empty">Expenses sync failed. Press Refresh to try again.</td></tr>';
     }
-    showToast('Expenses sync failed: '+String(e&&e.message?e.message:e),'error');
+    showToast('Expenses sync failed: '+msg,'error');
   }finally{
     if(btn){btn.disabled=false;btn.textContent='↻ Refresh';}
   }
@@ -2734,19 +2759,40 @@ async function importFromSheets(){
 // Unlike Import, it does not ask for confirmation because it is intended for
 // routine use after changes made directly in Google Sheets.
 async function refreshInventoryFromSheets(){
-  if(!SHEETS_URL){ showToast('No Sheet connected.','error'); return; }
-  showToast('🔄 Refreshing inventory from Google Sheets…','info');
-  var res=await sheetsCall('getInventory');
-  if(!res){ showToast('❌ Refresh failed. Check the Google Sheets connection.','error'); return; }
-  if(!res.items || res.items.length===0){
-    stockInventory=[];
+  var url=SHEETS_URL;
+  if(!url){showToast('Inventory: Google Sheets URL is missing.','error');return;}
+
+  try{
+    // v9.3.9: live authenticated POST read; no JSONP timeout path.
+    var controller=new AbortController();
+    var timer=setTimeout(function(){controller.abort();},15000);
+    var response;
+    try{
+      response=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'getInventory',sessionToken:_authSession,_ts:Date.now()}),
+        signal:controller.signal,
+        cache:'no-store',
+        redirect:'follow'
+      });
+    }finally{clearTimeout(timer);}
+
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    var res=await response.json();
+    if(res&&res.authRequired)throw new Error('AUTH_REQUIRED');
+    if(!res||!res.ok)throw new Error((res&&(res.message||res.error))||'No Inventory response');
+
+    inventory=Array.isArray(res.items)?res.items:[];
+    saveInventoryLocal();
     renderInventory();
-    showToast('⚠️ Google Sheets Inventory is empty.','warning');
-    return;
+    showToast('✅ Inventory refreshed: '+inventory.length+' items.','success');
+    return res;
+  }catch(e){
+    var msg=(e&&e.name==='AbortError')?'Google Sheets took longer than 15 seconds.':String(e&&e.message?e.message:e);
+    showToast('Inventory refresh failed: '+msg,'error');
+    return null;
   }
-  _normalizeAndSaveInventory(res.items);
-  renderInventory();
-  showToast('✅ Inventory refreshed: '+stockInventory.length+' items.','success');
 }
 
 
