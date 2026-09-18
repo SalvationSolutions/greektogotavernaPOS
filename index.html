@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2.4-EXPENSES-TAB-VISIBLE-INVENTORY-FIX">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2.5-SIGNIN-STABLE-EXPENSES-INVENTORY">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2276,7 +2276,9 @@ async function _call(url, action, data){
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
     try{
-      return await _jsonpAction(url,'login',data||{},10000);
+      // One request only: do not race/retry login because that can create duplicate sessions.
+      // Give Apps Script enough time for a cold start / Cashiers sheet read.
+      return await _jsonpAction(url,'login',data||{},25000);
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
       return null;
@@ -4669,7 +4671,10 @@ async function doLogin(){
     result=await _call(SHEETS_URL,'login',{username:username,pin:pin});
 
     if(!result){
-      if(errEl) errEl.textContent='Connection problem while signing in. Please try again.';
+      var detail=String(_lastCallError||'').replace(/^LOGIN FAILED\s*[—-]?\s*/i,'').trim();
+      if(errEl) errEl.textContent=detail
+        ? 'Connection problem: '+detail
+        : 'Connection problem while signing in. Please try again.';
       return;
     }
 
