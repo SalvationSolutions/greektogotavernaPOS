@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2.8-EXPENSES-SYNC-FIXED">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.0-INVENTORY-EXPENSES-FAST">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1593,7 +1593,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         <th>Ending Stocks</th>
         <th>UNIT</th><th>UOM</th>
         <th>Supplier</th>
-        <th>Actions</th>
+        <th>LAST UPDATED</th><th>Actions</th>
       </tr></thead>
       <tbody id="inv-table-body"></tbody>
     </table>
@@ -2149,7 +2149,10 @@ async function saveExpense(){
     document.getElementById('expense-remarks').value='';
     document.getElementById('expense-status').value='PAID';
     showToast('Expense saved to Google Sheets.','success');
-    await refreshExpenses();
+    var saved=(res&&res.item)?res.item:{date:_expenseToday(),item:'',amount:0,status:'PAID',remarks:''};
+    expensesData.push(saved);
+    renderExpenses();
+    
   }finally{
     if(btn){btn.disabled=false;btn.textContent='＋ Add Expense';}
   }
@@ -2273,7 +2276,7 @@ async function _expensePostTransport(url,action,data){
   var payload=Object.assign({action:action},data||{});
   if(_authSession) payload.sessionToken=_authSession;
   var ctrl=new AbortController();
-  var timer=setTimeout(function(){ctrl.abort();},20000);
+  var timer=setTimeout(function(){ctrl.abort();},12000);
   try{
     var r=await fetch(url,{
       method:'POST',
@@ -3831,6 +3834,19 @@ function renderDeliveryTable(platform){
 
 /* ═══════════════════ INVENTORY ═══════════════════ */
 function stockStatus(n){ if(n===0) return ['none','Out of Stock']; if(n<=5) return ['low','Low']; if(n<=20) return ['medium','Medium']; return ['high','Good']; }
+
+function formatInventoryUpdated(v){
+  if(!v) return '—';
+  var d = new Date(v);
+  if(isNaN(d.getTime())) return esc(String(v));
+  try{
+    return d.toLocaleString('en-PH',{
+      year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true
+    });
+  }catch(e){ return esc(String(v)); }
+}
+
 function renderInventoryPills(){
   const cats=['All',...new Set(stockInventory.map(i=>(i.category||i['CATEGORY']||i.cat||'').trim()).filter(c=>c&&c!=='undefined'))];
   const active=window._invActiveCat||'All';
