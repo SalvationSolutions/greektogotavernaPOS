@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.9-INVENTORY-EXPENSES-POST-NO-AUTO-LOGOUT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.10-EXPENSE-TEXT-DECODE-NO-AUTO-LOGOUT">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2100,6 +2100,15 @@ function initExpenseDate(){
   var el=document.getElementById('expense-date');
   if(el && !el.value) el.value=_expenseToday();
 }
+function decodeExpenseText(v){
+  var text=String(v == null ? '' : v);
+  // Only decode when the value actually contains percent-encoded bytes.
+  if(/%[0-9A-Fa-f]{2}/.test(text)){
+    try{return decodeURIComponent(text);}catch(e){}
+  }
+  return text;
+}
+
 function expenseMoney(v){ return '₱'+Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 async function refreshExpenses(){
@@ -2165,7 +2174,7 @@ async function refreshExpenses(){
 function renderExpenses(){
   var body=document.getElementById('expenses-table-body');
   if(!body) return;
-  var total=expensesData.reduce(function(sum,e){ return sum+(String(e.status||'').toUpperCase()==='CANCELLED'?0:Number(e.amount)||0); },0);
+  var total=expensesData.reduce(function(sum,e){ return sum+(String(decodeExpenseText(e.status||'')).toUpperCase()==='CANCELLED'?0:Number(e.amount)||0); },0);
   var totalEl=document.getElementById('expenses-total');
   if(totalEl) totalEl.textContent='Total: '+expenseMoney(total);
 
@@ -2176,10 +2185,10 @@ function renderExpenses(){
   body.innerHTML=expensesData.slice().reverse().map(function(e){
     return '<tr>'+
       '<td>'+esc(String(e.date||''))+'</td>'+
-      '<td><strong>'+esc(String(e.item||''))+'</strong></td>'+
+      '<td><strong>'+esc(String(decodeExpenseText(e.item||'')))+'</strong></td>'+
       '<td class="amount">'+expenseMoney(e.amount)+'</td>'+
-      '<td><span class="expense-status">'+esc(String(e.status||''))+'</span></td>'+
-      '<td>'+esc(String(e.remarks||''))+'</td>'+
+      '<td><span class="expense-status">'+esc(String(decodeExpenseText(e.status||'')))+'</span></td>'+
+      '<td>'+esc(String(decodeExpenseText(e.remarks||'')))+'</td>'+
     '</tr>';
   }).join('');
 }
