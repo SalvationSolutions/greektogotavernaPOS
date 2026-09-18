@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2.5-SIGNIN-STABLE-EXPENSES-INVENTORY">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2.8-EXPENSES-SYNC-FIXED">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2092,7 +2092,8 @@ async function refreshExpenses(){
   if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Syncing with Google Sheets…</td></tr>';
   var res=await sheetsCall('getExpenses',{});
   if(!res || !res.ok){
-    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Unable to load Expenses from Google Sheets.</td></tr>';
+    var detail=(res && (res.message||res.error)) || _lastCallError || 'Unable to load Expenses from Google Sheets.';
+    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Expenses sync error: '+esc(String(detail))+'</td></tr>';
     return;
   }
   expensesData=Array.isArray(res.items)?res.items:[];
@@ -2139,7 +2140,8 @@ async function saveExpense(){
   try{
     var res=await sheetsCall('addExpense',{expense:{date:date,item:item,amount:amount,status:status,remarks:remarks}});
     if(!res || !res.ok){
-      showToast('Expense was not saved to Google Sheets.','error');
+      var detail=(res && (res.message||res.error)) || _lastCallError || 'Google Sheets did not confirm the save.';
+      showToast('Expense not saved: '+String(detail),'error');
       return;
     }
     document.getElementById('expense-item').value='';
@@ -2267,6 +2269,28 @@ async function _postTransport(url,action,data){
   } finally { clearTimeout(timer); }
 }
 
+async function _expensePostTransport(url,action,data){
+  var payload=Object.assign({action:action},data||{});
+  if(_authSession) payload.sessionToken=_authSession;
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();},20000);
+  try{
+    var r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload),
+      redirect:'follow',
+      cache:'no-store',
+      credentials:'omit',
+      signal:ctrl.signal
+    });
+    var t=await r.text();
+    if(!r.ok) throw new Error('HTTP '+r.status+' '+r.statusText);
+    try{return JSON.parse(t);}
+    catch(e){throw new Error('Apps Script returned non-JSON: '+String(t||'').slice(0,160));}
+  }finally{clearTimeout(timer);}
+}
+
 async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
@@ -2275,12 +2299,50 @@ async function _call(url, action, data){
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
+    // v9.2.7: POST is the primary login transport.
+    // IMPORTANT: never race POST and JSONP — login is stateful and must be sent once.
     try{
-      // One request only: do not race/retry login because that can create duplicate sessions.
-      // Give Apps Script enough time for a cold start / Cashiers sheet read.
-      return await _jsonpAction(url,'login',data||{},25000);
+      var controller = (typeof AbortController!=='undefined') ? new AbortController() : null;
+      var timer = controller ? setTimeout(function(){ try{controller.abort();}catch(e){} },12000) : null;
+      try{
+        var resp = await fetch(url,{
+          method:'POST',
+          redirect:'follow',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify(Object.assign({},data||{},{action:'login'})),
+          cache:'no-store',
+          signal:controller ? controller.signal : undefined
+        });
+        if(timer) clearTimeout(timer);
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        var result = await resp.json();
+        if(result && typeof result==='object') return result;
+        throw new Error('Invalid login response');
+      }catch(postErr){
+        if(timer) clearTimeout(timer);
+        // Only fall back when POST itself could not return a response.
+        // The fallback is sequential, never simultaneous.
+        return await _jsonpAction(url,'login',data||{},15000);
+      }
     }catch(loginErr){
       _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
+      return null;
+    }
+  }
+
+  // EXPENSES SYNC v9.2.8:
+  // Use the same POST transport that successfully signs in. Do not race JSONP.
+  // Apps Script can cold-start slowly, so Expenses gets a 20-second request window.
+  if(action==='getExpenses' || action==='addExpense'){
+    try{
+      var expenseResult=await _expensePostTransport(url,action,data||{});
+      if(expenseResult && expenseResult.authRequired) return expenseResult;
+      if(expenseResult && expenseResult.ok===false){
+        _setCallError('EXPENSES FAILED — '+(expenseResult.message||expenseResult.error||'Unknown server error'));
+      }
+      return expenseResult;
+    }catch(expenseErr){
+      _setCallError('EXPENSES FAILED — '+(expenseErr.message||expenseErr));
       return null;
     }
   }
@@ -2294,7 +2356,7 @@ async function _call(url, action, data){
     'ping','salesStatus','getSales','findSaleByTransactionId',
     'getInventory','getPosMenu','getCashiers','getShiftLog',
     'getKitchenOrders','getHeldOrders','getEOD','getEODReports',
-    'getEODDetail','getSecurityAudit','getExpenses'
+    'getEODDetail','getSecurityAudit'
   ];
 
   if(fastReadActions.indexOf(action)>-1){
