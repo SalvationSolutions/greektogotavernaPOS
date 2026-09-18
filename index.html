@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.15-LOGIN-BUTTON-REPAIRED">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.17-LOGIN-FINAL-SYNTAX-REPAIRED">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1836,7 +1836,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.15';
+const POS_BUILD = '9.3.17';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -5837,37 +5837,7 @@ async function reprintSalesTransaction(index){
     +((d.change>0||d.tender>0)?'<div class="r"><span>Change:</span><span>P'+d.change.toFixed(2)+'</span></div>':'')
     +'<hr><div class="c">SCAN TO REGISTER<br>AND JOIN OUR LOYALTY PROGRAM</div><hr>'
     +'<div class="foot">Thank you! Please come again.<br><b>POWERED BY: SALVATION SOLUTIONS</b></div>'
-    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>
-<script>
-(function(){
-  function warmAppsScript(){
-    try{
-      var u=(typeof SHEETS_URL!=='undefined'&&SHEETS_URL)||
-            (typeof GOOGLE_SCRIPT_URL!=='undefined'&&GOOGLE_SCRIPT_URL)||
-            localStorage.getItem('greektogo_sheets_url')||'';
-      if(!u)return;
-      var cb='__gtgWarm'+Date.now();
-      var sc=document.createElement('script');
-      window[cb]=function(){ cleanup(); };
-      function cleanup(){
-        try{sc.remove();delete window[cb];}catch(e){}
-      }
-      sc.async=true;
-      sc.src=u+(u.indexOf('?')>=0?'&':'?')+'action=ping&callback='+encodeURIComponent(cb)+'&_='+Date.now();
-      sc.onerror=cleanup;
-      document.head.appendChild(sc);
-      setTimeout(cleanup,12000);
-    }catch(e){}
-  }
-  if(document.readyState==='loading') {
-    document.addEventListener('DOMContentLoaded',warmAppsScript,{once:true});
-  } else {
-    warmAppsScript();
-  }
-})();
-</script>
-
-</body></html>';
+    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>';
   var w=window.open('','_blank','width=420,height=620');
   if(w){w.document.write(body);w.document.close();}
   else showToast('Allow popups to reprint receipts.','error');
@@ -6465,7 +6435,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.15';
+  var BUILD='9.3.17';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
@@ -6798,5 +6768,27 @@ function printKitchenTicket(kitchenOrder){
 /* ═══════════════════════════════════════════════════════════ */
 
 </script>
+
+<script>
+(function(){
+  function warmAppsScript(){
+    try{
+      var u='https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
+      var cb='__gtgWarm'+Date.now();
+      var sc=document.createElement('script');
+      function cleanup(){ try{sc.remove();delete window[cb];}catch(e){} }
+      window[cb]=cleanup;
+      sc.async=true;
+      sc.src=u+'?action=ping&callback='+encodeURIComponent(cb)+'&_='+Date.now();
+      sc.onerror=cleanup;
+      document.head.appendChild(sc);
+      setTimeout(cleanup,12000);
+    }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',warmAppsScript,{once:true});
+  else warmAppsScript();
+})();
+</script>
+
 </body>
 </html>
