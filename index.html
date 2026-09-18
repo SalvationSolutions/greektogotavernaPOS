@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.12-POST-LOGIN-CACHE-RESET-NO-AUTO-LOGOUT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.13-PREWARM-JSONP-LOGIN-NO-AUTO-LOGOUT">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2378,35 +2378,12 @@ async function _call(url, action, data){
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
-    // v9.3.11: ONE login request only.
-    // POST is already the working transport for Inventory and Expenses.
-    // Removing the sequential JSONP fallback prevents a failed POST from
-    // adding another 15 seconds to sign-in.
+    // v9.3.13: one credential request only, using Apps Script's JSONP bridge.
+    // The deployment is pre-warmed in the background before ENTER POS is pressed.
     try{
-      var controller=(typeof AbortController!=='undefined')?new AbortController():null;
-      var timer=controller?setTimeout(function(){try{controller.abort();}catch(e){}},10000):null;
-      try{
-        var resp=await fetch(url,{
-          method:'POST',
-          redirect:'follow',
-          headers:{'Content-Type':'text/plain;charset=utf-8'},
-          body:JSON.stringify(Object.assign({},data||{},{action:'login'})),
-          cache:'no-store',
-          credentials:'omit',
-          signal:controller?controller.signal:undefined
-        });
-        if(!resp.ok)throw new Error('HTTP '+resp.status);
-        var result=await resp.json();
-        if(result&&typeof result==='object')return result;
-        throw new Error('Invalid login response');
-      }finally{
-        if(timer)clearTimeout(timer);
-      }
+      return await _jsonpAction(url,'login',data||{},25000);
     }catch(loginErr){
-      var msg=(loginErr&&loginErr.name==='AbortError')
-        ? 'Google Apps Script login took longer than 10 seconds.'
-        : (loginErr.message||String(loginErr));
-      _setCallError('LOGIN FAILED — '+msg);
+      _setCallError('LOGIN FAILED — '+((loginErr&&loginErr.message)||String(loginErr)));
       return null;
     }
   }
@@ -5835,7 +5812,37 @@ async function reprintSalesTransaction(index){
     +((d.change>0||d.tender>0)?'<div class="r"><span>Change:</span><span>P'+d.change.toFixed(2)+'</span></div>':'')
     +'<hr><div class="c">SCAN TO REGISTER<br>AND JOIN OUR LOYALTY PROGRAM</div><hr>'
     +'<div class="foot">Thank you! Please come again.<br><b>POWERED BY: SALVATION SOLUTIONS</b></div>'
-    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>';
+    +'<script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script>
+<script>
+(function(){
+  function warmAppsScript(){
+    try{
+      var u=(typeof SHEETS_URL!=='undefined'&&SHEETS_URL)||
+            (typeof GOOGLE_SCRIPT_URL!=='undefined'&&GOOGLE_SCRIPT_URL)||
+            localStorage.getItem('greektogo_sheets_url')||'';
+      if(!u)return;
+      var cb='__gtgWarm'+Date.now();
+      var sc=document.createElement('script');
+      window[cb]=function(){ cleanup(); };
+      function cleanup(){
+        try{sc.remove();delete window[cb];}catch(e){}
+      }
+      sc.async=true;
+      sc.src=u+(u.indexOf('?')>=0?'&':'?')+'action=ping&callback='+encodeURIComponent(cb)+'&_='+Date.now();
+      sc.onerror=cleanup;
+      document.head.appendChild(sc);
+      setTimeout(cleanup,12000);
+    }catch(e){}
+  }
+  if(document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded',warmAppsScript,{once:true});
+  } else {
+    warmAppsScript();
+  }
+})();
+</script>
+
+</body></html>';
   var w=window.open('','_blank','width=420,height=620');
   if(w){w.document.write(body);w.document.close();}
   else showToast('Allow popups to reprint receipts.','error');
