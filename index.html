@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2.1-STABLE-LOGIN-FAST-SYNC-GRAB-DEDUPE-0918">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2.3-EXPENSES-INVENTORY-FAST-SAVE-0918">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -888,6 +888,29 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .saleslog-status-detail{font-size:12px;}
 }
 
+
+/* ══════════ EXPENSES ══════════ */
+#expenses-view{flex-direction:column;padding:clamp(14px,2vw,24px);gap:16px;overflow-y:auto;min-height:calc(100dvh - 64px);}
+.expenses-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+.expenses-head h2{font-family:'Cinzel',serif;font-size:clamp(18px,2vw,23px);color:var(--blue-deep);margin:0;}
+.expenses-sub{font-size:11px;color:var(--gray-soft);margin-top:3px;}
+.expenses-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-card);padding:16px;}
+.expenses-form{display:grid;grid-template-columns:1.1fr 1.7fr 1fr 1.2fr 2fr auto;gap:10px;align-items:end;}
+.expenses-field label{display:block;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;color:var(--gray-soft);margin-bottom:5px;}
+.expenses-field input,.expenses-field select{width:100%;border:1.5px solid var(--blue-pale);border-radius:9px;padding:10px 11px;font-family:'Nunito',sans-serif;font-size:12px;outline:none;background:#fff;color:var(--blue-deep);}
+.expenses-field input:focus,.expenses-field select:focus{border-color:var(--blue-accent);}
+.expenses-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.expenses-table{width:100%;min-width:720px;border-collapse:collapse;font-size:12px;}
+.expenses-table th{text-align:left;padding:10px 9px;color:var(--gray-soft);font-size:9px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--blue-pale);}
+.expenses-table td{padding:10px 9px;border-bottom:1px solid var(--blue-ghost);vertical-align:middle;}
+.expenses-table td.amount{font-weight:900;color:var(--blue-deep);text-align:right;}
+.expenses-table th.amount{text-align:right;}
+.expense-status{display:inline-flex;padding:4px 8px;border-radius:99px;background:var(--blue-ghost);font-size:9px;font-weight:900;text-transform:uppercase;color:var(--blue-accent);}
+.expense-total{font-size:14px;font-weight:900;color:var(--blue-deep);}
+.expenses-empty{text-align:center;padding:28px 12px;color:var(--gray-soft);font-size:12px;}
+@media(max-width:1000px){.expenses-form{grid-template-columns:repeat(2,minmax(0,1fr));}.expenses-form .expenses-save{grid-column:span 2;}}
+@media(max-width:600px){#expenses-view{padding:10px;gap:10px}.expenses-form{grid-template-columns:1fr}.expenses-form .expenses-save{grid-column:span 1}.expenses-card{padding:12px}}
+
 </style>
 
 <style id="gtg-real-qr-print-fix">
@@ -989,6 +1012,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
     <button class="nav-btn"             onclick="showTab('reports',this)">📊 Reports</button>
     <button class="nav-btn"             onclick="showTab('analytics',this)">📈 Analytics</button>
+    <button class="nav-btn"             onclick="showTab('expenses',this)">🧾 Expenses</button>
     <button class="nav-btn"             onclick="showTab('kitchen',this)">🍳 Kitchen</button>
   </nav>
   <div class="header-right">
@@ -1206,6 +1230,61 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <div class="analytics-insights" id="analytics-insights"></div>
   </section>
   <div class="analytics-source" id="analytics-source">Analytics ready</div>
+</div>
+
+
+<!-- ══════════ EXPENSES VIEW ══════════ -->
+<div id="expenses-view" class="tab-view">
+  <div class="expenses-head">
+    <div>
+      <h2>🧾 Expenses</h2>
+      <div class="expenses-sub">Synced directly with the Expenses tab in Google Sheets</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="expense-total" id="expenses-total">Total: ₱0.00</div>
+      <button class="add-btn" style="background:var(--blue-deep)" onclick="refreshExpenses()">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <section class="expenses-card">
+    <div class="expenses-form">
+      <div class="expenses-field">
+        <label>Date</label>
+        <input type="date" id="expense-date">
+      </div>
+      <div class="expenses-field">
+        <label>Item</label>
+        <input type="text" id="expense-item" placeholder="Expense item">
+      </div>
+      <div class="expenses-field">
+        <label>Amount</label>
+        <input type="number" id="expense-amount" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="expenses-field">
+        <label>Status</label>
+        <select id="expense-status">
+          <option value="PAID">PAID</option>
+          <option value="PENDING">PENDING</option>
+          <option value="REIMBURSEMENT">REIMBURSEMENT</option>
+          <option value="CANCELLED">CANCELLED</option>
+        </select>
+      </div>
+      <div class="expenses-field">
+        <label>Remarks</label>
+        <input type="text" id="expense-remarks" placeholder="Optional remarks">
+      </div>
+      <button class="add-btn expenses-save" id="expense-save-btn" onclick="saveExpense()">＋ Add Expense</button>
+    </div>
+  </section>
+
+  <section class="expenses-card">
+    <div class="expenses-table-wrap">
+      <table class="expenses-table">
+        <thead><tr><th>Date</th><th>ITEM</th><th class="amount">Amount</th><th>Status</th><th>Remarks</th></tr></thead>
+        <tbody id="expenses-table-body"><tr><td colspan="5" class="expenses-empty">Loading expenses…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
 </div>
 
 <!-- PRINTER SETTINGS MODAL -->
@@ -1981,8 +2060,90 @@ function showTab(tab, btn) {
   if(tab==='cashier')   { renderCashierRoster(); renderShiftLog(); }
   if(tab==='reports')     refreshSalesFromSheets(true).then(renderReports);
   if(tab==='analytics')   refreshSalesFromSheets(true).then(renderAnalytics);
+  if(tab==='expenses')    refreshExpenses();
   if(tab==='kitchen')   { refreshKitchen(); startKitchenAutoRefresh(); startKitchenClock(); }
   else                  { stopKitchenAutoRefresh(); stopKitchenClock(); }
+}
+
+
+/* ═══════════════════ EXPENSES ═══════════════════ */
+var expensesData=[];
+
+function _expenseToday(){
+  var d=new Date(), y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function initExpenseDate(){
+  var el=document.getElementById('expense-date');
+  if(el && !el.value) el.value=_expenseToday();
+}
+function expenseMoney(v){ return '₱'+Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+async function refreshExpenses(){
+  initExpenseDate();
+  var body=document.getElementById('expenses-table-body');
+  if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Syncing with Google Sheets…</td></tr>';
+  var res=await sheetsCall('getExpenses',{});
+  if(!res || !res.ok){
+    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Unable to load Expenses from Google Sheets.</td></tr>';
+    return;
+  }
+  expensesData=Array.isArray(res.items)?res.items:[];
+  renderExpenses();
+}
+
+function renderExpenses(){
+  var body=document.getElementById('expenses-table-body');
+  if(!body) return;
+  var total=expensesData.reduce(function(sum,e){ return sum+(String(e.status||'').toUpperCase()==='CANCELLED'?0:Number(e.amount)||0); },0);
+  var totalEl=document.getElementById('expenses-total');
+  if(totalEl) totalEl.textContent='Total: '+expenseMoney(total);
+
+  if(!expensesData.length){
+    body.innerHTML='<tr><td colspan="5" class="expenses-empty">No expenses recorded yet.</td></tr>';
+    return;
+  }
+  body.innerHTML=expensesData.slice().reverse().map(function(e){
+    return '<tr>'+
+      '<td>'+esc(String(e.date||''))+'</td>'+
+      '<td><strong>'+esc(String(e.item||''))+'</strong></td>'+
+      '<td class="amount">'+expenseMoney(e.amount)+'</td>'+
+      '<td><span class="expense-status">'+esc(String(e.status||''))+'</span></td>'+
+      '<td>'+esc(String(e.remarks||''))+'</td>'+
+    '</tr>';
+  }).join('');
+}
+
+async function saveExpense(){
+  var date=(document.getElementById('expense-date')||{}).value||'';
+  var item=((document.getElementById('expense-item')||{}).value||'').trim();
+  var amount=Number((document.getElementById('expense-amount')||{}).value||0);
+  var status=((document.getElementById('expense-status')||{}).value||'PAID').trim();
+  var remarks=((document.getElementById('expense-remarks')||{}).value||'').trim();
+
+  if(!date){ showToast('Please select the expense date.','warning'); return; }
+  if(!item){ showToast('Please enter the expense item.','warning'); return; }
+  if(!(amount>0)){ showToast('Please enter an amount greater than ₱0.00.','warning'); return; }
+
+  var btn=document.getElementById('expense-save-btn');
+  if(btn && btn.disabled) return;
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+
+  try{
+    var res=await sheetsCall('addExpense',{expense:{date:date,item:item,amount:amount,status:status,remarks:remarks}});
+    if(!res || !res.ok){
+      showToast('Expense was not saved to Google Sheets.','error');
+      return;
+    }
+    document.getElementById('expense-item').value='';
+    document.getElementById('expense-amount').value='';
+    document.getElementById('expense-remarks').value='';
+    document.getElementById('expense-status').value='PAID';
+    showToast('Expense saved to Google Sheets.','success');
+    await refreshExpenses();
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='＋ Add Expense';}
+  }
 }
 
 /* ═══════════════════ SHEETS CONNECTION ENGINE ═══════════════════
@@ -2124,7 +2285,7 @@ async function _call(url, action, data){
     'ping','salesStatus','getSales','findSaleByTransactionId',
     'getInventory','getPosMenu','getCashiers','getShiftLog',
     'getKitchenOrders','getHeldOrders','getEOD','getEODReports',
-    'getEODDetail','getSecurityAudit'
+    'getEODDetail','getSecurityAudit','getExpenses'
   ];
 
   if(fastReadActions.indexOf(action)>-1){
@@ -2148,6 +2309,43 @@ async function _call(url, action, data){
       return await readJsonp;
     }catch(readErr){
       _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(readErr.message||readErr));
+      return null;
+    }
+  }
+
+  // INVENTORY FAST SAVE v9.2.3:
+  // saveInventory is an idempotent full-sheet replacement. For normal-sized
+  // inventories JSONP is substantially faster/reliable on Safari/iPhone and
+  // avoids the slow Apps Script POST redirect. If the payload is too large for
+  // a safe URL, use one POST instead. A JSONP failure may fall back to POST;
+  // repeating the same replacement payload does not append duplicate rows.
+  if(action==='saveInventory'){
+    var invData=data||{};
+    var invJson='';
+    try{ invJson=JSON.stringify(invData); }catch(e){ invJson=''; }
+    var INVENTORY_JSONP_LIMIT=12000;
+    if(invJson && invJson.length<=INVENTORY_JSONP_LIMIT){
+      try{
+        var invJ=await _jsonpAction(url,action,invData,6500);
+        if(invJ!==null && invJ!==undefined) return invJ;
+        throw new Error('Empty JSONP inventory response.');
+      }catch(invJsonpErr){
+        try{
+          var invP=await _postTransport(url,action,invData);
+          if(invP!==null && invP!==undefined) return invP;
+          throw new Error('Empty POST inventory response.');
+        }catch(invPostErr){
+          _setCallError('SAVEINVENTORY FAILED — JSONP: '+(invJsonpErr.message||invJsonpErr)+' | POST: '+(invPostErr.message||invPostErr));
+          return null;
+        }
+      }
+    }
+    try{
+      var invLarge=await _postTransport(url,action,invData);
+      if(invLarge!==null && invLarge!==undefined) return invLarge;
+      throw new Error('Empty POST inventory response.');
+    }catch(invLargeErr){
+      _setCallError('SAVEINVENTORY FAILED — '+(invLargeErr.message||invLargeErr));
       return null;
     }
   }
@@ -2226,7 +2424,7 @@ async function sheetsCall(action, body){
     if(!_sheetsOnline){ _sheetsOnline=true; setDBStatus('connected','Google Sheets ✓'); }
   } else {
     // Queue only non-sale writes. Sales must fail visibly and remain open.
-    var writeOps=['saveInventory','updateStock','logShift','savePosMenu','saveCashiers'];
+    var writeOps=['updateStock','logShift','savePosMenu','saveCashiers'];
     if(writeOps.indexOf(action)>-1) _enqueue(action, body||{});
     // Do not flip the whole app offline because one request failed.
   }
@@ -3687,7 +3885,13 @@ function _refreshCatSuggestions(){
   custom.forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); });
 }
 
+let _inventorySaveBusy=false;
 async function saveItem(){
+  if(_inventorySaveBusy) return;
+  const saveBtn=document.querySelector('#item-modal .m-save');
+  const originalSaveText=saveBtn?saveBtn.textContent:'';
+  _inventorySaveBusy=true;
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Saving to Google Sheets…'; }
   const itemCode=document.getElementById('m-code').value.trim();
   const description=document.getElementById('m-name').value.trim();
   const category=document.getElementById('m-cat').value.trim();
@@ -3697,7 +3901,12 @@ async function saveItem(){
   const begBal=parseInt(document.getElementById('m-begbal').value)||0;
   const endingStock=parseInt(document.getElementById('m-ending').value)||0;
   const supplier=document.getElementById('m-supplier').value.trim();
-  if(!description){showToast('Enter item description.','error');return;}
+  if(!description){
+    showToast('Enter item description.','error');
+    _inventorySaveBusy=false;
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText||'Save Item';}
+    return;
+  }
   const record={itemCode,description,category,price,unit,uom,begBal,endingStock,supplier};
   const candidate=stockInventory.map(function(i){return {...i};});
   if(editingId){
@@ -3707,12 +3916,17 @@ async function saveItem(){
     const newId=candidate.length?Math.max(...candidate.map(i=>i.id||0))+1:1;
     candidate.push({id:newId,...record});
   }
-  const saved=await pushInventoryToSheets(false,candidate);
-  if(!saved) return;
-  stockInventory=candidate;
-  closeModal('item-modal');
-  renderInventory();
-  showToast(editingId?'Item updated.':'Item added.','success');
+  try{
+    const saved=await pushInventoryToSheets(false,candidate);
+    if(!saved) return;
+    stockInventory=candidate;
+    closeModal('item-modal');
+    renderInventory();
+    showToast(editingId?'Item updated.':'Item added.','success');
+  }finally{
+    _inventorySaveBusy=false;
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText||'Save Item';}
+  }
 }
 async function deleteItem(id){
   if(!confirm('Remove this item from Google Sheets?')) return;
