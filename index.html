@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.17-LOGIN-FINAL-SYNTAX-REPAIRED">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.18-DIRECT-GET-LOGIN-FINAL">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1836,7 +1836,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.17';
+const POS_BUILD = '9.3.18';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2380,12 +2380,36 @@ async function _call(url, action, data){
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
-    // v9.3.13: one credential request only, using Apps Script's JSONP bridge.
-    // The deployment is pre-warmed in the background before ENTER POS is pressed.
+    // v9.3.18: direct GET login.
+    // The verified Apps Script deployment returns normal JSON when no callback is supplied.
+    // This bypasses the JSONP callback path that timed out on the POS device.
     try{
-      return await _jsonpAction(url,'login',data||{},25000);
+      var loginPayload=Object.assign({},data||{});
+      var loginUrl=url+(url.indexOf('?')>-1?'&':'?')
+        +'action=login&payload='+encodeURIComponent(JSON.stringify(loginPayload))
+        +'&_gtg='+Date.now();
+      var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+      var timer=ctrl?setTimeout(function(){try{ctrl.abort();}catch(e){}},20000):null;
+      try{
+        var resp=await fetch(loginUrl,{
+          method:'GET',
+          redirect:'follow',
+          cache:'no-store',
+          credentials:'omit',
+          signal:ctrl?ctrl.signal:undefined
+        });
+        var txt=await resp.text();
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        var result=JSON.parse(txt);
+        return result;
+      }finally{
+        if(timer)clearTimeout(timer);
+      }
     }catch(loginErr){
-      _setCallError('LOGIN FAILED — '+((loginErr&&loginErr.message)||String(loginErr)));
+      var msg=(loginErr&&loginErr.name==='AbortError')
+        ? 'Google Apps Script login took longer than 20 seconds.'
+        : ((loginErr&&loginErr.message)||String(loginErr));
+      _setCallError('LOGIN FAILED — '+msg);
       return null;
     }
   }
@@ -6435,7 +6459,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.17';
+  var BUILD='9.3.18';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
