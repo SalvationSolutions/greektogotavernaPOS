@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.2.3-EXPENSES-INVENTORY-FAST-SAVE-0918">
+<meta name="gtg-receipt-build" content="GTG-POS-9.2.4-EXPENSES-TAB-VISIBLE-INVENTORY-FIX">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -36,8 +36,15 @@ body{font-family:'Nunito',sans-serif;background:var(--blue-ghost);color:var(--bl
 .logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--gold),var(--gold-light));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;}
 .logo-text{font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1px;}
 .logo-text span{color:var(--gold-light);}
-.header-nav{display:flex;gap:5px;flex-wrap:wrap;}
-.nav-btn{padding:7px 13px;border:none;border-radius:8px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.header-nav{
+  display:flex;gap:5px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;min-width:0;
+  flex:1 1 auto;
+}
+.header-nav::-webkit-scrollbar{display:none;}
+.nav-btn{padding:7px 13px;border:none;border-radius:8px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;flex:0 0 auto;}
+.nav-btn.expenses-nav{border:1px solid rgba(255,255,255,.18);}
+.nav-btn.expenses-nav.active,.nav-btn.expenses-nav:hover{background:#C9A84C;color:#0B2545;}
 .nav-btn.active,.nav-btn:hover{background:var(--blue-accent);color:#fff;}
 .nav-btn:not(.active){background:rgba(255,255,255,.08);color:var(--gray-soft);}
 .nav-btn.grab-nav.active,.nav-btn.grab-nav:hover{background:var(--grab);}
@@ -1012,7 +1019,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     <button class="nav-btn"             onclick="showTab('cashier',this)">👤 Cashier</button>
     <button class="nav-btn"             onclick="showTab('reports',this)">📊 Reports</button>
     <button class="nav-btn"             onclick="showTab('analytics',this)">📈 Analytics</button>
-    <button class="nav-btn"             onclick="showTab('expenses',this)">🧾 Expenses</button>
+    <button class="nav-btn expenses-nav" onclick="showTab('expenses',this)">🧾 Expenses</button>
     <button class="nav-btn"             onclick="showTab('kitchen',this)">🍳 Kitchen</button>
   </nav>
   <div class="header-right">
