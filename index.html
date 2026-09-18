@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.10-EXPENSE-TEXT-DECODE-NO-AUTO-LOGOUT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.12-POST-LOGIN-CACHE-RESET-NO-AUTO-LOGOUT">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2378,33 +2378,35 @@ async function _call(url, action, data){
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
-    // v9.2.7: POST is the primary login transport.
-    // IMPORTANT: never race POST and JSONP — login is stateful and must be sent once.
+    // v9.3.11: ONE login request only.
+    // POST is already the working transport for Inventory and Expenses.
+    // Removing the sequential JSONP fallback prevents a failed POST from
+    // adding another 15 seconds to sign-in.
     try{
-      var controller = (typeof AbortController!=='undefined') ? new AbortController() : null;
-      var timer = controller ? setTimeout(function(){ try{controller.abort();}catch(e){} },12000) : null;
+      var controller=(typeof AbortController!=='undefined')?new AbortController():null;
+      var timer=controller?setTimeout(function(){try{controller.abort();}catch(e){}},10000):null;
       try{
-        var resp = await fetch(url,{
+        var resp=await fetch(url,{
           method:'POST',
           redirect:'follow',
           headers:{'Content-Type':'text/plain;charset=utf-8'},
           body:JSON.stringify(Object.assign({},data||{},{action:'login'})),
           cache:'no-store',
-          signal:controller ? controller.signal : undefined
+          credentials:'omit',
+          signal:controller?controller.signal:undefined
         });
-        if(timer) clearTimeout(timer);
-        if(!resp.ok) throw new Error('HTTP '+resp.status);
-        var result = await resp.json();
-        if(result && typeof result==='object') return result;
+        if(!resp.ok)throw new Error('HTTP '+resp.status);
+        var result=await resp.json();
+        if(result&&typeof result==='object')return result;
         throw new Error('Invalid login response');
-      }catch(postErr){
-        if(timer) clearTimeout(timer);
-        // Only fall back when POST itself could not return a response.
-        // The fallback is sequential, never simultaneous.
-        return await _jsonpAction(url,'login',data||{},15000);
+      }finally{
+        if(timer)clearTimeout(timer);
       }
     }catch(loginErr){
-      _setCallError('LOGIN FAILED — '+(loginErr.message||loginErr));
+      var msg=(loginErr&&loginErr.name==='AbortError')
+        ? 'Google Apps Script login took longer than 10 seconds.'
+        : (loginErr.message||String(loginErr));
+      _setCallError('LOGIN FAILED — '+msg);
       return null;
     }
   }
@@ -4819,17 +4821,18 @@ function loginPinBack() {
 }
 
 /* ═══════════════════ SECURE SESSION RESTORE ═══════════════════ */
-(async function restoreSession() {
+(function restoreSession() {
   localStorage.removeItem('gtg_user');
   localStorage.removeItem('gtg_auto_login');
   localStorage.removeItem('gtg_google_user');
   if(!_authSession) return;
-  var result=await _call(SHEETS_URL,'whoAmI',{});
-  if(result&&result.ok&&result.user){
-    googleUser=result.user;
+
+  var savedUser=null;
+  try{savedUser=JSON.parse(localStorage.getItem('gtg_auth_user')||'null');}catch(e){}
+  if(savedUser && savedUser.name){
+    googleUser=savedUser;
+    activeCashier=savedUser.name;
     onSignedIn();
-  }else{
-    _clearSecureSession();
   }
 })();
 
@@ -6429,6 +6432,26 @@ setTimeout(_updateSyncBadge, 500);
 </div>
 
 <script>
+(function(){
+  var BUILD='9.3.12';
+  try{
+    var previous=localStorage.getItem('gtg_pos_build');
+    localStorage.setItem('gtg_pos_build',BUILD);
+    if(previous && previous!==BUILD){
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          return Promise.all(regs.map(function(r){return r.unregister();}));
+        }).catch(function(){});
+      }
+      if(window.caches && caches.keys){
+        caches.keys().then(function(keys){
+          return Promise.all(keys.map(function(k){return caches.delete(k);}));
+        }).catch(function(){});
+      }
+    }
+  }catch(e){}
+})();
+
 // Permanent anti-stale-build protection.
 // This POS is online-first; remove older service workers/caches that can keep a
 // tablet/laptop on an obsolete HTML/endpoint while another device has the new build.
