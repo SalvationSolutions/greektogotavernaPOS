@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.23-LOGIN-SYNTAX-RESTORED">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.24-STABLE-NO-SYNC-QUEUE">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1856,7 +1856,7 @@ input,select,textarea{font-size:16px!important;min-height:48px}button,.btn{min-h
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.23';
+const POS_BUILD = '9.3.24';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2449,7 +2449,6 @@ async function _call(url, action, data){
   ];
 
   if(fastReadActions.indexOf(action)>-1){
-    return _queueSheetRead(async function(){
     try{
       var readPayload=Object.assign({},data||{});
       if(_authSession && action!=='ping') readPayload.sessionToken=_authSession;
@@ -2459,7 +2458,7 @@ async function _call(url, action, data){
         +'&_gtg='+Date.now();
 
       var readCtrl=(typeof AbortController!=='undefined')?new AbortController():null;
-      var readTimer=readCtrl?setTimeout(function(){try{readCtrl.abort();}catch(e){}},20000):null;
+      var readTimer=readCtrl?setTimeout(function(){try{readCtrl.abort();}catch(e){}},30000):null;
       try{
         var readResp=await fetch(readUrl,{
           method:'GET',
@@ -2477,12 +2476,11 @@ async function _call(url, action, data){
       }
     }catch(readErr){
       var readMsg=(readErr&&readErr.name==='AbortError')
-        ? 'Google Apps Script read took longer than 20 seconds.'
+        ? 'Google Apps Script read took longer than 30 seconds.'
         : ((readErr&&readErr.message)||String(readErr));
       _setCallError(String(action||'request').toUpperCase()+' FAILED — '+readMsg);
       return null;
     }
-    });
   }
 
   // INVENTORY FAST SAVE v9.2.3:
@@ -2578,13 +2576,7 @@ async function _call(url, action, data){
 }
 
 // ── Main sheetsCall ───────────────────────────────────────────────────────────
-// v9.3.23 — serialized authenticated reads, with valid async sheetsCall syntax.
-var _gtgReadQueue=Promise.resolve();
-function _queueSheetRead(task){
-  var run=_gtgReadQueue.then(task,task);
-  _gtgReadQueue=run.catch(function(){});
-  return run;
-}
+// v9.3.24 — independent requests: one slow Google Sheet read cannot block the others.
 async function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
   var result = await _call(SHEETS_URL, action, body||{});
@@ -6483,7 +6475,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.23';
+  var BUILD='9.3.24';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
