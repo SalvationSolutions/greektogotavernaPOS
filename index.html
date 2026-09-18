@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.0-INVENTORY-EXPENSES-FAST">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.2-EXPENSES-NO-STUCK-SYNC">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1744,6 +1744,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
       <div class="mf"><label>UOM</label><input type="text" id="m-uom" placeholder="e.g. pcs, kg, L, btl"></div>
       <div class="mf"><label>BEG. BAL. STOCKS</label><input type="number" id="m-begbal" placeholder="0" min="0"></div>
       <div class="mf"><label>ENDING STOCKS</label><input type="number" id="m-ending" placeholder="0" min="0"></div>
+      <div class="mf" style="grid-column:1/-1"><label>LAST UPDATED DATE</label><input type="date" id="m-updated-date"><div style="font-size:10px;color:var(--gray-soft);margin-top:4px">Time is stamped automatically when Google Sheets confirms the save.</div></div>
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="m-cancel" onclick="closeModal('item-modal')">Cancel</button>
@@ -1939,7 +1940,8 @@ function _mapInvItem(raw, idx){
     endingStock: parseInt(get('endingStock','ENDING STOCKS','ENDING','ending_stock','stock','STOCK')) || 0,
     unit:        get('unit','UNIT','Unit'),
     uom:         get('uom','UOM','Uom'),
-    supplier:    get('supplier','SUPPLIER','Supplier')
+    supplier:    get('supplier','SUPPLIER','Supplier'),
+    lastUpdated: get('lastUpdated','LAST UPDATED','Last Updated','UPDATED AT','Updated At')
   };
 }
 // Keep old name as alias so nothing breaks
@@ -2076,6 +2078,14 @@ function showTab(tab, btn) {
 /* ═══════════════════ EXPENSES ═══════════════════ */
 var expensesData=[];
 
+
+(function primeExpensesCache(){
+  try{
+    var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v932')||'[]');
+    if(Array.isArray(cached)) expensesData=cached;
+  }catch(e){}
+})();
+
 function _expenseToday(){
   var d=new Date(), y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
   return y+'-'+m+'-'+day;
@@ -2089,15 +2099,57 @@ function expenseMoney(v){ return '₱'+Number(v||0).toLocaleString('en-PH',{mini
 async function refreshExpenses(){
   initExpenseDate();
   var body=document.getElementById('expenses-table-body');
-  if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Syncing with Google Sheets…</td></tr>';
-  var res=await sheetsCall('getExpenses',{});
-  if(!res || !res.ok){
-    var detail=(res && (res.message||res.error)) || _lastCallError || 'Unable to load Expenses from Google Sheets.';
-    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Expenses sync error: '+esc(String(detail))+'</td></tr>';
+
+  // Never blank an already loaded table while refreshing.
+  if(expensesData.length){
+    renderExpenses();
+  }else if(body){
+    body.innerHTML='<tr><td colspan="5" class="expenses-empty">Loading expenses…</td></tr>';
+  }
+
+  var url=SHEETS_URL;
+  if(!url){
+    if(body && !expensesData.length) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Google Sheets URL is missing.</td></tr>';
     return;
   }
-  expensesData=Array.isArray(res.items)?res.items:[];
-  renderExpenses();
+
+  // getExpenses is READ-ONLY, so POST and JSONP may safely race.
+  // Whichever responds first wins. A hard deadline prevents a permanent Syncing state.
+  var post=_expensePostTransport(url,'getExpenses',{}).catch(function(){return null;});
+  var jsonp=_jsonpAction(url,'getExpenses',{},7000).catch(function(){return null;});
+  var deadline=new Promise(function(resolve){setTimeout(function(){resolve(null);},8000);});
+
+  var res=null;
+  try{
+    res=await Promise.race([
+      Promise.any([
+        post.then(function(r){if(r&&typeof r==='object')return r;throw new Error('POST empty');}),
+        jsonp.then(function(r){if(r&&typeof r==='object')return r;throw new Error('JSONP empty');})
+      ]).catch(function(){return null;}),
+      deadline
+    ]);
+  }catch(e){res=null;}
+
+  if(res && res.authRequired){
+    await sheetsCall('whoAmI',{}); // lets the normal session-expired handler run
+    return;
+  }
+
+  if(res && res.ok){
+    expensesData=Array.isArray(res.items)?res.items:[];
+    try{localStorage.setItem('gtg_expenses_cache_v932',JSON.stringify(expensesData));}catch(e){}
+    renderExpenses();
+    return;
+  }
+
+  // If network is slow, use the last successful Expenses snapshot instead of hanging.
+  if(!expensesData.length){
+    try{
+      var cached=JSON.parse(localStorage.getItem('gtg_expenses_cache_v932')||'[]');
+      if(Array.isArray(cached) && cached.length){expensesData=cached;renderExpenses();return;}
+    }catch(e){}
+    if(body) body.innerHTML='<tr><td colspan="5" class="expenses-empty">Expenses sync timed out. Tap Refresh to try again.</td></tr>';
+  }
 }
 
 function renderExpenses(){
@@ -2151,6 +2203,7 @@ async function saveExpense(){
     showToast('Expense saved to Google Sheets.','success');
     var saved=(res&&res.item)?res.item:{date:_expenseToday(),item:'',amount:0,status:'PAID',remarks:''};
     expensesData.push(saved);
+    try{localStorage.setItem('gtg_expenses_cache_v932',JSON.stringify(expensesData));}catch(e){}
     renderExpenses();
     
   }finally{
@@ -2336,7 +2389,7 @@ async function _call(url, action, data){
   // EXPENSES SYNC v9.2.8:
   // Use the same POST transport that successfully signs in. Do not race JSONP.
   // Apps Script can cold-start slowly, so Expenses gets a 20-second request window.
-  if(action==='getExpenses' || action==='addExpense'){
+  if(action==='addExpense'){
     try{
       var expenseResult=await _expensePostTransport(url,action,data||{});
       if(expenseResult && expenseResult.authRequired) return expenseResult;
@@ -2612,13 +2665,15 @@ async function pushInventoryToSheets(silent, inventoryOverride){
     var m = _mapInvItem(i,0);
     return { itemCode:m.itemCode, description:m.description, category:m.category,
              price:m.price, begBal:m.begBal, endingStock:m.endingStock,
-             uom:m.uom, supplier:m.supplier };
+             unit:m.unit, uom:m.uom, supplier:m.supplier, lastUpdated:m.lastUpdated,
+             _touchLastUpdated:i._touchLastUpdated===true, updatedDate:i.updatedDate||'' };
   });
   if(!silent) showToast('⬆ Saving '+rows.length+' items to Google Sheets…','info');
   var res = await sheetsCall('saveInventory',{items:rows});
   if(res && res.ok){
+    if(Array.isArray(res.items)) stockInventory=res.items.map(_normalizeInvItem);
     if(!silent) showToast('✅ Inventory saved to Google Sheets! ('+rows.length+' items)','success');
-    return true;
+    return res;
   }
   _addSyncError('Inventory','saveInventory','Google Sheets rejected or did not receive the inventory write',{items:rows,response:res});
   if(!silent) showToast('❌ Inventory was not saved. Google Sheets is unavailable.','error');
@@ -3816,7 +3871,7 @@ function renderDeliveryTable(platform){
   const orders=grabOrders;
   const tbody=document.getElementById(`${platform}-tbody`);
   if(!orders.length){
-    tbody.innerHTML=`<tr><td colspan="9"><div class="empty-table"><div class="et-icon">${platform==='grab'?'🟢':'🐼'}</div><p>No orders logged yet.</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="11"><div class="empty-table"><div class="et-icon">${platform==='grab'?'🟢':'🐼'}</div><p>No orders logged yet.</p></div></td></tr>`;
     return;
   }
   tbody.innerHTML=orders.map(o=>`<tr>
@@ -3929,12 +3984,29 @@ function renderInventory(){
       <td>${iUnit||'—'}</td>
       <td>${iUom||'—'}</td>
       <td>${iSupp||'—'}</td>
+      <td class="inv-updated-cell">${formatInventoryUpdated(mapped.lastUpdated)}</td>
       <td class="ia-cell">
-        <button class="ia" onclick="openEditModal(${it.id})">✏️</button>
-        <button class="ia del" onclick="deleteItem(${it.id})">🗑</button>
+        <button class="ia" onclick="openEditModal(${it.id})" title="Edit item">✏️</button>
+        <button class="ia del" onclick="deleteItem(${it.id})" title="Delete item">🗑</button>
       </td>
     </tr>`;
   }).join("");
+}
+
+
+function inventoryDateValue(v){
+  if(v){
+    var s=String(v).trim();
+    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m)return m[1]+'-'+m[2]+'-'+m[3];
+    var d=new Date(v);
+    if(!isNaN(d.getTime())){
+      var y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');
+      return y+'-'+mo+'-'+da;
+    }
+  }
+  var n=new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
 }
 
 function openAddModal(){
@@ -3942,6 +4014,7 @@ function openAddModal(){
   document.getElementById('modal-title').textContent='➕ Add Inventory Item';
   ['m-code','m-name','m-cat','m-price','m-unit','m-uom','m-begbal','m-ending','m-supplier']
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const upd=document.getElementById('m-updated-date'); if(upd) upd.value=inventoryDateValue('');
   _refreshCatSuggestions();
   openModal('item-modal');
 }
@@ -3960,6 +4033,7 @@ function openEditModal(id){
   document.getElementById('m-begbal').value  = it.begBal||it['BEG BAL STOCKS']||it['BEG BAL']||0;
   document.getElementById('m-ending').value  = it.endingStock||it['ENDING STOCKS']||it.stock||0;
   document.getElementById('m-supplier').value= _v(it.supplier,   it['SUPPLIER'],    '');
+  const upd=document.getElementById('m-updated-date'); if(upd) upd.value=inventoryDateValue(it.lastUpdated||it['LAST UPDATED']||'');
   _refreshCatSuggestions();
   openModal('item-modal');
 }
@@ -3988,13 +4062,14 @@ async function saveItem(){
   const begBal=parseInt(document.getElementById('m-begbal').value)||0;
   const endingStock=parseInt(document.getElementById('m-ending').value)||0;
   const supplier=document.getElementById('m-supplier').value.trim();
+  const updatedDate=(document.getElementById('m-updated-date')||{value:''}).value||inventoryDateValue('');
   if(!description){
     showToast('Enter item description.','error');
     _inventorySaveBusy=false;
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalSaveText||'Save Item';}
     return;
   }
-  const record={itemCode,description,category,price,unit,uom,begBal,endingStock,supplier};
+  const record={itemCode,description,category,price,unit,uom,begBal,endingStock,supplier,lastUpdated:'',_touchLastUpdated:true,updatedDate:updatedDate};
   const candidate=stockInventory.map(function(i){return {...i};});
   if(editingId){
     const idx=candidate.findIndex(i=>i.id===editingId);
@@ -4006,7 +4081,7 @@ async function saveItem(){
   try{
     const saved=await pushInventoryToSheets(false,candidate);
     if(!saved) return;
-    stockInventory=candidate;
+    if(!Array.isArray(saved.items)) stockInventory=candidate.map(_normalizeInvItem);
     closeModal('item-modal');
     renderInventory();
     showToast(editingId?'Item updated.':'Item added.','success');
