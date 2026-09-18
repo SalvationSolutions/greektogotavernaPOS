@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.18-DIRECT-GET-LOGIN-FINAL">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.19-DIRECT-GET-SHEETS-SYNC-FINAL">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1836,7 +1836,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.18';
+const POS_BUILD = '9.3.19';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2431,39 +2431,47 @@ async function _call(url, action, data){
     }
   }
 
-  // FAST GOOGLE SYNC v9.2:
-  // Read-only actions are safe to race over POST + JSONP because they do not mutate
-  // Google Sheets. The first valid response wins, which reduces waiting on redirects
-  // or a slow transport. WRITE actions continue through the existing single-path
-  // logic below so they are never blindly duplicated.
+  // v9.3.19 DIRECT GOOGLE SHEETS READS:
+  // Login is already working through direct GET. Use the same verified transport
+  // for protected read actions instead of POST/JSONP races.
   var fastReadActions=[
     'ping','salesStatus','getSales','findSaleByTransactionId',
     'getInventory','getPosMenu','getCashiers','getShiftLog',
     'getKitchenOrders','getHeldOrders','getEOD','getEODReports',
-    'getEODDetail','getSecurityAudit'
+    'getEODDetail','getSecurityAudit','getExpenses','whoAmI'
   ];
 
   if(fastReadActions.indexOf(action)>-1){
-    var readData=data||{};
-    var READ_FAST_TIMEOUT_MS=8000;
-
-    function validSyncResponse(r){
-      return r!==null && r!==undefined && typeof r==='object';
-    }
-
-    var readPost=_postTransport(url,action,readData)
-      .then(function(r){ if(validSyncResponse(r)) return r; throw new Error('Empty POST sync response.'); });
-
-    var readJsonp=_jsonpAction(url,action,readData,READ_FAST_TIMEOUT_MS)
-      .then(function(r){ if(validSyncResponse(r)) return r; throw new Error('Empty JSONP sync response.'); });
-
     try{
-      if(typeof Promise.any==='function'){
-        return await Promise.any([readPost,readJsonp]);
+      var readPayload=Object.assign({},data||{});
+      if(_authSession && action!=='ping') readPayload.sessionToken=_authSession;
+      var readUrl=url+(url.indexOf('?')>-1?'&':'?')
+        +'action='+encodeURIComponent(action)
+        +'&payload='+encodeURIComponent(JSON.stringify(readPayload))
+        +'&_gtg='+Date.now();
+
+      var readCtrl=(typeof AbortController!=='undefined')?new AbortController():null;
+      var readTimer=readCtrl?setTimeout(function(){try{readCtrl.abort();}catch(e){}},20000):null;
+      try{
+        var readResp=await fetch(readUrl,{
+          method:'GET',
+          redirect:'follow',
+          cache:'no-store',
+          credentials:'omit',
+          signal:readCtrl?readCtrl.signal:undefined
+        });
+        var readText=await readResp.text();
+        if(!readResp.ok) throw new Error('HTTP '+readResp.status);
+        var readResult=JSON.parse(readText);
+        return readResult;
+      }finally{
+        if(readTimer)clearTimeout(readTimer);
       }
-      return await readJsonp;
     }catch(readErr){
-      _setCallError(String(action||'request').toUpperCase()+' FAILED — '+(readErr.message||readErr));
+      var readMsg=(readErr&&readErr.name==='AbortError')
+        ? 'Google Apps Script read took longer than 20 seconds.'
+        : ((readErr&&readErr.message)||String(readErr));
+      _setCallError(String(action||'request').toUpperCase()+' FAILED — '+readMsg);
       return null;
     }
   }
@@ -6459,7 +6467,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.18';
+  var BUILD='9.3.19';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
