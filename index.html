@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.6-EXPENSES-SYNC-NO-AUTO-LOGOUT">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.7-EXPENSES-ESC-FIX-NO-AUTO-LOGOUT">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -2274,6 +2274,10 @@ function _jsonp(fullUrl, timeoutMs){
   });
 }
 
+
+function esc(v){
+  return encodeURIComponent(String(v == null ? '' : v));
+}
 
 async function _jsonpAction(url,action,data,timeoutMs){
   var payload=Object.assign({},data||{});
