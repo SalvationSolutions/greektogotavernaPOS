@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.22-SYNC-QUEUE-MENU-RETRY">
+<meta name="gtg-receipt-build" content="GTG-POS-9.3.23-LOGIN-SYNTAX-RESTORED">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1856,7 +1856,7 @@ input,select,textarea{font-size:16px!important;min-height:48px}button,.btn{min-h
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.22';
+const POS_BUILD = '9.3.23';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -2578,14 +2578,14 @@ async function _call(url, action, data){
 }
 
 // ── Main sheetsCall ───────────────────────────────────────────────────────────
-async // v9.3.22 — serialize authenticated Google Sheets reads to avoid simultaneous Apps Script contention.
+// v9.3.23 — serialized authenticated reads, with valid async sheetsCall syntax.
 var _gtgReadQueue=Promise.resolve();
 function _queueSheetRead(task){
   var run=_gtgReadQueue.then(task,task);
   _gtgReadQueue=run.catch(function(){});
   return run;
 }
-function sheetsCall(action, body){
+async function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
   var result = await _call(SHEETS_URL, action, body||{});
   if(result && result.authRequired){
@@ -6483,7 +6483,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.22';
+  var BUILD='9.3.23';
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
