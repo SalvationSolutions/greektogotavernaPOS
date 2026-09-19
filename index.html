@@ -2708,10 +2708,9 @@ async function refreshInventoryFromSheets(){
     if(res&&res.authRequired)throw new Error('AUTH_REQUIRED');
     if(!res||!res.ok)throw new Error((res&&(res.message||res.error))||'No Inventory response');
 
-    inventory=Array.isArray(res.items)?res.items:[];
-    saveInventoryLocal();
+    stockInventory=Array.isArray(res.items)?res.items.map(_normalizeInvItem):[];
     renderInventory();
-    showToast('✅ Inventory refreshed: '+inventory.length+' items.','success');
+    showToast('✅ Inventory refreshed: '+stockInventory.length+' items.','success');
     return res;
   }catch(e){
     var msg=(e&&e.name==='AbortError')?'Google Sheets took longer than 15 seconds.':String(e&&e.message?e.message:e);
