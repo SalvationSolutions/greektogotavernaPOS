@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>GREEK TO GO TAVERNA POS</title>
-<meta name="gtg-receipt-build" content="GTG-POS-9.3.25-UNIFIED-JSONP">
+<meta name="gtg-receipt-build" content="GTG-POS-9.4.0-PRODUCTION-QC">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
@@ -1856,7 +1856,7 @@ input,select,textarea{font-size:16px!important;min-height:48px}button,.btn{min-h
 /* ═══════════════════ CONFIG ═══════════════════ */
 // ── Google Sheets URL — hardcoded, works on every browser/device ──
 // ── HARDCODED — never needs localStorage or manual setup ──────────────────
-const POS_BUILD = '9.3.25';
+const POS_BUILD = '9.4.0';
 const SHEETS_URL_PERMANENT = 'https://script.google.com/macros/s/AKfycbximx73Wr5GuqjiulSbjj0mGTp9-L4793v7bR-BcYM4wFXubWJvj4RrfNnBitxPGoX6IA/exec';
 const SHEETS_URL = SHEETS_URL_PERMANENT;
 let _authSession = localStorage.getItem('gtg_auth_session') || sessionStorage.getItem('gtg_auth_session') || '';
@@ -1907,47 +1907,21 @@ try{ localStorage.removeItem('greektogo_sheets_url'); localStorage.setItem('gree
 // POS Menu loads exclusively from Google Sheets POS MENU CREATION tab — no defaults.
 
 // ══════════════════════════════════════════════════════════════════════════
-// MENU and INVENTORY are two fully independent lists. Nothing you do to one
-// ever affects the other — no shared array, no shared storage key, no
-// shared Sheets sync. This is intentional and permanent.
+// GOOGLE SHEETS DATA AUTHORITY
+// Inventory, POS Menu, SalesLog and HeldOrders are authoritative in Sheets.
+// Browser storage is reserved for device configuration/session convenience,
+// never as the business-data source of truth.
 // ══════════════════════════════════════════════════════════════════════════
 
-// ── POS MENU — what's sellable/orderable. Seeded once from the starter
-// dishes below; after that it lives only in this device's localStorage.
-// Never touches Google Sheets.
-let menuItems = (function(){
-  try {
-    var saved = localStorage.getItem('gtg_menu_items');
-    if (saved) { var parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length) return parsed; }
-  } catch(e) {}
-  return [];  // always starts empty — loaded from Google Sheets POS MENU CREATION tab
-})();
-function _saveMenuLocally(){ try{ localStorage.setItem('gtg_menu_items', JSON.stringify(menuItems)); }catch(e){} }
+// POS MENU — runtime memory only. It is populated from Google Sheets after
+// authentication. Older device menu caches are removed during this QC release.
+let menuItems = [];
+try{ localStorage.removeItem('gtg_menu_items'); }catch(e){}
+// Compatibility no-op: older callers may still invoke this after stock display
+// changes, but menu business data is never persisted locally.
+function _saveMenuLocally(){ return false; }
 
-// ── On first load: clear any cached DEFAULT_INVENTORY items so Sheets takes over
-(function(){
-  try {
-    var OLD_DEFAULTS = ["Chicken Souvlaki","Lamb Gyros","Greek Salad","Spanakopita",
-      "Tzatziki Dip","Loukoumades","Moussaka","Lemon Soup","Pita Bread",
-      "Greek Coffee","Frappe","Baklava","Tiropita","Pork Souvlaki","Feta Saganaki"];
-    var saved = localStorage.getItem('gtg_menu_items');
-    if(saved){
-      var items = JSON.parse(saved);
-      // If the saved items are ALL default items, clear them so Sheets re-imports
-      var names = items.map(function(i){ return i.name; });
-      var isAllDefault = names.every(function(n){ return OLD_DEFAULTS.indexOf(n) > -1; });
-      if(isAllDefault){
-        localStorage.removeItem('gtg_menu_items');
-        console.log('Cleared old default menu — will reload from Google Sheets');
-      }
-    }
-  } catch(e){}
-})();
-
-// ── INVENTORY (stock tracking) — starts empty. You build this list
-// yourself via the Inventory tab. Backs up to Google Sheets, but Sheets
-// can only ever receive a copy from here — never push data back in.
-// ── INVENTORY — Google Sheets is the only source of truth.
+// INVENTORY — runtime memory only; Google Sheets is the only source of truth.
 let stockInventory = [];
 try{ localStorage.removeItem('gtg_stock_inventory'); }catch(e){}
 // Kept as a compatibility no-op so older callers cannot persist inventory locally.
@@ -2002,8 +1976,7 @@ let activeCashier = null;
 let currentCat = 'All';
 let disc = {type:'pct', value:0, applied:false};
 
-// Floating transactions are intentionally memory-only.
-// They never call Apps Script and never write to SalesLog/Google Sheets.
+// Floating/Held transactions are persisted in the Google Sheets HeldOrders tab.
 let floatingOrders = [];
 let floatingSequence = 1;
 
@@ -2359,7 +2332,7 @@ async function _call(url, action, data){
   _lastCallError='';
   if(!url){ _setCallError('Google Apps Script URL is missing.'); return null; }
 
-  // STABLE LOGIN v9.2.1:
+  // PRODUCTION LOGIN:
   // Use ONE JSONP request only. Apps Script ContentService redirects can make
   // cross-origin POST unreliable, and racing POST + JSONP submits login twice.
   if(action==='login'){
@@ -2371,7 +2344,7 @@ async function _call(url, action, data){
     }
   }
 
-  // v9.3.20: Expenses writes use the same direct JSON transport.
+  // Expenses writes use the same direct JSON transport.
   if(action==='addExpense'){
     try{
       var expenseResult=await _jsonpAction(url,action,data||{},20000);
@@ -2385,7 +2358,7 @@ async function _call(url, action, data){
     }
   }
 
-  // v9.3.19 DIRECT GOOGLE SHEETS READS:
+  // DIRECT GOOGLE SHEETS READS:
   // Login is already working through direct GET. Use the same verified transport
   // for protected read actions instead of POST/JSONP races.
   var fastReadActions=[
@@ -2404,7 +2377,7 @@ async function _call(url, action, data){
     }
   }
 
-  // INVENTORY FAST SAVE v9.2.3:
+  // INVENTORY FAST SAVE:
   // saveInventory is an idempotent full-sheet replacement. For normal-sized
   // inventories JSONP is substantially faster/reliable on Safari/iPhone and
   // avoids the slow Apps Script POST redirect. If the payload is too large for
@@ -2458,6 +2431,7 @@ async function _call(url, action, data){
     'ping','whoAmI','getCashiers','getInventory','getPosMenu',
     'getSales','findSaleByTransactionId','salesStatus','getEOD','logEOD',
     'logShift','addKitchenOrder','getKitchenOrders','updateKitchenOrder',
+    'saveHeldOrder','getHeldOrders','recallHeldOrder','completeHeldOrder','deleteHeldOrder',
     'logout'
   ].indexOf(action)>=0;
 
@@ -2497,7 +2471,7 @@ async function _call(url, action, data){
 }
 
 // ── Main sheetsCall ───────────────────────────────────────────────────────────
-// v9.3.24 — independent requests: one slow Google Sheet read cannot block the others.
+// Independent requests: one slow Google Sheet read cannot block the others.
 async function sheetsCall(action, body){
   if(!SHEETS_URL) return null;
   var result = await _call(SHEETS_URL, action, body||{});
@@ -2714,7 +2688,7 @@ async function refreshInventoryFromSheets(){
   if(!url){showToast('Inventory: Google Sheets URL is missing.','error');return;}
 
   try{
-    // v9.3.9: live authenticated POST read; no JSONP timeout path.
+    // Live authenticated POST read; no JSONP timeout path.
     var controller=new AbortController();
     var timer=setTimeout(function(){controller.abort();},15000);
     var response;
@@ -3317,9 +3291,9 @@ function clearOrder(){
 }
 
 
-/* ═══════════════════ FLOATING TRANSACTIONS ═══════════════════
-   Floating orders exist only in this open browser/POS session.
-   They do NOT call Apps Script and do NOT write to SalesLog or Google Sheets. */
+/* ═══════════════════ FLOATING / HELD TRANSACTIONS ═══════════════════
+   Google Sheets HeldOrders is authoritative. A current order is cleared only
+   after Apps Script confirms the hold was saved. */
 function _floatingEsc(v){
   return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
 }
@@ -3327,127 +3301,106 @@ function _updateFloatingOrdersButton(){
   var btn=document.getElementById('floating-orders-btn');
   if(btn) btn.textContent='📋 FLOATING ORDERS ('+floatingOrders.length+')';
 }
-function floatCurrentOrder(){
+async function refreshFloatingOrders(){
+  if(!_authSession){ floatingOrders=[]; _updateFloatingOrdersButton(); return false; }
+  var res=await sheetsCall('getHeldOrders',{status:'HELD'});
+  if(!res||!res.ok){
+    showToast('Held Orders could not be loaded from Google Sheets.','error');
+    return false;
+  }
+  floatingOrders=Array.isArray(res.orders)?res.orders:(Array.isArray(res.items)?res.items:[]);
+  _updateFloatingOrdersButton();
+  return true;
+}
+async function floatCurrentOrder(){
   if(!order.length){showToast('Add items before floating the transaction.','warning');return;}
+  if(!_authSession){showToast('Google Sheets session required to hold an order.','error');return;}
   var t=getTotals();
   var tableEl=document.getElementById('table-num');
   var custEl=document.getElementById('cust-name');
   var notesEl=document.getElementById('order-notes');
-  var floatId='F'+String(floatingSequence++).padStart(3,'0');
+  var holdId='HOLD-'+Date.now()+'-'+Math.random().toString(36).slice(2,8).toUpperCase();
   var snap={
-    id:floatId,
-    floatedAt:Date.now(),
-    cashier:activeCashier||'—',
-    table:(tableEl&&tableEl.value)||'',
-    customer:(custEl&&custEl.value)||'',
-    notes:(notesEl&&notesEl.value)||'',
-    // Store a self-contained snapshot of each menu line.  pid/detail make
-    // resume safe even if the live menu refreshes and numeric IDs change.
+    heldId:holdId,id:holdId,label:'Floating Order',heldAt:new Date().toISOString(),
+    cashier:activeCashier||'—',table:(tableEl&&tableEl.value)||'',
+    customer:(custEl&&custEl.value)||'',notes:(notesEl&&notesEl.value)||'',
     items:order.map(function(o){
       var live=menuItems.find(function(m){return Number(m.id)===Number(o.id);})||{};
-      return {
-        id:o.id,
-        pid:String(live.pid||o.pid||''),
-        name:String(o.name||live.name||''),
-        cat:String(o.cat||live.cat||'Other'),
-        detail:String(live.detail||o.detail||''),
-        price:Number(o.price)||0,
-        qty:Number(o.qty)||1
-      };
+      return {id:o.id,pid:String(live.pid||o.pid||''),name:String(o.name||live.name||''),
+        cat:String(o.cat||live.cat||'Other'),detail:String(live.detail||o.detail||''),
+        price:Number(o.price)||0,qty:Number(o.qty)||1};
     }),
     disc:JSON.parse(JSON.stringify(disc||{type:'pct',value:0,applied:false})),
+    discountState:JSON.parse(JSON.stringify(disc||{type:'pct',value:0,applied:false})),
     srpCounts:JSON.parse(JSON.stringify(srpCounts||{sr:0,pwd:0})),
-    total:Number(t.tot)||0
+    subtotal:Number(t.sub)||0,discount:Number(t.da)||0,discountLabel:discLabel(),vat:Number(t.vat)||0,total:Number(t.tot)||0
   };
+  var res=await sheetsCall('saveHeldOrder',{order:snap});
+  if(!res||!res.ok||res.saved===false){
+    showToast('⛔ Order was NOT floated. Google Sheets did not confirm the hold.','error');
+    return;
+  }
+  snap.id=res.heldId||res.id||holdId;snap.heldId=snap.id;snap.status='HELD';
   floatingOrders.push(snap);
   _updateFloatingOrdersButton();
   clearOrder();
-  showToast('🌊 '+floatId+' floated. No SalesLog/database entry was created.','success');
+  showToast('🌊 Order floated and saved to Google Sheets.','success');
 }
-function openFloatingOrders(){
+async function openFloatingOrders(){
+  await refreshFloatingOrders();
   renderFloatingOrders();
   openModal('floating-orders-modal');
 }
 function renderFloatingOrders(){
   var box=document.getElementById('floating-orders-list');
   if(!box) return;
-  if(!floatingOrders.length){
-    box.innerHTML='<div style="padding:24px 12px;text-align:center;color:var(--gray-soft);background:var(--blue-ghost);border-radius:12px;">No floating transactions.</div>';
-    _updateFloatingOrdersButton();
-    return;
-  }
+  if(!floatingOrders.length){box.innerHTML='<div style="padding:24px 12px;text-align:center;color:var(--gray-soft);background:var(--blue-ghost);border-radius:12px;">No floating transactions.</div>';_updateFloatingOrdersButton();return;}
   box.innerHTML=floatingOrders.map(function(f){
-    var when=new Date(f.floatedAt).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
-    var itemCount=(f.items||[]).reduce(function(n,i){return n+(Number(i.qty)||0);},0);
+    var rawWhen=f.heldAt||f.floatedAt||f.updatedAt||Date.now();
+    var when=new Date(rawWhen).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+    var itemCount=(f.items||f.order||[]).reduce(function(n,i){return n+(Number(i.qty)||0);},0);
     var who=[f.table?('Table '+f.table):'',f.customer||''].filter(Boolean).join(' · ')||'Walk-in';
-    var menuNames=(f.items||[]).map(function(i){
-      return (Number(i.qty)||1)+'× '+_floatingEsc(i.name||'Menu item');
-    }).join(' · ');
+    var menuNames=(f.items||f.order||[]).map(function(i){return (Number(i.qty)||1)+'× '+_floatingEsc(i.name||'Menu item');}).join(' · ');
     return '<div style="border:1.5px solid var(--blue-pale);border-radius:12px;padding:12px;margin-bottom:9px;background:#fff;">'
-      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
-      +'<div><div style="font-weight:900;color:var(--blue-deep);font-size:14px;">📋 '+_floatingEsc(f.id)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;"><div><div style="font-weight:900;color:var(--blue-deep);font-size:14px;">📋 '+_floatingEsc(f.id||f.heldId)+'</div>'
       +'<div style="font-size:11px;color:var(--gray-soft);margin-top:2px;">'+_floatingEsc(who)+' · '+itemCount+' item'+(itemCount===1?'':'s')+' · '+_floatingEsc(when)+'</div></div>'
       +'<div style="font-weight:900;color:var(--blue-deep);font-size:15px;">₱'+Number(f.total||0).toFixed(2)+'</div></div>'
       +(menuNames?'<div style="font-size:12px;font-weight:900;color:var(--blue-deep);margin-top:8px;line-height:1.45;">🍽️ '+menuNames+'</div>':'')
       +(f.notes?'<div style="font-size:11px;margin-top:7px;color:var(--gray-soft);">📝 '+_floatingEsc(f.notes)+'</div>':'')
-      +'<div style="display:flex;gap:7px;margin-top:10px;">'
-      +'<button onclick="resumeFloatingOrder(\''+_floatingEsc(f.id)+'\')" style="flex:1;padding:8px;border:0;border-radius:9px;background:var(--blue-accent);color:#fff;font-weight:900;cursor:pointer;">↩ RESUME</button>'
-      +'<button onclick="discardFloatingOrder(\''+_floatingEsc(f.id)+'\')" style="padding:8px 12px;border:1.5px solid #E25555;border-radius:9px;background:#fff;color:#B42F2F;font-weight:900;cursor:pointer;">🗑 DISCARD</button>'
-      +'</div></div>';
-  }).join('');
-  _updateFloatingOrdersButton();
+      +'<div style="display:flex;gap:7px;margin-top:10px;"><button onclick="resumeFloatingOrder(\''+_floatingEsc(f.id||f.heldId)+'\')" style="flex:1;padding:8px;border:0;border-radius:9px;background:var(--blue-accent);color:#fff;font-weight:900;cursor:pointer;">↩ RESUME</button>'
+      +'<button onclick="discardFloatingOrder(\''+_floatingEsc(f.id||f.heldId)+'\')" style="padding:8px 12px;border:1.5px solid #E25555;border-radius:9px;background:#fff;color:#B42F2F;font-weight:900;cursor:pointer;">🗑 DISCARD</button></div></div>';
+  }).join('');_updateFloatingOrdersButton();
 }
-function resumeFloatingOrder(id){
-  if(order.length){
-    showToast('Current order has items. Float or clear it before resuming another transaction.','warning');
-    return;
-  }
-  var idx=floatingOrders.findIndex(function(f){return String(f.id)===String(id);});
+async function resumeFloatingOrder(id){
+  if(order.length){showToast('Current order has items. Float or clear it before resuming another transaction.','warning');return;}
+  var idx=floatingOrders.findIndex(function(f){return String(f.id||f.heldId)===String(id);});
   if(idx<0){showToast('Floating transaction not found.','error');return;}
   var f=floatingOrders[idx];
+  var res=await sheetsCall('recallHeldOrder',{id:id});
+  if(!res||!res.ok){showToast('Could not recall Held Order from Google Sheets.','error');return;}
   floatingOrders.splice(idx,1);
-  order=(f.items||[]).map(function(saved){
-    var live=null;
-    if(saved.pid){
-      live=menuItems.find(function(m){return String(m.pid||'')===String(saved.pid);});
-    }
-    if(!live){
-      live=menuItems.find(function(m){
-        return String(m.name||'').trim().toLowerCase()===String(saved.name||'').trim().toLowerCase()
-          && Math.abs((Number(m.price)||0)-(Number(saved.price)||0))<0.001;
-      });
-    }
-    return {
-      id:live?live.id:saved.id,
-      pid:String(saved.pid||(live&&live.pid)||''),
-      name:String(saved.name||(live&&live.name)||'Menu item'),
-      cat:String(saved.cat||(live&&live.cat)||'Other'),
-      detail:String(saved.detail||(live&&live.detail)||''),
-      price:Number(saved.price)||0,
-      qty:Number(saved.qty)||1
-    };
+  order=(f.items||f.order||[]).map(function(saved){
+    var live=saved.pid?menuItems.find(function(m){return String(m.pid||'')===String(saved.pid);}):null;
+    if(!live)live=menuItems.find(function(m){return String(m.name||'').trim().toLowerCase()===String(saved.name||'').trim().toLowerCase()&&Math.abs((Number(m.price)||0)-(Number(saved.price)||0))<0.001;});
+    return {id:live?live.id:saved.id,pid:String(saved.pid||(live&&live.pid)||''),name:String(saved.name||(live&&live.name)||'Menu item'),cat:String(saved.cat||(live&&live.cat)||'Other'),detail:String(saved.detail||(live&&live.detail)||''),price:Number(saved.price)||0,qty:Number(saved.qty)||1};
   });
-  disc=JSON.parse(JSON.stringify(f.disc||{type:'pct',value:0,applied:false}));
+  disc=JSON.parse(JSON.stringify(f.discountState||f.disc||{type:'pct',value:0,applied:false}));
   srpCounts=JSON.parse(JSON.stringify(f.srpCounts||{sr:0,pwd:0}));
-  var tableEl=document.getElementById('table-num'); if(tableEl) tableEl.value=f.table||'';
-  var custEl=document.getElementById('cust-name'); if(custEl) custEl.value=f.customer||'';
-  var notesEl=document.getElementById('order-notes'); if(notesEl) notesEl.value=f.notes||'';
-  var sr=document.getElementById('sr-count'); if(sr) sr.textContent=srpCounts.sr||0;
-  var pw=document.getElementById('pwd-count'); if(pw) pw.textContent=srpCounts.pwd||0;
-  _setDiscountRemoveVisible(!!disc.applied);
-  renderOrder();
-  _updateFloatingOrdersButton();
-  closeModal('floating-orders-modal');
-  showToast('↩ '+f.id+' resumed. Pay normally when ready.','success');
+  var tableEl=document.getElementById('table-num');if(tableEl)tableEl.value=f.table||'';
+  var custEl=document.getElementById('cust-name');if(custEl)custEl.value=f.customer||'';
+  var notesEl=document.getElementById('order-notes');if(notesEl)notesEl.value=f.notes||'';
+  var sr=document.getElementById('sr-count');if(sr)sr.textContent=srpCounts.sr||0;
+  var pw=document.getElementById('pwd-count');if(pw)pw.textContent=srpCounts.pwd||0;
+  _setDiscountRemoveVisible(!!disc.applied);renderOrder();_updateFloatingOrdersButton();closeModal('floating-orders-modal');
+  showToast('↩ Held order resumed from Google Sheets.','success');
 }
-function discardFloatingOrder(id){
-  var idx=floatingOrders.findIndex(function(f){return String(f.id)===String(id);});
-  if(idx<0) return;
-  if(!confirm('Discard floating transaction '+id+'?\n\nThis will permanently remove it from this POS session.')) return;
-  floatingOrders.splice(idx,1);
-  renderFloatingOrders();
-  _updateFloatingOrdersButton();
-  showToast('Floating transaction '+id+' discarded.','warning');
+async function discardFloatingOrder(id){
+  var idx=floatingOrders.findIndex(function(f){return String(f.id||f.heldId)===String(id);});
+  if(idx<0)return;
+  if(!confirm('Discard floating transaction '+id+'?\n\nThis will mark the Held Order as deleted in Google Sheets.'))return;
+  var res=await sheetsCall('deleteHeldOrder',{id:id});
+  if(!res||!res.ok){showToast('Could not delete Held Order from Google Sheets.','error');return;}
+  floatingOrders.splice(idx,1);renderFloatingOrders();_updateFloatingOrdersButton();showToast('Held order deleted in Google Sheets.','warning');
 }
 
 var _pendingTransactionId='';
@@ -4057,7 +4010,7 @@ async function saveItem(){
   }
   const record={itemCode,description,category,price,unit,uom,begBal,endingStock,supplier,lastUpdated:'',_touchLastUpdated:true,updatedDate:updatedDate};
   try{
-    // v9.3.3: save ONLY the item being edited/added.
+    // Save ONLY the item being edited/added.
     // This removes the old 90-row full Inventory rewrite on every Save Item click.
     const payload={...record};
     const res=await sheetsCall('saveInventoryItem',{item:payload});
@@ -4874,7 +4827,7 @@ async function doLogin(){
 }
 
 
-/* v9.3.15 — hard-bind login controls so inline-handler/CSP/cache issues cannot disable ENTER POS. */
+/* Hard-bind login controls so inline-handler/CSP/cache issues cannot disable ENTER POS. */
 (function bindLoginControls(){
   var btn=document.getElementById('enter-pos-btn');
   var pass=document.getElementById('login-pass');
@@ -6396,7 +6349,7 @@ setTimeout(_updateSyncBadge, 500);
 
 <script>
 (function(){
-  var BUILD='9.3.25';
+  var BUILD=POS_BUILD;
   try{
     var previous=localStorage.getItem('gtg_pos_build');
     localStorage.setItem('gtg_pos_build',BUILD);
